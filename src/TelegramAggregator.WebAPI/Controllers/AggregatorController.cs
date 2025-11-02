@@ -2,25 +2,27 @@
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Services;
 
-namespace TeleSend.WebAPI.Controllers
+namespace TelegramAggregator.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
     public class AggregatorController : ControllerBase
     {
         private readonly AggregatorService _service;
-
         private readonly IConfiguration _config;
         private readonly ILogger<AggregatorController> _logger;
-        public AggregatorController(AggregatorService service)
+        public AggregatorController(AggregatorService service, IConfiguration config,
+            ILogger<AggregatorController> logger)
         {
             _service = service;
+            _config = config;
+            _logger = logger;
         }
 
         /// <summary>
         /// دستی اجرا کن (برای ادمین‌ها)
         /// </summary>
-        [HttpPost("run")]
+        [HttpPost("RunNow")]
         public async Task<ActionResult> RunNow()
         {
             //if (!IsValidApiKey(apiKey))
@@ -43,7 +45,8 @@ namespace TeleSend.WebAPI.Controllers
         /// <summary>
         /// وضعیت سیستم
         /// </summary>
-        [HttpGet("status")]
+        [HttpGet]
+        [Route("Status")]
         public ActionResult Status()
         {
             //if (!IsValidApiKey(apiKey))
@@ -62,11 +65,12 @@ namespace TeleSend.WebAPI.Controllers
             });
         }
 
+
         /// <summary>
         /// لیست کانال‌ها
         /// </summary>
         // GetChannels([FromHeader(Name = "X-API-Key")] string? apiKey)
-        [HttpGet("channels")]
+        [HttpGet("Channels")]
         public ActionResult GetChannels()
         {
 

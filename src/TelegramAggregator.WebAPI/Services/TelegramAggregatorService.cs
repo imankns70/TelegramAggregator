@@ -32,12 +32,13 @@ public class AggregatorService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        _logger.LogInformation("ربات شروع شد. Poll هر {Minutes} دقیقه.", _pollInterval.TotalMinutes);
+
 
         while (!ct.IsCancellationRequested)
         {
             try
             {
+                await Task.Delay(_pollInterval, ct);
                 await ProcessAllChannels(ct);
             }
             catch (Exception ex)
@@ -45,7 +46,7 @@ public class AggregatorService : BackgroundService
                 _logger.LogError(ex, "خطا در چرخه اصلی");
             }
 
-            await Task.Delay(_pollInterval, ct);
+
         }
     }
 
@@ -68,8 +69,8 @@ public class AggregatorService : BackgroundService
                     var message = FormatMessage(item, channel);
                     if (IsDuplicate(message)) continue;
 
-                    await SendMessage(channel, message, ct);
-                    TrackLink(message);
+                    //await SendMessage(channel, message, ct);
+                    //TrackLink(message);
                     await Task.Delay(1000, ct); // جلوگیری از Rate Limit
                 }
             }
@@ -80,7 +81,7 @@ public class AggregatorService : BackgroundService
         }
     }
 
-    private async Task<List<ContentItem>> FetchItems(ChannelConfig channel)
+    public async Task<List<ContentItem>> FetchItems(ChannelConfig channel)
     {
         var items = new List<ContentItem>();
         foreach (var source in channel.Sources.Where(s => s.Type.Equals("Rss", StringComparison.OrdinalIgnoreCase)))

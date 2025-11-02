@@ -7,6 +7,6 @@
         public long ChannelId { get; set; }   // جدید: گروه مخفی
         public string Template { get; set; } = "";
         public List<SourceConfig> Sources { get; set; } = new();
-        public string AdminUsername { get; set; } = "Admin";
+        public string AdminUsername { get; set; } = "";
     }
 }
