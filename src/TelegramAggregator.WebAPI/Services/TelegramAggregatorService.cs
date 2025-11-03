@@ -36,6 +36,7 @@ public class AggregatorService : BackgroundService
     {
         while (!ct.IsCancellationRequested)
         {
+            var forbiddenTitleKeywords = _appSettings.Value.ForbiddenTitleKeywords;
             var now = DateTime.Now;
 
             // خواب شبانه: 1 تا 8 صبح
@@ -117,9 +118,7 @@ public class AggregatorService : BackgroundService
                     var title = entry.Title?.Text ?? "";
                     var description = entry.Summary?.Text ?? "";
 
-                    // نادیده گرفتن خبرهایی که به عکس یا ویدئو اشاره دارند
-                    if (!IsTitleAllowed(title))
-                        continue;
+
 
                     var item = new ContentItem
                     {
@@ -262,11 +261,5 @@ public class AggregatorService : BackgroundService
             _sentLinks.Remove(old);
         }
     }
-    private bool IsTitleAllowed(string title)
-    {
-        if (string.IsNullOrWhiteSpace(title)) return true;
 
-        title = title.Trim().ToLowerInvariant();
-        return !ForbiddenTitleKeywords.Any(k => title.Contains(k));
-    }
 }
