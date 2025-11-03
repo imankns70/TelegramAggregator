@@ -1,8 +1,9 @@
-﻿// AggregatorService.cs (نسخه نهایی)
+﻿using Microsoft.Extensions.Options;
 using System.ServiceModel.Syndication;
 using System.Text.RegularExpressions;
 using System.Xml;
 using Telegram.Bot;
+using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramAggregator.WebAPI.Models;
 
@@ -13,200 +14,259 @@ public class AggregatorService : BackgroundService
     private readonly ITelegramBotClient _bot;
     private readonly ILogger<AggregatorService> _logger;
     private readonly List<ChannelConfig> _channels;
-    private readonly Dictionary<string, string> _intros;
-    private readonly TimeSpan _pollInterval;
+    private readonly long _hiddenGroupId;
+    private readonly IOptions<AppSettings> _appSettings;
+    private readonly Random _random = new();
     private readonly HashSet<string> _sentLinks = new();
     private readonly Queue<string> _linkOrder = new();
-    private const int MaxStoredLinks = 500;
-    private readonly long _hiddenGroupId;
+    private readonly TimeSpan _minPoll = TimeSpan.FromMinutes(18);
+    private readonly TimeSpan _maxPoll = TimeSpan.FromMinutes(25);
+    private const int MaxStoredLinks = 1000;
 
-    public AggregatorService(IConfiguration config, ILogger<AggregatorService> logger)
+    public AggregatorService(IConfiguration config, ILogger<AggregatorService> logger, IOptions<AppSettings> appSettings)
     {
         _bot = new TelegramBotClient(config["BotToken"] ?? throw new ArgumentNullException("BotToken"));
         _logger = logger;
         _channels = config.GetSection("Channels").Get<List<ChannelConfig>>() ?? throw new InvalidOperationException("Channels config missing");
-        _intros = config.GetSection("Intros:Keywords").Get<Dictionary<string, string>>() ?? new();
         _hiddenGroupId = long.Parse(config["HiddenGroupId"] ?? throw new ArgumentNullException("HiddenGroupId"));
-        _pollInterval = TimeSpan.FromMinutes(int.Parse(config["PollIntervalMinutes"] ?? "20"));
+        _appSettings = appSettings;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-
-
         while (!ct.IsCancellationRequested)
         {
+            var now = DateTime.Now;
+
+            // خواب شبانه: 1 تا 8 صبح
+            if (now.Hour >= 1 && now.Hour < 8)
+            {
+                _logger.LogInformation("⏸ در حالت خواب شبانه تا ساعت ۸ صبح...");
+                await Task.Delay(TimeSpan.FromMinutes(30), ct);
+                continue;
+            }
+
             try
             {
-                await Task.Delay(_pollInterval, ct);
                 await ProcessAllChannels(ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "خطا در چرخه اصلی");
+                _logger.LogError(ex, "❌ خطا در چرخه اصلی");
             }
 
-
+            // چرخه اصلی بعدی: 10 تا 15 دقیقه رندوم
+            var mainDelay = TimeSpan.FromMinutes(_random.Next(10, 16));
+            _logger.LogInformation("🕒 تأخیر بعدی چرخه اصلی: {Minutes} دقیقه", mainDelay.TotalMinutes);
+            await Task.Delay(mainDelay, ct);
         }
     }
 
-    public async Task ProcessAllChannels(CancellationToken ct)
+    private async Task ProcessAllChannels(CancellationToken ct)
     {
         foreach (var channel in _channels)
         {
             try
             {
-                var items = await FetchItems(channel);
-                if (!items.Any())
-                {
-                    _logger.LogDebug("هیچ آیتمی برای {Channel} پیدا نشد", channel.Name);
-                    continue;
-                }
+                _logger.LogInformation("🚀 شروع پردازش کانال: {Channel}", channel.Name);
 
-                var filtered = FilterItems(items, channel);
-                foreach (var item in filtered)
-                {
-                    var message = FormatMessage(item, channel);
-                    if (IsDuplicate(message)) continue;
+                var items = await FetchItems(channel.Sources);
+                if (!items.Any()) continue;
 
-                    //await SendMessage(channel, message, ct);
-                    //TrackLink(message);
-                    await Task.Delay(1000, ct); // جلوگیری از Rate Limit
+                var filtered = FilterItems(items);
+                if (!filtered.Any()) continue;
+
+                // تعداد خبر رندوم برای این چرخه: 1 تا 6
+                var candidates = filtered
+                    .Where(i => !_sentLinks.Contains(i.Link))
+                    .OrderByDescending(i => i.PubDate)
+                    .Take(_random.Next(1, 7))
+                    .ToList();
+
+                foreach (var item in candidates)
+                {
+                    await SendMessage(channel, item, ct);
+                    TrackLink(item);
+
+
+                    var innerDelay = TimeSpan.FromSeconds(_random.Next(30, 181));
+                    _logger.LogDebug("⏱ انتظار {Seconds} ثانیه تا خبر بعدی", innerDelay.TotalSeconds);
+                    await Task.Delay(innerDelay, ct);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "خطا در پردازش کانال {ChannelName}", channel.Name);
+                _logger.LogError(ex, "⚠️ خطا در پردازش کانال {Channel}", channel.Name);
             }
         }
     }
 
-    public async Task<List<ContentItem>> FetchItems(ChannelConfig channel)
+    private async Task<List<ContentItem>> FetchItems(List<SourceConfig> sources)
     {
         var items = new List<ContentItem>();
-        foreach (var source in channel.Sources.Where(s => s.Type.Equals("Rss", StringComparison.OrdinalIgnoreCase)))
+
+        foreach (var source in sources.Where(s => s.Type == "Rss"))
         {
             try
             {
-                using var reader = XmlReader.Create(source.Url, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit });
+                using var reader = XmlReader.Create(source.Url);
                 var feed = SyndicationFeed.Load(reader);
-                foreach (var entry in feed.Items.Take(20)) // حداکثر ۲۰ تا برای سرعت
+
+                foreach (var entry in feed.Items.Take(20))
                 {
-                    items.Add(new ContentItem
+                    var title = entry.Title?.Text ?? "";
+                    var description = entry.Summary?.Text ?? "";
+
+                    // نادیده گرفتن خبرهایی که به عکس یا ویدئو اشاره دارند
+                    if (!IsTitleAllowed(title))
+                        continue;
+
+                    var item = new ContentItem
                     {
-                        Title = entry.Title?.Text?.Trim() ?? "بدون عنوان",
-                        Description = (entry.Summary?.Text ?? entry.Content?.ToString() ?? "").Trim(),
+                        Title = CleanText(title),
+                        Description = CleanText(description),
                         Link = entry.Links.FirstOrDefault()?.Uri?.ToString() ?? "",
                         PubDate = entry.PublishDate.DateTime
-                    });
+                    };
+
+                    items.Add(item);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "خطا در خواندن RSS: {Url}", source.Url);
+                _logger.LogWarning(ex, "⚠️ خطا در خواندن RSS: {Url}", source.Url);
             }
         }
+
         return items;
     }
 
-    private List<ContentItem> FilterItems(List<ContentItem> items, ChannelConfig channel)
+    private List<ContentItem> FilterItems(List<ContentItem> items)
     {
-        // 90% فوتبال
-        var footballKeywords = new[] { "فوتبال", "لیگ", "دربی", "استقلال", "پرسپولیس", "تیم ملی", "چمپیونز", "جام جهانی" };
-        var footballItems = items
-            .Where(i => footballKeywords.Any(k => i.Title.Contains(k, StringComparison.OrdinalIgnoreCase)))
-            .Take(9)
-            .ToList();
+        var footballKeywords = _appSettings.Value.FootballKeywords;
+        var nonSportKeywords = _appSettings.Value.NonSportKeywords;
+        var forbiddenTitleKeywords = _appSettings.Value.ForbiddenTitleKeywords;
 
-        // 10% ورزش‌های مهم دیگر
-        var otherKeywords = new[] { "والیبال", "فوتسال", "کشتی", "وزنه‌برداری" };
-        var importantOther = items
-            .Where(i => otherKeywords.Any(k => i.Title.Contains(k, StringComparison.OrdinalIgnoreCase)) &&
-                        (i.Title.Contains("قهرمان") || i.Title.Contains("طلا") || i.Title.Contains("مدال")))
-            .Take(1)
-            .ToList();
-
-        return footballItems
-            .Concat(importantOther)
-            .OrderByDescending(i => i.PubDate)
-            .ToList();
+        return items
+       .Where(i =>
+           !i.Title.Contains("ویدئو") &&
+           !i.Description.Contains("ویدئو") &&
+           !i.Title.Contains("عکس") &&
+           !i.Description.Contains("عکس") &&
+           !forbiddenTitleKeywords.Any(k => i.Title.Contains(k) || i.Description.Contains(k)) &&
+           !nonSportKeywords.Any(k => i.Title.Contains(k) || i.Description.Contains(k)) &&
+           footballKeywords.Any(k => (i.Title + " " + i.Description).Contains(k))
+       )
+       .OrderByDescending(i => i.PubDate)
+       .Take(20)
+       .ToList();
     }
 
-    private string FormatMessage(ContentItem item, ChannelConfig channel)
-    {
-        var intro = GetIntro(item.Title, channel);
-        var adminSign = string.IsNullOrEmpty(channel.AdminUsername) ? "" : $"\n\nاز: @{channel.AdminUsername}";
-
-        var template = channel.Template ?? "{Intro}\n\n{Title}\n\n{Description}\n\n{AdminSign}\n\n#ورزش | ساعت {Time}";
-
-        return template
-            .Replace("{Intro}", intro)
-            .Replace("{Title}", Escape(item.Title))
-            .Replace("{Description}", Escape(item.Description))
-            .Replace("{Time}", item.PubDate.ToLocalTime().ToString("HH:mm"))
-            .Replace("{AdminSign}", adminSign);
-    }
-
-    private string GetIntro(string title, ChannelConfig channel)
-    {
-        title = title.ToLower();
-        foreach (var kvp in _intros)
-        {
-            if (title.Contains(kvp.Key.ToLower()))
-                return kvp.Value;
-        }
-        return "سلام رفیق! یه خبر مهم";
-    }
-
-    private bool IsDuplicate(string message)
-    {
-        var link = ExtractLink(message);
-        return !string.IsNullOrEmpty(link) && _sentLinks.Contains(link);
-    }
-
-    private void TrackLink(string message)
-    {
-        var link = ExtractLink(message);
-        if (string.IsNullOrEmpty(link)) return;
-
-        _sentLinks.Add(link);
-        _linkOrder.Enqueue(link);
-        while (_linkOrder.Count > MaxStoredLinks)
-            _sentLinks.Remove(_linkOrder.Dequeue());
-    }
-
-    private string? ExtractLink(string message) =>
-        Regex.Match(message, @"https?://[^\s""]+", RegexOptions.IgnoreCase)?.Value;
-
-    private async Task SendMessage(ChannelConfig channel, string text, CancellationToken ct)
+    private async Task SendMessage(ChannelConfig channel, ContentItem item, CancellationToken ct)
     {
         try
         {
-            var sentMessage = await _bot.SendMessage(
-                chatId: _hiddenGroupId,
-                text: text,
-                parseMode: ParseMode.Html,
-                disableNotification: true,
-                cancellationToken: ct
-            );
+            var text = FormatMessage(item, channel);
 
+            // محدودیت caption در تلگرام ~ 1024 کاراکتر (برای ایمنی ما 1000)
+            string caption = text.Length > 1000 ? text.Substring(0, 1000 - 3) + "..." : text;
+
+            Message sentMessage;
+
+            if (!string.IsNullOrEmpty(item.VideoUrl))
+            {
+                _logger.LogDebug("ارسال ویدیو برای کانال {Channel}: {Title}", channel.Name, item.Title);
+                sentMessage = await _bot.SendVideo(
+                    chatId: _hiddenGroupId,
+                    video: item.VideoUrl,
+                    caption: caption,
+                    parseMode: ParseMode.Html,
+                    disableNotification: true,
+                    cancellationToken: ct
+                );
+            }
+            else if (!string.IsNullOrEmpty(item.ImageUrl))
+            {
+                _logger.LogDebug("ارسال عکس برای کانال {Channel}: {Title}", channel.Name, item.Title);
+                sentMessage = await _bot.SendPhoto(
+                    chatId: _hiddenGroupId,
+                    photo: item.ImageUrl,
+                    caption: caption,
+                    parseMode: ParseMode.Html,
+                    disableNotification: true,
+                    cancellationToken: ct
+                );
+            }
+            else
+            {
+                _logger.LogDebug("ارسال متن برای کانال {Channel}: {Title}", channel.Name, item.Title);
+                sentMessage = await _bot.SendMessage(
+                    chatId: _hiddenGroupId,
+                    text: text,
+                    parseMode: ParseMode.Html,
+                    disableNotification: true,
+                    cancellationToken: ct
+                );
+            }
+
+            // کپی به کانال و حذف از گروه مخفی
             await _bot.CopyMessage(
                 chatId: channel.ChannelId,
                 fromChatId: _hiddenGroupId,
                 messageId: sentMessage.MessageId,
-                parseMode: ParseMode.Html,
                 disableNotification: true,
                 cancellationToken: ct
             );
 
-            _logger.LogInformation("ارسال شد به {Channel}: {Title}", channel.Name, text.Substring(0, Math.Min(50, text.Length)));
+            // حذف پیام ارسالی از گروه مخفی تا فقط کانال دیده شود
+            await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId, ct);
+
+            _logger.LogInformation("ارسال {Type} به کانال {Channel}: {Title}",
+                item.HasMedia ? (item.VideoUrl != null ? "ویدیو" : "عکس") : "متن",
+                channel.Name,
+                item.Title.Length > 50 ? item.Title.Substring(0, 50) + "..." : item.Title);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "خطا در ارسال به کانال {Channel}", channel.Name);
         }
     }
+    private string FormatMessage(ContentItem item, ChannelConfig channel)
+    {
+        string text = channel.Template ?? "{Title}\n\n{Description}\n\n@{ChannelUsername}\n#{AdminUsername}";
+        text = text.Replace("{Title}", CleanText(item.Title))
+                   .Replace("{Description}", CleanText(item.Description))
+                   .Replace("{ChannelUsername}", channel.ChannelUsername)
+                   .Replace("{AdminUsername}", channel.AdminUsername);
+        return text;
+    }
+    private static string CleanText(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return "";
+        var clean = Regex.Replace(input, "<.*?>", " "); // حذف تگ‌ها
+        clean = Regex.Replace(clean, "&[a-zA-Z]+;", " "); // حذف &nbsp; و غیره
+        clean = Regex.Replace(clean, @"\s{2,}", " ").Trim();
+        return clean;
+    }
 
-    private static string Escape(string text) =>
-        text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+    private void TrackLink(ContentItem item)
+    {
+        if (string.IsNullOrEmpty(item.Link)) return;
+
+        _sentLinks.Add(item.Link);
+        _linkOrder.Enqueue(item.Link);
+
+        while (_linkOrder.Count > MaxStoredLinks)
+        {
+            var old = _linkOrder.Dequeue();
+            _sentLinks.Remove(old);
+        }
+    }
+    private bool IsTitleAllowed(string title)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return true;
+
+        title = title.Trim().ToLowerInvariant();
+        return !ForbiddenTitleKeywords.Any(k => title.Contains(k));
+    }
 }

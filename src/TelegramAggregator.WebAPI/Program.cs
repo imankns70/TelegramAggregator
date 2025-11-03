@@ -1,9 +1,10 @@
 ﻿
+using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-
+builder.Services.Configure<AppSettings>(builder.Configuration);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using TelegramAggregator.WebAPI.Models;
-using TelegramAggregator.WebAPI.Services;
 
 namespace TelegramAggregator.WebAPI.Controllers
 {
@@ -8,39 +7,16 @@ namespace TelegramAggregator.WebAPI.Controllers
     [Route("api/[controller]")]
     public class AggregatorController : ControllerBase
     {
-        private readonly AggregatorService _service;
+
         private readonly IConfiguration _config;
         private readonly ILogger<AggregatorController> _logger;
-        public AggregatorController(AggregatorService service, IConfiguration config,
-            ILogger<AggregatorController> logger)
+        public AggregatorController(IConfiguration config, ILogger<AggregatorController> logger)
         {
-            _service = service;
+
             _config = config;
             _logger = logger;
         }
 
-        /// <summary>
-        /// دستی اجرا کن (برای ادمین‌ها)
-        /// </summary>
-        [HttpPost("RunNow")]
-        public async Task<ActionResult> RunNow()
-        {
-            //if (!IsValidApiKey(apiKey))
-            //    return Unauthorized("API Key نامعتبر است");
-
-            _logger.LogInformation("درخواست دستی اجرا از {IP}", GetClientIp());
-
-            try
-            {
-                await _service.ProcessAllChannels(CancellationToken.None);
-                return Ok(new { message = "خبرها با موفقیت ارسال شدند!", timestamp = DateTime.Now });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "خطا در اجرای دستی");
-                return StatusCode(500, new { error = "خطا در ارسال خبرها" });
-            }
-        }
 
         /// <summary>
         /// وضعیت سیستم
