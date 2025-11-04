@@ -56,7 +56,6 @@ public class AggregatorService : BackgroundService
             }
 
             var delay = TimeSpan.FromMinutes(_random.Next(10, 16));
-            //var delay = TimeSpan.FromSeconds(_random.Next(10, 16));
             _logger.LogInformation("🕒 تاخیر تا چرخه بعدی: {Minutes} دقیقه", delay.TotalMinutes);
             await Task.Delay(delay, ct);
         }
@@ -88,7 +87,6 @@ public class AggregatorService : BackgroundService
                     TrackLink(item);
 
                     var delay = TimeSpan.FromSeconds(_random.Next(30, 90));
-                    //var delay = TimeSpan.FromSeconds(_random.Next(5, 10));
                     _logger.LogDebug("⏱ انتظار {Seconds} ثانیه تا خبر بعدی", delay.TotalSeconds);
                     await Task.Delay(delay, ct);
                 }
@@ -121,8 +119,15 @@ public class AggregatorService : BackgroundService
                         PubDate = entry.PublishDate.DateTime
                     };
 
-                    // بارگذاری صفحه برای استخراج عکس/ویدیو
                     await EnrichMediaAsync(item);
+
+                    // ⚠️ اگر ویدیوی blob دارد، این خبر را نادیده بگیر
+                    if (!string.IsNullOrEmpty(item.VideoUrl) && item.VideoUrl.StartsWith("blob:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogDebug("⛔ حذف خبر دارای blob video: {Link}", item.Link);
+                        continue;
+                    }
+
                     items.Add(item);
                 }
             }
@@ -152,23 +157,18 @@ public class AggregatorService : BackgroundService
             {
                 var imgUrl = imgNode.GetAttributeValue("content", null) ?? imgNode.GetAttributeValue("src", null);
                 if (!string.IsNullOrWhiteSpace(imgUrl))
-                {
                     item.ImageUrl = NormalizeUrl(item.Link, imgUrl);
-
-                }
             }
 
             // ویدیوها
             var videoNode = doc.DocumentNode.SelectSingleNode("//meta[@property='og:video']") ??
-                            doc.DocumentNode.SelectSingleNode("//video/source[@src]");
+                            doc.DocumentNode.SelectSingleNode("//video/source[@src]") ??
+                            doc.DocumentNode.SelectSingleNode("//video[@src]");
             if (videoNode != null)
             {
                 var videoUrl = videoNode.GetAttributeValue("content", null) ?? videoNode.GetAttributeValue("src", null);
                 if (!string.IsNullOrWhiteSpace(videoUrl))
-                {
                     item.VideoUrl = NormalizeUrl(item.Link, videoUrl);
-
-                }
             }
         }
         catch (Exception ex)
@@ -199,8 +199,8 @@ public class AggregatorService : BackgroundService
 
         return items
             .Where(i =>
-                !nonSportKeywords.Any(k => i.Title.Contains(k) || i.Description.Contains(k)) &&
-                footballKeywords.Any(k => (i.Title + " " + i.Description).Contains(k))
+                footballKeywords.Any(k => (i.Title + " " + i.Description).Contains(k)) &&
+                !nonSportKeywords.Any(k => i.Title.Contains(k) || i.Description.Contains(k))
             )
             .OrderByDescending(i => i.PubDate)
             .Take(30)
