@@ -41,7 +41,7 @@ public class AggregatorService : BackgroundService
 
             if (now.Hour >= 1 && now.Hour < 8)
             {
-                _logger.LogInformation("⏸ در حالت خواب شبانه تا ساعت ۸ صبح...");
+             
                 await Task.Delay(TimeSpan.FromMinutes(30), ct);
                 continue;
             }

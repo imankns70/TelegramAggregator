@@ -4,8 +4,8 @@ using TelegramAggregator.WebAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Configuration.AddJsonFile("footballKeywords.json", optional: true, reloadOnChange: true);
 builder.Services.Configure<AppSettings>(builder.Configuration);
-
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 

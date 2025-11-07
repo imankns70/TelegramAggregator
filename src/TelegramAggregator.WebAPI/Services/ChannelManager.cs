@@ -1,0 +1,6 @@
+﻿namespace TelegramAggregator.WebAPI.Services
+{
+    public class ChannelManager
+    {
+    }
+}
