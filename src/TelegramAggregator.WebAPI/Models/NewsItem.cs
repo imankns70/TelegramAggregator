@@ -7,8 +7,11 @@
             /// <summary>عنوان خبر یا پست</summary>
             public string Title { get; set; } = "";
 
-            /// <summary>توضیح یا خلاصه محتوا</summary>
-            public string Description { get; set; } = "";
+            /// <summary>توضیح کوتاه یا خلاصه محتوا</summary>
+            public string ShortDescription { get; set; } = "";
+
+            /// <summary>شرح کامل محتوا</summary>
+            public string FullDescription { get; set; } = "";
 
             /// <summary>لینک منبع اصلی</summary>
             public string Link { get; set; } = "";
@@ -31,6 +34,7 @@
             /// <summary>کلید یکتا برای جلوگیری از ارسال تکراری</summary>
             public string UniqueKey => $"{SourceName}-{Link}".ToLowerInvariant();
         }
+
     }
 
 }

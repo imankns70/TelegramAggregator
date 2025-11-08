@@ -1,4 +1,5 @@
-﻿
+﻿using Microsoft.Extensions.Options;
+using TelegramAggregator.WebAPI.Helpers;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Services;
 
@@ -9,6 +10,11 @@ builder.Services.Configure<AppSettings>(builder.Configuration);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
+builder.Services.AddSingleton<DuplicateChecker>(sp =>
+{
+    var setting = sp.GetRequiredService<IOptions<AppSettings>>().Value;
+    return new DuplicateChecker(setting.MaxItems);
+});
 
 builder.Services.AddSingleton<AggregatorService>();
 builder.Services.AddHostedService<AggregatorService>();
