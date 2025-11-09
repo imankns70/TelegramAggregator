@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Models.TelegramAggregator.WebAPI.Models;
 
-namespace TelegramAggregator.WebAPI.Helpers
+namespace TelegramAggregator.WebAPI.Infrastructure
 {
     public static class MessageTemplateFormatter
     {

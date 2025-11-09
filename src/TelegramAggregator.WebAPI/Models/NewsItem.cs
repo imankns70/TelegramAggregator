@@ -31,6 +31,8 @@
             /// <summary>نام منبع (مثلاً طرفداری، ورزش3 و ...)</summary>
             public string? SourceName { get; set; }
 
+            public string? ErrorMessage { get; set; }
+
             /// <summary>کلید یکتا برای جلوگیری از ارسال تکراری</summary>
             public string UniqueKey => $"{SourceName}-{Link}".ToLowerInvariant();
         }
