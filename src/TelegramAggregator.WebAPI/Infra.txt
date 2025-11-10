@@ -13,6 +13,7 @@
  │   ┣━ RssParser.cs          // پارس RSS
  │   ┣━ HtmlExtractor.cs      // استخراج محتوا از HTML (FullDescription + Images)
  │   ┗━ ImageDownloader.cs    // دانلود و ذخیره‌ی تصاویر (اختیاری)
+ │   ┗━ TextSimilarity.cs     
  │
  ┣━ Steps
  │   ┣━ FetchRssStep.cs       // مرحله‌ی دریافت RSS

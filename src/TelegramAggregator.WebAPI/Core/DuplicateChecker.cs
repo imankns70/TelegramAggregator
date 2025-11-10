@@ -1,42 +1,52 @@
-﻿using TelegramAggregator.WebAPI.Models.TelegramAggregator.WebAPI.Models;
+﻿using TelegramAggregator.WebAPI.Infrastructure;
+using TelegramAggregator.WebAPI.Models.TelegramAggregator.WebAPI.Models;
 
 namespace TelegramAggregator.WebAPI.Core
 {
+    /// <summary>
+    /// بررسی می‌کند که یک خبر جدید تکراری یا قدیمی است یا خیر
+    /// بر اساس اخبار موجود در NewsStorage
+    /// </summary>
     public class DuplicateChecker
     {
-        private readonly int _maxItems;
-        private readonly LinkedList<string> _recentKeys;
-        private readonly HashSet<string> _keySet;
-        private DateTime _latestPubDate = DateTime.MinValue;
+        private readonly double _similarityThreshold;
+        private readonly NewsStorage _storage;
 
-        public DuplicateChecker(int maxItems)
+        public DuplicateChecker(NewsStorage storage, double similarityThreshold = 0.88)
         {
-            _maxItems = maxItems;
-            _recentKeys = new LinkedList<string>();
-            _keySet = new HashSet<string>();
+            _storage = storage ?? throw new ArgumentNullException(nameof(storage));
+            _similarityThreshold = similarityThreshold;
         }
 
+        /// <summary>
+        /// بررسی می‌کند آیا خبر تکراری یا قدیمی است
+        /// </summary>
         public bool IsDuplicateOrOld(NewsItem item)
         {
-            if (item.PubDate <= _latestPubDate)
-                return true;
+            if (item == null) return true;
 
-            var key = $"{item.UniqueKey}-{item.PubDate:yyyyMMddHHmm}";
-
-            if (_keySet.Contains(key))
-                return true;
-
-            _recentKeys.AddLast(key);
-            _keySet.Add(key);
-
-            if (item.PubDate > _latestPubDate)
-                _latestPubDate = item.PubDate;
-
-            if (_recentKeys.Count > _maxItems)
+            foreach (var oldItem in _storage.GetRecentItems())
             {
-                var oldestNode = _recentKeys.First;
-                _recentKeys.RemoveFirst();
-                _keySet.Remove(oldestNode!.Value);
+                // 1️⃣ بررسی قدیمی بودن خبر
+                if (item.PubDate <= oldItem.PubDate)
+                    return true;
+
+                // 2️⃣ بررسی لینک دقیق
+                if (!string.IsNullOrWhiteSpace(item.Link) && item.Link == oldItem.Link)
+                    return true;
+
+                // 3️⃣ بررسی شباهت عنوان
+                double titleSim = TextSimilarity.GetSimilarity(item.Title, oldItem.Title);
+                if (titleSim >= _similarityThreshold)
+                    return true;
+
+                // 4️⃣ بررسی شباهت توضیحات
+                if (!string.IsNullOrEmpty(item.FullDescription) && !string.IsNullOrEmpty(oldItem.FullDescription))
+                {
+                    double descSim = TextSimilarity.GetSimilarity(item.FullDescription, oldItem.FullDescription);
+                    if (descSim >= _similarityThreshold)
+                        return true;
+                }
             }
 
             return false;
