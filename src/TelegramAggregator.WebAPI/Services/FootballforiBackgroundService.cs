@@ -18,13 +18,13 @@ public class FootballforiBackgroundService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            //var now = DateTime.Now;
-            //if (now.Hour >= 1 && now.Hour < 8)
-            //{
+            var now = DateTime.Now;
+            if (now.Hour >= 1 && now.Hour < 8)
+            {
 
-            //    await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken);
-            //    continue;
-            //}
+                await Task.Delay(TimeSpan.FromMinutes(30), stoppingToken);
+                continue;
+            }
             try
             {
                 using var scope = _serviceFactory.CreateScope();
