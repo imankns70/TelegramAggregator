@@ -41,7 +41,7 @@ public class AggregatorService : BackgroundService
 
             if (now.Hour >= 1 && now.Hour < 8)
             {
-             
+
                 await Task.Delay(TimeSpan.FromMinutes(30), ct);
                 continue;
             }
@@ -102,7 +102,7 @@ public class AggregatorService : BackgroundService
     {
         var items = new List<ContentItem>();
 
-        foreach (var source in sources.Where(s => s.Type == "Rss"))
+        foreach (var source in sources)
         {
             try
             {

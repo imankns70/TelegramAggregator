@@ -8,7 +8,5 @@
         /// <summary>آدرس RSS یا URL سایت</summary>
         public string Url { get; set; } = "";
 
-        /// <summary>نوع منبع (RSS, HTML و غیره)</summary>
-        public string Type { get; set; } = "Rss";
     }
 }

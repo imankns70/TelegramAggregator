@@ -1,6 +1,6 @@
 ﻿using System.ServiceModel.Syndication;
 using System.Xml;
-using TelegramAggregator.WebAPI.Models.TelegramAggregator.WebAPI.Models;
+using TelegramAggregator.WebAPI.Models;
 
 namespace TelegramAggregator.WebAPI.Infrastructure
 {
@@ -20,24 +20,22 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             try
             {
-                using var reader = XmlReader.Create(new System.IO.StringReader(rssContent));
+                using var reader = XmlReader.Create(new StringReader(rssContent));
                 var feed = SyndicationFeed.Load(reader);
 
                 if (feed == null) return items;
 
-                foreach (var entry in feed.Items)
-                {
-                    var item = new NewsItem
-                    {
-                        Title = entry.Title?.Text ?? "",
-                        ShortDescription = entry.Summary?.Text ?? "",
-                        Link = entry.Links.FirstOrDefault()?.Uri?.ToString() ?? "",
-                        PubDate = entry.PublishDate.DateTime,
-                        SourceName = feed.Title?.Text ?? "RSS"
-                    };
+                items = feed.Items.Take(20)
+                                .OrderByDescending(i => i.PublishDate.DateTime).Take(5)
+                                .Select(entry => new NewsItem
+                                {
+                                    Title = entry.Title?.Text ?? "",
+                                    ShortDescription = entry.Summary?.Text ?? "",
+                                    Link = entry.Links.FirstOrDefault()?.Uri?.ToString() ?? "",
+                                    PubDate = entry.PublishDate.DateTime,
+                                    SourceName = feed.Title?.Text ?? "RSS"
+                                }).ToList();
 
-                    items.Add(item);
-                }
             }
             catch
             {

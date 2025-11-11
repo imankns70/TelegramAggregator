@@ -1,6 +1,6 @@
-﻿using TelegramAggregator.WebAPI.Models.TelegramAggregator.WebAPI.Models;
+﻿using TelegramAggregator.WebAPI.Models;
 
-namespace TelegramAggregator.WebAPI.Core
+namespace TelegramAggregator.WebAPI.Infrastructure
 {
     /// <summary>
     /// مدیریت مجموعه‌ای از اخبار اخیر (مثلاً ۱۰۰۰ خبر آخر)

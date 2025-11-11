@@ -1,10 +1,9 @@
 ﻿using Microsoft.Extensions.Options;
-using TelegramAggregator.Core;
+using Telegram.Bot;
 using TelegramAggregator.Infrastructure;
-using TelegramAggregator.WebAPI.Core;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
-using TelegramAggregator.WebAPI.Steps;
+using TelegramAggregator.WebAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,40 +38,29 @@ builder.Services.AddSingleton<DuplicateChecker>(sp =>
     return new DuplicateChecker(storage, 0.88);
 });
 
-// Pipeline registry
-builder.Services.AddSingleton<PipelineRegistry>();
-builder.Services.AddSingleton<PipelineRunner>();
 
 // Helpers
 builder.Services.AddSingleton<HttpHelper>();
 builder.Services.AddSingleton<RssParser>();
 builder.Services.AddSingleton<HtmlExtractor>();
 
-// Steps
-builder.Services.AddTransient<FetchAndParseRssStep>();
-builder.Services.AddTransient<FilterStep>();
-builder.Services.AddTransient<FetchFullContentStep>();
-builder.Services.AddTransient<PublishStep>();
+builder.Services.AddSingleton<ITelegramBotClient>(sp =>
+{
+    var settings = sp.GetRequiredService<IOptions<AppSettings>>().Value;
+    var token = settings.BotToken;
+    return new Telegram.Bot.TelegramBotClient(token);
+});
 
+builder.Services.AddScoped<FootballforiService>();
+
+
+
+builder.Services.AddHostedService<FootballforiBackgroundService>();
 var app = builder.Build();
-var serviceProvider = app.Services;
 
-// Register pipelines
-var registry = serviceProvider.GetRequiredService<PipelineRegistry>();
 
-registry.RegisterPipeline("RssPipeline", new IPipelineStep[]
-{
-    serviceProvider.GetRequiredService<FetchAndParseRssStep>(),
-    serviceProvider.GetRequiredService<FilterStep>(),
-    serviceProvider.GetRequiredService<FetchFullContentStep>(),
-    serviceProvider.GetRequiredService<PublishStep>()
-});
 
-registry.RegisterPipeline("AdminPipeline", new IPipelineStep[]
-{
-    // serviceProvider.GetRequiredService<FetchFullContentStep>(),
-    // serviceProvider.GetRequiredService<PublishStep>()
-});
+
 
 // Map endpoints and middleware
 app.UseHttpsRedirection();

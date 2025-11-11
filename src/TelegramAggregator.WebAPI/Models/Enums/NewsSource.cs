@@ -5,14 +5,11 @@
     /// </summary>
     public enum NewsSource
     {
-        /// <summary>
-        /// خبر از سیستم جمع‌آورنده RSS یا خزنده آمده است
-        /// </summary>
-        Aggregator = 0,
-
-        /// <summary>
-        /// خبر از گروه ادمین‌ها (در تلگرام) ارسال شده است
-        /// </summary>
-        AdminGroup = 1
+        Unknown = 0,   // حالت پیش‌فرض
+        Rss = 1,       // خبرها از فید RSS گرفته می‌شوند
+        Telegram = 2,  // خبرها از کانال تلگرام استخراج می‌شوند
+        Twitter = 3,   // از توییتر (X) گرفته می‌شوند
+        Instagram = 4, // از اینستاگرام
+        Website = 5    // از وب‌سایت مستقیم (Scraping)
     }
 }

@@ -1,4 +1,5 @@
 ﻿using HtmlAgilityPack;
+using System.Text.RegularExpressions;
 
 namespace TelegramAggregator.Infrastructure
 {
@@ -12,7 +13,7 @@ namespace TelegramAggregator.Infrastructure
         }
 
         /// <summary>
-        /// واکشی HTML و بازگرداندن متن کامل خبر
+        /// واکشی HTML و استخراج محتوای اصلی خبر (متن تمیزشده)
         /// </summary>
         public async Task<string> GetFullDescriptionAsync(string url)
         {
@@ -22,25 +23,42 @@ namespace TelegramAggregator.Infrastructure
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
-                // پیدا کردن محتوای اصلی، بر اساس تگ‌های متداول مقالات
+                // 🔍 تلاش برای یافتن بخش اصلی مقاله با XPathهای متداول
                 var contentNode = doc.DocumentNode.SelectSingleNode(
-                    "//article | //div[contains(@class,'content')] | //div[contains(@class,'article-body')]");
+                    "//article" +
+                    " | //div[contains(@class,'content')]" +
+                    " | //div[contains(@class,'article-body')]" +
+                    " | //div[contains(@class,'post-body')]" +
+                    " | //div[contains(@class,'entry-content')]" +
+                    " | //div[contains(@class,'news-body')]" +     // مخصوص ورزش سه
+                    " | //div[contains(@id,'main-content')]" +
+                    " | //section[contains(@class,'main-content')]" // مخصوص برخی سایت‌ها
+                );
 
                 if (contentNode == null)
-                    contentNode = doc.DocumentNode; // fallback به کل سند
+                {
+                    // fallback: جستجو برای طولانی‌ترین div از نظر متن
+                    contentNode = doc.DocumentNode
+                        .SelectNodes("//div")
+                        ?.OrderByDescending(n => n.InnerText.Length)
+                        .FirstOrDefault()
+                        ?? doc.DocumentNode;
+                }
 
-                // پاکسازی تگ‌های غیر ضروری
+                // 🧹 حذف تگ‌های غیرضروری
                 CleanNode(contentNode);
 
+                // 📝 استخراج متن تمیز
                 var text = contentNode.InnerText;
+
                 return NormalizeText(text);
             }
             catch (Exception ex)
             {
-                // در صورت خطا، پیام خطا ثبت شود
                 return $"[Error extracting content] {ex.Message}";
             }
         }
+
 
         public async Task<string?> ExtractMainImageAsync(string url)
         {
@@ -82,31 +100,54 @@ namespace TelegramAggregator.Infrastructure
         /// </summary>
         private void CleanNode(HtmlNode node)
         {
-            // حذف اسکریپت‌ها، استایل‌ها و iframe
-            var unwantedTags = node.SelectNodes(".//script | .//style | .//iframe | .//noscript");
-            if (unwantedTags != null)
+            // حذف تگ‌های اضافی
+            var tagsToRemove = new[] { "script", "style", "nav", "header", "footer", "form", "aside" };
+            foreach (var tag in tagsToRemove)
             {
-                foreach (var tag in unwantedTags)
-                {
-                    tag.Remove();
-                }
+                var nodes = node.SelectNodes($"//{tag}");
+                if (nodes == null) continue;
+                foreach (var n in nodes)
+                    n.Remove();
+            }
+
+            // حذف لینک‌ها و تبلیغات بی‌ربط
+            var adNodes = node.SelectNodes("//*[contains(text(),'اپلیکیشن') or contains(text(),'پخش زنده') or contains(text(),'پادکست')]");
+            if (adNodes != null)
+            {
+                foreach (var ad in adNodes)
+                    ad.Remove();
             }
         }
 
+
         /// <summary>
         /// نرمال سازی متن: حذف فاصله‌های اضافی و خطوط خالی
+        /// </summary>
+        /// <summary>
+        /// نرمال‌سازی متن: حذف فاصله‌های اضافی، کاراکترهای کنترلی و خطوط خالی
         /// </summary>
         private string NormalizeText(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return string.Empty;
 
+            // تبدیل HTML entities و حذف فاصله‌های خاص
+            text = HtmlEntity.DeEntitize(text)
+                             .Replace("\t", " ")
+                             .Replace("\u200C", "") // حذف نیم‌فاصله zero-width
+                             .Replace("\u200B", ""); // حذف zero-width space
+
+            // حذف فاصله‌های متوالی
+            text = Regex.Replace(text, @"\s{2,}", " ");
+
+            // حذف خطوط خالی و فاصله‌های اضافه‌ی اطراف
             var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                             .Select(l => l.Trim())
                             .Where(l => !string.IsNullOrEmpty(l));
 
-            return string.Join(Environment.NewLine + Environment.NewLine, lines);
+            return string.Join(Environment.NewLine + Environment.NewLine, lines).Trim();
         }
+
 
         /// <summary>
         /// تبدیل URL نسبی به کامل
@@ -116,10 +157,15 @@ namespace TelegramAggregator.Infrastructure
             if (Uri.TryCreate(src, UriKind.Absolute, out var absoluteUri))
                 return absoluteUri.ToString();
 
+            // اطمینان از اینکه baseUrl با '/' تمام می‌شود
+            if (!baseUrl.EndsWith("/"))
+                baseUrl += "/";
+
             if (Uri.TryCreate(new Uri(baseUrl), src, out var relativeUri))
                 return relativeUri.ToString();
 
             return src; // fallback
         }
+
     }
 }
