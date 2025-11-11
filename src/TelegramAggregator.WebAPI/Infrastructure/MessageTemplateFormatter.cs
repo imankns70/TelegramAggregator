@@ -100,37 +100,50 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             return clean;
         }
 
-        private static string CleanFullDescription(string? input)
+        private static string CleanFullDescription(string text)
         {
-            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+            if (string.IsNullOrWhiteSpace(text))
+                return string.Empty;
 
-            var clean = input;
+            // حذف URL ها
+            text = Regex.Replace(text, @"https?:\/\/\S+", "", RegexOptions.IgnoreCase);
 
-            // حذف تگ‌های HTML
-            clean = Regex.Replace(clean, "<.*?>", " ");
+            // حذف خطوط تبلیغاتی یا عبارت‌های غیرخبری
+            string[] unwantedPhrases =
+            {
+        "شروع دعوت دوباره یادآوری کن",
+        "پخش زنده",
+        "دانلود اپلیکیشن",
+        "تماس با ما",
+        "ورزش سه",
+        "طرفداری",
+        "کد خبر",
+        "ورود | ثبت نام",
+        "تبلیغات",
+        "خبر بعدی",
+        "اپلیکیشن طرفداری"
+    };
 
-            // حذف HTML entities
-            clean = Regex.Replace(clean, "&[a-zA-Z]+;", " ");
+            foreach (var phrase in unwantedPhrases)
+                text = text.Replace(phrase, "", StringComparison.OrdinalIgnoreCase);
 
-            // حذف لینک‌ها
-            clean = Regex.Replace(clean, @"http[s]?://\S+", " ");
+            // حذف خطوط کوتاه و بی‌محتوا
+            text = string.Join(Environment.NewLine,
+                text.Split('\n')
+                    .Select(l => l.Trim())
+                    .Where(l => l.Length > 5));
 
-            // حذف عبارت‌های مربوط به منبع خبر با حالت‌های مختلف
-            clean = Regex.Replace(clean, @"به گزارش\s+[""']?\s*[\u0600-\u06FFa-zA-Z0-9\s‌\-–_]+[""']?\s*[,،:]?", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"طبق گزارش\s+[""']?\s*[\u0600-\u06FFa-zA-Z0-9\s‌\-–_]+[""']?\s*[,،:]?", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"از گزارش\s+[""']?\s*[\u0600-\u06FFa-zA-Z0-9\s‌\-–_]+[""']?\s*[,،:]?", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"گزارش\s+[""']?\s*[\u0600-\u06FFa-zA-Z0-9\s‌\-–_]+[""']?\s*[,،:]?", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*[""']?(ورزش سه|طرفداری|بی بی سی|فارس|تسنیم|ایسنا|مهر)[""']?\s*[،,:]?", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"منبع\s*[:：]\s*[\u0600-\u06FFa-zA-Z0-9\s‌\-–_]+", " ", RegexOptions.IgnoreCase);
+            // حذف فاصله‌های اضافی
+            text = Regex.Replace(text, @"\s+", " ");
 
-            // حذف فاصله‌های تکراری
-            clean = Regex.Replace(clean, @"\s{2,}", " ").Trim();
+            // متن تا آخرین نقطه نگه‌داشته شود
+            var lastDotIndex = text.LastIndexOf('。') >= 0 ? text.LastIndexOf('。') : text.LastIndexOf('.');
+            if (lastDotIndex > 0)
+                text = text[..(lastDotIndex + 1)];
 
-            // حذف نقل‌قول‌های تکی در ابتدای پاراگراف‌ها
-            clean = Regex.Replace(clean, @"^[\""'«»]+", "", RegexOptions.Multiline);
-
-            return clean;
+            return text.Trim();
         }
+
         private static string SmartTruncate(string text, int maxLength = 1024)
         {
             if (string.IsNullOrEmpty(text)) return string.Empty;
