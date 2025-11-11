@@ -31,7 +31,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             // عنوان
             if (!string.IsNullOrWhiteSpace(item.Title))
-                sb.AppendLine(EscapeHtml(item.Title));
+                sb.AppendLine($"<b>{EscapeHtml(item.Title)}</b>");
 
             sb.AppendLine();
 
