@@ -19,6 +19,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly HtmlExtractor _htmlExtractor;
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
+        private string? _lastSource = null;
         public FootballforiService(ITelegramBotClient bot, ILogger<FootballforiService> logger,
             HttpHelper httpHelper,
             RssParser rssParser, DuplicateChecker duplicateChecker,
@@ -114,7 +115,16 @@ namespace TelegramAggregator.WebAPI.Services
         {
             while (_newsStorage.Queue.Count > 0)
             {
-                var item = _newsStorage.Queue.Dequeue();
+                var item = _newsStorage.Queue.Peek(); // فقط نگاه می‌کنیم، حذف نه هنوز
+
+                // ✅ اگر منبع همون منبع قبلیه، بفرستش انتهای صف تا فعلاً رد بشیم
+                if (item.SourceName == _lastSource && _newsStorage.Queue.Count > 1)
+                {
+                    _newsStorage.Queue.Enqueue(_newsStorage.Queue.Dequeue());
+                    continue;
+                }
+
+                item = _newsStorage.Queue.Dequeue();
 
                 try
                 {
@@ -155,6 +165,8 @@ namespace TelegramAggregator.WebAPI.Services
                         disableNotification: true);
 
                     await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
+
+                    _lastSource = item.SourceName;
 
                     // 🕒 اضافه کردن تاخیر بین ارسال هر خبر
                     var delay = TimeSpan.FromSeconds(new Random().Next(30, 90));
