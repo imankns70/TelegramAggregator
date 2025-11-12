@@ -12,9 +12,6 @@ namespace TelegramAggregator.Infrastructure
             _httpClient = httpClient ?? new HttpClient();
         }
 
-        /// <summary>
-        /// واکشی HTML و استخراج محتوای اصلی خبر (متن تمیزشده) با تشخیص سایت
-        /// </summary>
         public async Task<string> GetFullDescriptionAsync(string url)
         {
             try
@@ -23,15 +20,15 @@ namespace TelegramAggregator.Infrastructure
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
-                // تشخیص سایت بر اساس دامنه
                 string host = new Uri(url).Host.ToLower();
                 var contentNode = host switch
                 {
                     var h when h.Contains("varzesh3.com") =>
-                        doc.DocumentNode.SelectSingleNode("//div[contains(@class,'news-body')]") ?? doc.DocumentNode,
+                        doc.DocumentNode.SelectSingleNode("//div[contains(@class,'news-body') or contains(@class,'news-text') or contains(@class,'newsPage')]")
+                        ?? doc.DocumentNode,
 
                     var h when h.Contains("tarafdari.com") =>
-                        doc.DocumentNode.SelectSingleNode("//div[contains(@class,'node-content') or contains(@class,'field--name-body')]")
+                        doc.DocumentNode.SelectSingleNode("//div[contains(@class,'node-content') or contains(@class,'field--name-body') or contains(@class,'field-name-body')]")
                         ?? doc.DocumentNode,
 
                     _ => doc.DocumentNode.SelectSingleNode(
@@ -46,11 +43,31 @@ namespace TelegramAggregator.Infrastructure
                     ) ?? doc.DocumentNode
                 };
 
-
                 CleanNode(contentNode);
-                var text = contentNode.InnerText;
 
-                return NormalizeText(text);
+                // بررسی وجود ویدیو در محتوا
+                var videoNode = contentNode.SelectSingleNode(".//video | .//div[contains(@class,'video-container')]");
+                string text;
+                if (videoNode != null)
+                {
+                    // اگر ویدیو هست، فقط پاراگراف اول را بگیریم
+                    var firstPara = contentNode.SelectSingleNode(".//p");
+                    text = firstPara != null ? NormalizeText(firstPara.InnerText) : string.Empty;
+                }
+                else
+                {
+                    text = NormalizeText(contentNode.InnerText);
+                }
+
+                // حذف تبلیغات و اضافات سایت خاص
+                text = host switch
+                {
+                    var h when h.Contains("tarafdari.com") => CleanTarafdariText(text),
+                    var h when h.Contains("varzesh3.com") => CleanVarzesh3Text(text),
+                    _ => text
+                };
+
+                return text.Trim();
             }
             catch (Exception ex)
             {
@@ -66,7 +83,6 @@ namespace TelegramAggregator.Infrastructure
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
-                // تشخیص سایت برای meta image
                 string host = new Uri(url).Host.ToLower();
                 HtmlNode? imgNode = host switch
                 {
@@ -86,7 +102,11 @@ namespace TelegramAggregator.Infrastructure
                 {
                     var imgUrl = imgNode.GetAttributeValue("content", null) ?? imgNode.GetAttributeValue("src", null);
                     if (!string.IsNullOrWhiteSpace(imgUrl))
-                        return NormalizeUrl(url, imgUrl);
+                    {
+                        // نادیده گرفتن عکس ویدیو تلگرام یا آیکون‌ها
+                        if (!imgUrl.Contains("telegram") && !imgUrl.Contains("video"))
+                            return NormalizeUrl(url, imgUrl);
+                    }
                 }
             }
             catch { }
@@ -123,9 +143,26 @@ namespace TelegramAggregator.Infrastructure
 
             var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                             .Select(l => l.Trim())
-                            .Where(l => !string.IsNullOrEmpty(l));
+                            .Where(l => !string.IsNullOrEmpty(l) && l.Length > 2);
 
             return string.Join(Environment.NewLine + Environment.NewLine, lines).Trim();
+        }
+
+        private string CleanTarafdariText(string text)
+        {
+            text = Regex.Replace(text, @"@\w+", ""); // حذف @username
+            text = Regex.Replace(text, @"#\w+", ""); // حذف هشتگ‌ها
+            text = Regex.Replace(text, @"با دعوت.*?هدیه بگیرید\.?", "", RegexOptions.Singleline);
+            text = Regex.Replace(text, @"تبدیل\s*،?\s*\d+\s*هزار\s*تومان.*", "", RegexOptions.Singleline);
+            return text.Trim();
+        }
+
+        private string CleanVarzesh3Text(string text)
+        {
+            text = Regex.Replace(text, @"کد\s*خبر.*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"برای\s*مشاهده.*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"ورود\s*\|\s*ثبت\s*نام.*", "", RegexOptions.Multiline);
+            return text.Trim();
         }
 
         private string NormalizeUrl(string baseUrl, string src)
