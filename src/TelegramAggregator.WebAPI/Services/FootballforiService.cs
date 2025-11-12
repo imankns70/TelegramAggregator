@@ -120,8 +120,13 @@ namespace TelegramAggregator.WebAPI.Services
                 {
 
 
-                    item.ImageUrl = await _htmlExtractor.ExtractMainImageAsync(item.Link);
-                    item.FullDescription = await _htmlExtractor.GetFullDescriptionAsync(item.Link);
+                    // 🔹 واکشی تصویر و متن کامل قبل از ساخت پیام
+                    var imageTask = _htmlExtractor.ExtractMainImageAsync(item.Link);
+                    var fullDescTask = _htmlExtractor.GetFullDescriptionAsync(item.Link);
+                    await Task.WhenAll(imageTask, fullDescTask);
+
+                    item.ImageUrl = imageTask.Result;
+                    item.FullDescription = fullDescTask.Result;
 
 
                     string caption = await MessageTemplateFormatter.PrepareMessageAsync(item, channelConfig, _htmlExtractor);
