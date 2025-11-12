@@ -139,6 +139,9 @@ namespace TelegramAggregator.Infrastructure
                              .Replace("\u200C", "")
                              .Replace("\u200B", "");
 
+            // حذف کاراکتر | ابتدای متن و فاصله‌های اضافی بعدش
+            text = Regex.Replace(text, @"^\|+\s*", "");
+
             text = Regex.Replace(text, @"\s{2,}", " ");
 
             var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
@@ -147,6 +150,7 @@ namespace TelegramAggregator.Infrastructure
 
             return string.Join(Environment.NewLine + Environment.NewLine, lines).Trim();
         }
+
 
         private string CleanTarafdariText(string text)
         {
