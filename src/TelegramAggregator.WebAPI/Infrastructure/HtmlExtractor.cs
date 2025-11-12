@@ -25,12 +25,15 @@ namespace TelegramAggregator.Infrastructure
 
                 // تشخیص سایت بر اساس دامنه
                 string host = new Uri(url).Host.ToLower();
-                HtmlNode? contentNode = host switch
+                var contentNode = host switch
                 {
-                    var h when h.Contains("varzesh3.com") => doc.DocumentNode.SelectSingleNode("//div[contains(@class,'news-text')]") 
-                                                              ?? doc.DocumentNode,
-                    var h when h.Contains("tarafdari.com") => doc.DocumentNode.SelectSingleNode("//div[contains(@class,'news-content')]") 
-                                                                  ?? doc.DocumentNode,
+                    var h when h.Contains("varzesh3.com") =>
+                        doc.DocumentNode.SelectSingleNode("//div[contains(@class,'news-body')]") ?? doc.DocumentNode,
+
+                    var h when h.Contains("tarafdari.com") =>
+                        doc.DocumentNode.SelectSingleNode("//div[contains(@class,'node-content') or contains(@class,'field--name-body')]")
+                        ?? doc.DocumentNode,
+
                     _ => doc.DocumentNode.SelectSingleNode(
                         "//article" +
                         " | //div[contains(@class,'content')]" +
@@ -42,6 +45,7 @@ namespace TelegramAggregator.Infrastructure
                         " | //section[contains(@class,'main-content')]"
                     ) ?? doc.DocumentNode
                 };
+
 
                 CleanNode(contentNode);
                 var text = contentNode.InnerText;

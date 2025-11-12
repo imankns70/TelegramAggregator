@@ -10,7 +10,7 @@ namespace TelegramAggregator.WebAPI.Services
     public class FootballforiService
     {
         private readonly ITelegramBotClient _bot;
-        private readonly ILogger<AggregatorService> _logger;
+        private readonly ILogger<FootballforiService> _logger;
         private readonly List<ChannelConfig> _channels;
         private readonly HttpHelper _httpHelper;
         private readonly RssParser _rssParser;
@@ -19,7 +19,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly HtmlExtractor _htmlExtractor;
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
-        public FootballforiService(ITelegramBotClient bot, ILogger<AggregatorService> logger,
+        public FootballforiService(ITelegramBotClient bot, ILogger<FootballforiService> logger,
             HttpHelper httpHelper,
             RssParser rssParser, DuplicateChecker duplicateChecker,
             NewsStorage newsStorage, IOptions<AppSettings> appSettings, HtmlExtractor htmlExtractor)
