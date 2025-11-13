@@ -65,7 +65,7 @@ public class FootballforiBackgroundService : BackgroundService
 
             // 🕒 محاسبه فاصله بین دو اجرای متوالی (از شروع تا شروع)
             var elapsed = DateTime.UtcNow - startTime;
-            var randomDelay = TimeSpan.FromMinutes(_random.Next(10, 30));
+            var randomDelay = TimeSpan.FromMinutes(_random.Next(10, 20));
             var delay = randomDelay - elapsed;
             if (delay < TimeSpan.Zero)
                 delay = TimeSpan.Zero;

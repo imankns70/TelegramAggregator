@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 
 namespace TelegramAggregator.WebAPI.Controllers
@@ -8,13 +9,17 @@ namespace TelegramAggregator.WebAPI.Controllers
     public class AggregatorController : ControllerBase
     {
 
+
+        private readonly NewsStorage _newsStorage;
         private readonly IConfiguration _config;
         private readonly ILogger<AggregatorController> _logger;
-        public AggregatorController(IConfiguration config, ILogger<AggregatorController> logger)
+        public AggregatorController(IConfiguration config, ILogger<AggregatorController> logger,
+        NewsStorage newsStorage)
         {
 
             _config = config;
             _logger = logger;
+            _newsStorage = newsStorage;
         }
 
 
@@ -40,7 +45,23 @@ namespace TelegramAggregator.WebAPI.Controllers
                 channels = channels.Select(c => new { c.Name, c.ChannelId, c.AdminUsername })
             });
         }
+        [HttpGet]
+        [Route("GetPostedInQueue")]
+        public ActionResult GetPostedInQueue()
+        {
+            var news = _newsStorage.Queue.GroupBy(a => a.SourceName)
+                            .Select(s => new
+                            {
 
+                                Source = s.Key,
+                                news = s.Select(a => new
+                                {
+                                    a.Title,
+                                    a.Link
+                                }).ToList()
+                            });
+            return Ok(news);
+        }
 
         /// <summary>
         /// لیست کانال‌ها

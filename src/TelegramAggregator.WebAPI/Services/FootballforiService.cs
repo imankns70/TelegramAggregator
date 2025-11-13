@@ -105,6 +105,8 @@ namespace TelegramAggregator.WebAPI.Services
 
         private async Task PublishAsync(ChannelConfig channelConfig, CancellationToken ct)
         {
+
+          
             while (_newsStorage.Queue.Count > 0 && !ct.IsCancellationRequested)
             {
                 var item = _newsStorage.Queue.Peek();
@@ -162,7 +164,7 @@ namespace TelegramAggregator.WebAPI.Services
                     _lastPublishedBySource[item.SourceName] = DateTime.UtcNow;
 
                     // تأخیر تصادفی بین 2 تا 20 دقیقه برای طبیعی بودن
-                    var randomDelay = TimeSpan.FromMinutes(new Random().Next(2, 21));
+                    var randomDelay = TimeSpan.FromMinutes(new Random().Next(2, 20));
                     _logger.LogDebug("⏱ انتظار {Minutes} دقیقه تا پست بعدی در کانال {Channel}",
                         randomDelay.TotalMinutes, channelConfig.Name);
                     await Task.Delay(randomDelay);

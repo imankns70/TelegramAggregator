@@ -181,9 +181,14 @@ namespace TelegramAggregator.Infrastructure
             text = Regex.Replace(text, @"خبر[:：]\s*\d+", "", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, @"زمان مطالعه[:：]\s*\d+\s*دقیقه", "", RegexOptions.IgnoreCase);
 
+            // حذف پیش‌نمایش تیتر با منبع و ساعت و امتیاز
+            text = Regex.Replace(text, @"- خبرورزشی.*$", "", RegexOptions.IgnoreCase);
+
             // حذف صفحه اصلی، نام نویسنده و جداکننده‌ها
             text = Regex.Replace(text, @"صفحه اصلی.*?-\s*", "", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, @"^\s*[\w\s]+:\s*", "", RegexOptions.Multiline); // حذف نام نویسنده
+
+            // حذف | و کاراکترهای اضافی
             text = Regex.Replace(text, @"\|\s*", " ");
 
             // حذف فاصله‌های اضافی و خطوط خالی
@@ -199,6 +204,7 @@ namespace TelegramAggregator.Infrastructure
 
             return text;
         }
+
 
         private string NormalizeUrl(string baseUrl, string src)
         {
