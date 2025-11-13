@@ -177,13 +177,22 @@ namespace TelegramAggregator.Infrastructure
         {
             if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
-            text = Regex.Replace(text, @"خبر[:：]\s*\d+", "");
-            text = Regex.Replace(text, @"زمان مطالعه[:：]\s*\d+\s*دقیقه", "");
-            text = Regex.Replace(text, @"صفحه اصلی.*?-\s*", "");
+            // حذف خبر شماره و زمان مطالعه
+            text = Regex.Replace(text, @"خبر[:：]\s*\d+", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"زمان مطالعه[:：]\s*\d+\s*دقیقه", "", RegexOptions.IgnoreCase);
+
+            // حذف صفحه اصلی، نام نویسنده و جداکننده‌ها
+            text = Regex.Replace(text, @"صفحه اصلی.*?-\s*", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"^\s*[\w\s]+:\s*", "", RegexOptions.Multiline); // حذف نام نویسنده
             text = Regex.Replace(text, @"\|\s*", " ");
+
+            // حذف فاصله‌های اضافی و خطوط خالی
             text = Regex.Replace(text, @"\s{2,}", " ");
+            text = Regex.Replace(text, @"[\r\n]{2,}", "\n");
+
             text = text.Trim();
 
+            // پایان‌بندی طبیعی جمله‌ها
             var lastDot = text.LastIndexOf('.');
             if (lastDot > 0)
                 text = text[..(lastDot + 1)];

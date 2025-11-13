@@ -20,9 +20,6 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
         private readonly Dictionary<string, DateTime> _lastPublishedBySource = new();
-        private readonly TimeSpan _minIntervalPerSource = TimeSpan.FromMinutes(5);
-        private readonly TimeSpan _globalMinInterval = TimeSpan.FromMinutes(2);
-        private DateTime _lastGlobalPostTime = DateTime.MinValue;
         private readonly Random _random = new();
 
         public FootballforiService(
@@ -112,24 +109,18 @@ namespace TelegramAggregator.WebAPI.Services
             {
                 var item = _newsStorage.Queue.Peek();
 
-                // 🕐 بررسی فاصله زمانی کلی بین پست‌ها
-                var sinceLastGlobal = DateTime.UtcNow - _lastGlobalPostTime;
-                if (sinceLastGlobal < _globalMinInterval)
-                {
-                    var wait = _globalMinInterval - sinceLastGlobal;
-                    _logger.LogDebug("⌛ در انتظار {Seconds} ثانیه برای رعایت فاصله کلی بین پست‌ها", wait.TotalSeconds);
-                    await Task.Delay(wait, ct);
-                }
-
-                // 🔁 بررسی فاصله ارسال برای هر منبع
+                // بررسی فاصله از آخرین پست همان منبع
                 if (_lastPublishedBySource.TryGetValue(item.SourceName, out var lastTime))
                 {
                     var timeSinceLast = DateTime.UtcNow - lastTime;
-                    if (timeSinceLast < _minIntervalPerSource && _newsStorage.Queue.Count > 1)
+
+                    if (timeSinceLast < TimeSpan.FromMinutes(2))
                     {
-                        _newsStorage.Queue.Enqueue(_newsStorage.Queue.Dequeue());
-                        await Task.Delay(500, ct);
-                        continue;
+                        // اگر هنوز حداقل 2 دقیقه نگذشته، منتظر بمان
+                        var wait = TimeSpan.FromMinutes(2) - timeSinceLast;
+                        _logger.LogDebug("⏱ انتظار {Minutes} دقیقه برای رعایت حداقل فاصله از آخرین پست منبع {Source}",
+                            wait.TotalMinutes, item.SourceName);
+                        await Task.Delay(wait);
                     }
                 }
 
@@ -137,7 +128,7 @@ namespace TelegramAggregator.WebAPI.Services
 
                 try
                 {
-                    // 📄 واکشی تصویر و شرح کامل
+                    // واکشی تصویر و شرح کامل
                     item.ImageUrl = await _htmlExtractor.ExtractMainImageAsync(item.Link);
                     item.FullDescription = await _htmlExtractor.GetFullDescriptionAsync(item.Link);
 
@@ -147,35 +138,41 @@ namespace TelegramAggregator.WebAPI.Services
 
                     if (!string.IsNullOrEmpty(item.VideoUrl))
                     {
-                        sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl, caption: caption, parseMode: ParseMode.Html, disableNotification: true);
+                        sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl,
+                            caption: caption, parseMode: ParseMode.Html, disableNotification: true);
                     }
                     else if (!string.IsNullOrEmpty(item.ImageUrl))
                     {
-                        sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl, caption: caption, parseMode: ParseMode.Html, disableNotification: true);
+                        sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl,
+                            caption: caption, parseMode: ParseMode.Html, disableNotification: true);
                     }
                     else
                     {
-                        sentMessage = await _bot.SendMessage(_hiddenGroupId, caption, parseMode: ParseMode.Html, disableNotification: true);
+                        sentMessage = await _bot.SendMessage(_hiddenGroupId, caption,
+                            parseMode: ParseMode.Html, disableNotification: true);
                     }
 
-                    // 📤 ارسال به کانال اصلی
-                    await _bot.CopyMessage(channelConfig.ChannelId, _hiddenGroupId, sentMessage.MessageId, disableNotification: true);
+                    await _bot.CopyMessage(channelConfig.ChannelId,
+                        _hiddenGroupId, sentMessage.MessageId,
+                        disableNotification: true);
+
                     await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
 
-                    // 🧠 ثبت آخرین ارسال
+                    // ذخیره زمان آخرین پست از این منبع
                     _lastPublishedBySource[item.SourceName] = DateTime.UtcNow;
-                    _lastGlobalPostTime = DateTime.UtcNow;
 
-                    // ⏳ فاصله طبیعی تا پست بعدی
-                    var delay = TimeSpan.FromSeconds(_random.Next(60, 150));
-                    _logger.LogInformation("✅ خبر از {Source} ارسال شد. انتظار {Seconds} ثانیه تا بعدی.", item.SourceName, delay.TotalSeconds);
-                    await Task.Delay(delay, ct);
+                    // تأخیر تصادفی بین 2 تا 20 دقیقه برای طبیعی بودن
+                    var randomDelay = TimeSpan.FromMinutes(new Random().Next(2, 21));
+                    _logger.LogDebug("⏱ انتظار {Minutes} دقیقه تا پست بعدی در کانال {Channel}",
+                        randomDelay.TotalMinutes, channelConfig.Name);
+                    await Task.Delay(randomDelay);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "⚠️ خطا در ارسال پیام از منبع {Source}", item.SourceName);
+                    _logger.LogError(ex, "⚠️ خطا در ارسال پیام به کانال {Channel}", channelConfig.Name);
                 }
             }
         }
+
     }
 }
