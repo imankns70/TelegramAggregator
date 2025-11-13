@@ -11,7 +11,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         {
             item.Title = CleanText(item.Title);
             item.ShortDescription = CleanText(item.ShortDescription);
-            item.FullDescription = CleanFullDescription(item.FullDescription);
+            item.FullDescription = CleanFullDescription(item.FullDescription, item.Title);
 
             var caption = FormatMessage(item, channel);
             return SmartTruncate(caption);
@@ -57,13 +57,24 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             return clean;
         }
 
-        private static string CleanFullDescription(string text)
+        private static string CleanFullDescription(string text, string? title = null)
         {
             if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
             // حذف لینک‌ها و نویزهای متنی
             text = Regex.Replace(text, @"https?:\/\/\S+", "", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"^\s*\|\s*", ""); // حذف | در ابتدای متن
+
+            // حذف | اضافی
+            text = Regex.Replace(text, @"^\s*\|\s*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"\s*\|\s*", " ");
+
+            // حذف اطلاعات اضافی مثل "خبر: 527,101 ..." یا "صفحه اصلی ..."
+            text = Regex.Replace(text, @"خبر\s*[:：].*?\d+", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"صفحه اصلی.*", "", RegexOptions.IgnoreCase);
+
+            // حذف عنوان خبر تکراری داخل متن
+            if (!string.IsNullOrWhiteSpace(title))
+                text = Regex.Replace(text, Regex.Escape(title), "", RegexOptions.IgnoreCase);
 
             // حذف الگوهای گزارش
             text = Regex.Replace(text,
@@ -86,9 +97,8 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             // حذف الگوهای آخر متن مثل لینک کانال
             text = Regex.Replace(text, @"(به\s*کانال.*|عضو\s*کانال.*|لینک\s*کانال.*|در\s*تلگرام\s*ما.*)$", "", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"[""“”«»]{2,}", "", RegexOptions.IgnoreCase);
 
-            // خط‌های کوتاه و خالی حذف بشن
+            // حذف خطوط کوتاه و خالی
             text = string.Join(Environment.NewLine,
                 text.Split('\n')
                     .Select(l => l.Trim())
