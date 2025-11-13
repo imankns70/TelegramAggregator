@@ -49,7 +49,7 @@ namespace TelegramAggregator.Infrastructure
                     ) ?? doc.DocumentNode
                 };
 
-                CleanNode(contentNode);
+                CleanNode(contentNode, host);
 
                 // بررسی وجود ویدیو در محتوا
                 var videoNode = contentNode.SelectSingleNode(".//video | .//div[contains(@class,'video-container')]");
@@ -121,20 +121,27 @@ namespace TelegramAggregator.Infrastructure
             return null;
         }
 
-        private void CleanNode(HtmlNode node)
+        private void CleanNode(HtmlNode node, string host)
         {
             var tagsToRemove = new[] { "script", "style", "nav", "header", "footer", "form", "aside" };
             foreach (var tag in tagsToRemove)
             {
                 var nodes = node.SelectNodes($"//{tag}");
-                if (nodes == null) continue;
-                foreach (var n in nodes) n.Remove();
+                if (nodes != null) foreach (var n in nodes) n.Remove();
             }
 
+            // حذف تبلیغات و بخش‌های غیرمربوط
             var adNodes = node.SelectNodes("//*[contains(text(),'اپلیکیشن') or contains(text(),'پخش زنده') or contains(text(),'پادکست')]");
-            if (adNodes != null)
-                foreach (var ad in adNodes) ad.Remove();
+            if (adNodes != null) foreach (var ad in adNodes) ad.Remove();
+
+            // حذف منبع و زمان مطالعه برای خبرورزشی
+            if (host.Contains("khabarvarzeshi.com"))
+            {
+                var sourceNode = node.SelectSingleNode(".//div[contains(@class,'item-nav')]");
+                sourceNode?.Remove();
+            }
         }
+
 
         private string NormalizeText(string text)
         {
@@ -181,14 +188,9 @@ namespace TelegramAggregator.Infrastructure
             text = Regex.Replace(text, @"خبر[:：]\s*\d+", "", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, @"زمان مطالعه[:：]\s*\d+\s*دقیقه", "", RegexOptions.IgnoreCase);
 
-            // حذف پیش‌نمایش تیتر با منبع و ساعت و امتیاز
-            text = Regex.Replace(text, @"- خبرورزشی.*$", "", RegexOptions.IgnoreCase);
-
             // حذف صفحه اصلی، نام نویسنده و جداکننده‌ها
             text = Regex.Replace(text, @"صفحه اصلی.*?-\s*", "", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, @"^\s*[\w\s]+:\s*", "", RegexOptions.Multiline); // حذف نام نویسنده
-
-            // حذف | و کاراکترهای اضافی
             text = Regex.Replace(text, @"\|\s*", " ");
 
             // حذف فاصله‌های اضافی و خطوط خالی
@@ -204,7 +206,6 @@ namespace TelegramAggregator.Infrastructure
 
             return text;
         }
-
 
         private string NormalizeUrl(string baseUrl, string src)
         {

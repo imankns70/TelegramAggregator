@@ -25,7 +25,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
                 if (feed == null) return items;
 
-                items = feed.Items.Take(20)
+                items = feed.Items.Where(a=> !a.Title.Text.Contains("ویدیو")).Take(20)
                                 .OrderByDescending(i => i.PublishDate.DateTime).Take(5)
                                 .Select(entry => new NewsItem
                                 {

@@ -23,7 +23,7 @@ public class FootballforiBackgroundService : BackgroundService
         {
             var now = DateTime.Now;
 
-            // 💤 حالت شبانه (۱ تا ۸ صبح)
+             //💤 حالت شبانه(۱ تا ۸ صبح)
             if (now.Hour >= 1 && now.Hour < 8)
             {
                 _logger.LogInformation("🌙 ساعت {Hour}: در حالت شبانه هستیم، بررسی بعدی تا ۳۰ دقیقه دیگر", now.Hour);

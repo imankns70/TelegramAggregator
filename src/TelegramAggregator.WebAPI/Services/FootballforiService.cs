@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Options;
+using System.Text.RegularExpressions;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using TelegramAggregator.Infrastructure;
@@ -20,7 +21,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
         private readonly Dictionary<string, DateTime> _lastPublishedBySource = new();
-        private readonly Random _random = new();
+   
 
         public FootballforiService(
             ITelegramBotClient bot,
@@ -87,18 +88,22 @@ namespace TelegramAggregator.WebAPI.Services
             var footballKeywords = _appSettings.FootballKeywords;
             var nonSportKeywords = _appSettings.NonSportKeywords;
 
+
             var filtered = items
                 .Where(item =>
                     !_duplicateChecker.IsDuplicateOrOld(item) &&
                     footballKeywords.Any(k => (item.Title + " " + item.ShortDescription).Contains(k)) &&
                     !nonSportKeywords.Any(k => item.Title.Contains(k) || item.ShortDescription.Contains(k)) &&
-                    string.IsNullOrEmpty(item.VideoUrl))
+                    string.IsNullOrEmpty(item.VideoUrl) && !IsLineupOrPreMatchNews(item))
                 .OrderByDescending(i => i.PubDate)
                 .Take(30)
                 .ToList();
 
             foreach (var item in filtered)
+            {
+
                 _newsStorage.Add(item);
+            }
 
             return Task.CompletedTask;
         }
@@ -106,7 +111,7 @@ namespace TelegramAggregator.WebAPI.Services
         private async Task PublishAsync(ChannelConfig channelConfig, CancellationToken ct)
         {
 
-          
+
             while (_newsStorage.Queue.Count > 0 && !ct.IsCancellationRequested)
             {
                 var item = _newsStorage.Queue.Peek();
@@ -134,6 +139,8 @@ namespace TelegramAggregator.WebAPI.Services
                     item.ImageUrl = await _htmlExtractor.ExtractMainImageAsync(item.Link);
                     item.FullDescription = await _htmlExtractor.GetFullDescriptionAsync(item.Link);
 
+     
+
                     string caption = await MessageTemplateFormatter.PrepareMessageAsync(item, channelConfig, _htmlExtractor);
 
                     Telegram.Bot.Types.Message sentMessage;
@@ -160,11 +167,11 @@ namespace TelegramAggregator.WebAPI.Services
 
                     await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
 
-                    // ذخیره زمان آخرین پست از این منبع
-                    _lastPublishedBySource[item.SourceName] = DateTime.UtcNow;
+                    //ذخیره زمان آخرین پست از این منبع
+                   _lastPublishedBySource[item.SourceName] = DateTime.UtcNow;
 
-                    // تأخیر تصادفی بین 2 تا 20 دقیقه برای طبیعی بودن
-                    var randomDelay = TimeSpan.FromMinutes(new Random().Next(2, 20));
+                    //تأخیر تصادفی بین 2 تا 20 دقیقه برای طبیعی بودن
+                    var randomDelay = TimeSpan.FromMinutes(new Random().Next(2, 16));
                     _logger.LogDebug("⏱ انتظار {Minutes} دقیقه تا پست بعدی در کانال {Channel}",
                         randomDelay.TotalMinutes, channelConfig.Name);
                     await Task.Delay(randomDelay);
@@ -176,5 +183,34 @@ namespace TelegramAggregator.WebAPI.Services
             }
         }
 
+        private bool IsLineupOrPreMatchNews(NewsItem item)
+        {
+            // ترکیب عنوان + توضیح کوتاه + متن کامل
+            var text = $"{item.Title} {item.ShortDescription} {item.FullDescription}"
+                       .Replace("‌", " ")  // نیم‌فاصله
+                       .Replace("ي", "ی")
+                       .Replace("ك", "ک")
+                       .ToLowerInvariant();
+
+            // --- 1. کلیدواژه‌های دقیق ---
+            var lineupKeywords = _appSettings.LineupKeywords;
+
+            if (lineupKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
+                return true;
+
+            // --- 2. الگوی عنوان: "ترکیب پرسپولیس و استقلال مشخص شد" ---
+            if (Regex.IsMatch(item.Title, @"ترکیب\s+.+?\s+(و|با)\s+.+?\s+(مشخص|اعلام)\s+شد", RegexOptions.IgnoreCase))
+                return true;
+
+            // --- 3. ساختار لیست بازیکنان (مثلاً: 1. علیرضا بیرانوند، مدافع، هافبک...) ---
+            if (Regex.IsMatch(text, @"\b(\d{1,2}\.?\s*[-–]?\s*.+?)\b") &&
+                Regex.IsMatch(text, @"\b(دروازه.?بان|مدافع|هافبک|مهاجم|فوروارد|وینگر|مدافع کناری|هافبک دفاعی)\b"))
+                return true;
+
+            // --- 4. وجود چندین نام بازیکن معروف در یک خط (اختیاری، برای دقت بیشتر) ---
+            // اگر بخوای می‌تونی لیست بازیکنان معروف رو داشته باشی، ولی سنگین میشه
+
+            return false;
+        }
     }
 }

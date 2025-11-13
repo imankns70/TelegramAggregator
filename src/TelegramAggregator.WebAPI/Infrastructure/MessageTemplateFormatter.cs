@@ -64,15 +64,18 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             // حذف لینک‌ها و نویزهای متنی
             text = Regex.Replace(text, @"https?:\/\/\S+", "", RegexOptions.IgnoreCase);
 
-            // حذف | اضافی
+            // حذف "|"
             text = Regex.Replace(text, @"^\s*\|\s*", "", RegexOptions.Multiline);
             text = Regex.Replace(text, @"\s*\|\s*", " ");
 
-            // حذف اطلاعات اضافی مثل "خبر: 527,101 ..." یا "صفحه اصلی ..."
+            // حذف اطلاعات اضافی مانند "خبر: 527,101 ..." یا "صفحه اصلی ..."
             text = Regex.Replace(text, @"خبر\s*[:：].*?\d+", "", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, @"صفحه اصلی.*", "", RegexOptions.IgnoreCase);
 
-            // حذف عنوان خبر تکراری داخل متن
+            // حذف عبارت‌هایی مثل "- خبرورزشی ۲۳:۳۵ ۱ ۰ ۱"
+            text = Regex.Replace(text, @"-+\s*خبرورزشی\s*\d{1,2}[:٫:]\d{2}\s*(\d+\s*){1,3}", "", RegexOptions.IgnoreCase);
+
+            // حذف عنوان تکراری داخل متن
             if (!string.IsNullOrWhiteSpace(title))
                 text = Regex.Replace(text, Regex.Escape(title), "", RegexOptions.IgnoreCase);
 
@@ -84,21 +87,18 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             // حذف عبارت‌های تبلیغاتی یا بی‌ربط
             string[] unwantedPhrases =
             {
-                "شروع دعوت دوباره یادآوری کن", "پخش زنده", "دانلود اپلیکیشن", "تماس با ما",
-                "ورزش سه", "طرفداری", "کد خبر", "ورود | ثبت نام", "تبلیغات",
-                "خبر بعدی", "اپلیکیشن طرفداری", "به جمع ما", "لینک کانال",
-                "کانال تلگرامی", "همراه ما باشید", "برای مشاهده اخبار بیشتر",
-                "مشاهده سایر اخبار",
-                "صفحات اول روزنامه‌های ورزشی اروپا را هرروز در کیوسک طرفداری بخوانید"
-            };
+        "شروع دعوت دوباره یادآوری کن", "پخش زنده", "دانلود اپلیکیشن", "تماس با ما",
+        "ورزش سه", "طرفداری", "کد خبر", "ورود | ثبت نام", "تبلیغات",
+        "خبر بعدی", "اپلیکیشن طرفداری", "به جمع ما", "لینک کانال",
+        "کانال تلگرامی", "همراه ما باشید", "برای مشاهده اخبار بیشتر",
+        "مشاهده سایر اخبار",
+        "صفحات اول روزنامه‌های ورزشی اروپا را هرروز در کیوسک طرفداری بخوانید"
+    };
 
             foreach (var phrase in unwantedPhrases)
                 text = Regex.Replace(text, phrase, "", RegexOptions.IgnoreCase);
 
-            // حذف الگوهای آخر متن مثل لینک کانال
-            text = Regex.Replace(text, @"(به\s*کانال.*|عضو\s*کانال.*|لینک\s*کانال.*|در\s*تلگرام\s*ما.*)$", "", RegexOptions.IgnoreCase);
-
-            // حذف خطوط کوتاه و خالی
+            // حذف خطوط کوتاه یا خالی
             text = string.Join(Environment.NewLine,
                 text.Split('\n')
                     .Select(l => l.Trim())
@@ -108,10 +108,6 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             text = Regex.Replace(text, @"\s+", " ");
 
             // پایان‌بندی طبیعی جمله‌ها
-            var lastDotIndex = text.LastIndexOf('。') >= 0 ? text.LastIndexOf('。') : text.LastIndexOf('.');
-            if (lastDotIndex > 0)
-                text = text[..(lastDotIndex + 1)];
-
             if (!text.EndsWith('.'))
                 text += ".";
 
