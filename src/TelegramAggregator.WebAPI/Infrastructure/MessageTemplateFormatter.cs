@@ -9,14 +9,6 @@ namespace TelegramAggregator.WebAPI.Infrastructure
     {
         public static async Task<string> PrepareMessageAsync(NewsItem item, ChannelConfig channel, HtmlExtractor htmlExtractor)
         {
-            // واکشی تصویر و متن کامل
-            var imageTask = htmlExtractor.ExtractMainImageAsync(item.Link);
-            var fullDescTask = htmlExtractor.GetFullDescriptionAsync(item.Link);
-            await Task.WhenAll(imageTask, fullDescTask);
-
-            item.ImageUrl = imageTask.Result;
-            item.FullDescription = fullDescTask.Result;
-
             item.Title = CleanText(item.Title);
             item.ShortDescription = CleanText(item.ShortDescription);
             item.FullDescription = CleanFullDescription(item.FullDescription);
@@ -69,33 +61,43 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         {
             if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
+            // حذف لینک‌ها و نویزهای متنی
             text = Regex.Replace(text, @"https?:\/\/\S+", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"^\s*\|\s*", ""); // حذف | در ابتدای متن
+
+            // حذف الگوهای گزارش
             text = Regex.Replace(text,
                 @"\b(به\s*گزارش|طبق\s*گزارش|بر\s*اساس\s*گزارش|از\s*گزارش|گزارش)\s+[\""'«»]?\s*[\u0600-\u06FFa-zA-Z0-9\s‌\-–_]*[\""'«»]?\s*[,:،]?",
                 "", RegexOptions.IgnoreCase);
 
+            // حذف عبارت‌های تبلیغاتی یا بی‌ربط
             string[] unwantedPhrases =
             {
                 "شروع دعوت دوباره یادآوری کن", "پخش زنده", "دانلود اپلیکیشن", "تماس با ما",
                 "ورزش سه", "طرفداری", "کد خبر", "ورود | ثبت نام", "تبلیغات",
                 "خبر بعدی", "اپلیکیشن طرفداری", "به جمع ما", "لینک کانال",
                 "کانال تلگرامی", "همراه ما باشید", "برای مشاهده اخبار بیشتر",
-                "مشاهده سایر اخبار"
+                "مشاهده سایر اخبار",
+                "صفحات اول روزنامه‌های ورزشی اروپا را هرروز در کیوسک طرفداری بخوانید"
             };
 
             foreach (var phrase in unwantedPhrases)
                 text = Regex.Replace(text, phrase, "", RegexOptions.IgnoreCase);
 
+            // حذف الگوهای آخر متن مثل لینک کانال
             text = Regex.Replace(text, @"(به\s*کانال.*|عضو\s*کانال.*|لینک\s*کانال.*|در\s*تلگرام\s*ما.*)$", "", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, @"[""“”«»]{2,}", "", RegexOptions.IgnoreCase);
 
+            // خط‌های کوتاه و خالی حذف بشن
             text = string.Join(Environment.NewLine,
                 text.Split('\n')
                     .Select(l => l.Trim())
                     .Where(l => l.Length > 5));
 
+            // فشرده‌سازی فاصله‌ها
             text = Regex.Replace(text, @"\s+", " ");
 
+            // پایان‌بندی طبیعی جمله‌ها
             var lastDotIndex = text.LastIndexOf('。') >= 0 ? text.LastIndexOf('。') : text.LastIndexOf('.');
             if (lastDotIndex > 0)
                 text = text[..(lastDotIndex + 1)];

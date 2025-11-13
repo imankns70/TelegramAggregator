@@ -19,7 +19,8 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly HtmlExtractor _htmlExtractor;
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
-        private string? _lastSource = null;
+        private readonly Dictionary<string, DateTime> _lastPublishedBySource = new();
+        private readonly TimeSpan _minIntervalPerSource = TimeSpan.FromMinutes(5);
         public FootballforiService(ITelegramBotClient bot, ILogger<FootballforiService> logger,
             HttpHelper httpHelper,
             RssParser rssParser, DuplicateChecker duplicateChecker,
@@ -115,32 +116,31 @@ namespace TelegramAggregator.WebAPI.Services
         {
             while (_newsStorage.Queue.Count > 0)
             {
-                var item = _newsStorage.Queue.Peek(); // فقط نگاه می‌کنیم، حذف نه هنوز
+                var item = _newsStorage.Queue.Peek(); // فقط نگاه، حذف نه هنوز
 
-                // ✅ اگر منبع همون منبع قبلیه، بفرستش انتهای صف تا فعلاً رد بشیم
-                if (item.SourceName == _lastSource && _newsStorage.Queue.Count > 1)
+                // بررسی اینکه از آخرین ارسال این منبع چقدر گذشته
+                if (_lastPublishedBySource.TryGetValue(item.SourceName, out var lastTime))
                 {
-                    _newsStorage.Queue.Enqueue(_newsStorage.Queue.Dequeue());
-                    continue;
+                    var timeSinceLast = DateTime.UtcNow - lastTime;
+
+                    // اگه فاصله از حداقل زمان کمتره، بندازش ته صف
+                    if (timeSinceLast < _minIntervalPerSource && _newsStorage.Queue.Count > 1)
+                    {
+                        _newsStorage.Queue.Enqueue(_newsStorage.Queue.Dequeue());
+                        await Task.Delay(500); // کمی مکث برای جلوگیری از حلقه سریع
+                        continue;
+                    }
                 }
 
                 item = _newsStorage.Queue.Dequeue();
 
                 try
                 {
-
-
-                    // 🔹 واکشی تصویر و متن کامل قبل از ساخت پیام
-                    var imageTask = _htmlExtractor.ExtractMainImageAsync(item.Link);
-                    var fullDescTask = _htmlExtractor.GetFullDescriptionAsync(item.Link);
-                    await Task.WhenAll(imageTask, fullDescTask);
-
-                    item.ImageUrl = imageTask.Result;
-                    item.FullDescription = fullDescTask.Result;
-
+                    // واکشی تصویر و شرح کامل
+                    item.ImageUrl = await _htmlExtractor.ExtractMainImageAsync(item.Link);
+                    item.FullDescription = await _htmlExtractor.GetFullDescriptionAsync(item.Link);
 
                     string caption = await MessageTemplateFormatter.PrepareMessageAsync(item, channelConfig, _htmlExtractor);
-
 
                     Telegram.Bot.Types.Message sentMessage;
 
@@ -166,9 +166,10 @@ namespace TelegramAggregator.WebAPI.Services
 
                     await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
 
-                    _lastSource = item.SourceName;
+                    // ذخیره زمان آخرین پست از این منبع
+                    _lastPublishedBySource[item.SourceName] = DateTime.UtcNow;
 
-                    // 🕒 اضافه کردن تاخیر بین ارسال هر خبر
+                    // تأخیر بین پست‌ها (برای طبیعی بودن)
                     var delay = TimeSpan.FromSeconds(new Random().Next(30, 90));
                     _logger.LogDebug("⏱ انتظار {Seconds} ثانیه تا خبر بعدی در کانال {Channel}",
                         delay.TotalSeconds, channelConfig.Name);
@@ -179,10 +180,7 @@ namespace TelegramAggregator.WebAPI.Services
                     _logger.LogError(ex, "⚠️ خطا در ارسال پیام به کانال {Channel}", channelConfig.Name);
                 }
             }
-
         }
-
-
 
 
 
