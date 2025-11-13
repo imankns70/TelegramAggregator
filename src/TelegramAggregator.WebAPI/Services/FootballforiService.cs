@@ -21,10 +21,19 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly long _hiddenGroupId;
         private readonly Dictionary<string, DateTime> _lastPublishedBySource = new();
         private readonly TimeSpan _minIntervalPerSource = TimeSpan.FromMinutes(5);
-        public FootballforiService(ITelegramBotClient bot, ILogger<FootballforiService> logger,
+        private readonly TimeSpan _globalMinInterval = TimeSpan.FromMinutes(2);
+        private DateTime _lastGlobalPostTime = DateTime.MinValue;
+        private readonly Random _random = new();
+
+        public FootballforiService(
+            ITelegramBotClient bot,
+            ILogger<FootballforiService> logger,
             HttpHelper httpHelper,
-            RssParser rssParser, DuplicateChecker duplicateChecker,
-            NewsStorage newsStorage, IOptions<AppSettings> appSettings, HtmlExtractor htmlExtractor)
+            RssParser rssParser,
+            DuplicateChecker duplicateChecker,
+            NewsStorage newsStorage,
+            IOptions<AppSettings> appSettings,
+            HtmlExtractor htmlExtractor)
         {
             _bot = bot;
             _logger = logger;
@@ -40,20 +49,14 @@ namespace TelegramAggregator.WebAPI.Services
 
         public async Task RunAsync(CancellationToken ct)
         {
-
-
             foreach (var channel in _channels)
             {
                 try
                 {
                     _logger.LogInformation("🚀 شروع پردازش کانال: {Channel}", channel.Name);
 
-
                     await FetchNews(channel.Sources);
-
-                    await PublishAsync(channel);
-
-
+                    await PublishAsync(channel, ct);
                 }
                 catch (Exception ex)
                 {
@@ -62,30 +65,24 @@ namespace TelegramAggregator.WebAPI.Services
             }
         }
 
-        public async Task FetchNews(List<SourceConfig> sources)
+        private async Task FetchNews(List<SourceConfig> sources)
         {
-            List<NewsItem> newsItems = new List<NewsItem>();
-            try
+            var newsItems = new List<NewsItem>();
+
+            foreach (var source in sources)
             {
-                foreach (var source in sources)
+                try
                 {
-                    // واکشی محتوا
                     var rssContent = await _httpHelper.GetStringAsync(source.Url);
-
-                    // پارس RSS و تبدیل به NewsItem
                     newsItems.AddRange(_rssParser.Parse(rssContent));
-
                 }
-
-                await FilterNewsAsync(newsItems);
-
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "خطا در واکشی و پارس RSS:", ex.Message);
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "⚠️ خطا در واکشی منبع: {Source}", source.Url);
+                }
             }
 
-            await Task.CompletedTask;
+            await FilterNewsAsync(newsItems);
         }
 
         private Task FilterNewsAsync(List<NewsItem> items)
@@ -95,39 +92,43 @@ namespace TelegramAggregator.WebAPI.Services
 
             var filtered = items
                 .Where(item =>
-                   !_duplicateChecker.IsDuplicateOrOld(item) &&      // حذف تکراری‌ها و قدیمی‌ها
+                    !_duplicateChecker.IsDuplicateOrOld(item) &&
                     footballKeywords.Any(k => (item.Title + " " + item.ShortDescription).Contains(k)) &&
                     !nonSportKeywords.Any(k => item.Title.Contains(k) || item.ShortDescription.Contains(k)) &&
-                    string.IsNullOrEmpty(item.VideoUrl)
-                )
+                    string.IsNullOrEmpty(item.VideoUrl))
                 .OrderByDescending(i => i.PubDate)
                 .Take(30)
                 .ToList();
 
-            // اضافه کردن اخبار غیرتکراری به NewsStorage (ذخیره + صف انتشار)
             foreach (var item in filtered)
-            {
                 _newsStorage.Add(item);
-            }
+
             return Task.CompletedTask;
         }
 
-        private async Task PublishAsync(ChannelConfig channelConfig)
+        private async Task PublishAsync(ChannelConfig channelConfig, CancellationToken ct)
         {
-            while (_newsStorage.Queue.Count > 0)
+            while (_newsStorage.Queue.Count > 0 && !ct.IsCancellationRequested)
             {
-                var item = _newsStorage.Queue.Peek(); // فقط نگاه، حذف نه هنوز
+                var item = _newsStorage.Queue.Peek();
 
-                // بررسی اینکه از آخرین ارسال این منبع چقدر گذشته
+                // 🕐 بررسی فاصله زمانی کلی بین پست‌ها
+                var sinceLastGlobal = DateTime.UtcNow - _lastGlobalPostTime;
+                if (sinceLastGlobal < _globalMinInterval)
+                {
+                    var wait = _globalMinInterval - sinceLastGlobal;
+                    _logger.LogDebug("⌛ در انتظار {Seconds} ثانیه برای رعایت فاصله کلی بین پست‌ها", wait.TotalSeconds);
+                    await Task.Delay(wait, ct);
+                }
+
+                // 🔁 بررسی فاصله ارسال برای هر منبع
                 if (_lastPublishedBySource.TryGetValue(item.SourceName, out var lastTime))
                 {
                     var timeSinceLast = DateTime.UtcNow - lastTime;
-
-                    // اگه فاصله از حداقل زمان کمتره، بندازش ته صف
                     if (timeSinceLast < _minIntervalPerSource && _newsStorage.Queue.Count > 1)
                     {
                         _newsStorage.Queue.Enqueue(_newsStorage.Queue.Dequeue());
-                        await Task.Delay(500); // کمی مکث برای جلوگیری از حلقه سریع
+                        await Task.Delay(500, ct);
                         continue;
                     }
                 }
@@ -136,7 +137,7 @@ namespace TelegramAggregator.WebAPI.Services
 
                 try
                 {
-                    // واکشی تصویر و شرح کامل
+                    // 📄 واکشی تصویر و شرح کامل
                     item.ImageUrl = await _htmlExtractor.ExtractMainImageAsync(item.Link);
                     item.FullDescription = await _htmlExtractor.GetFullDescriptionAsync(item.Link);
 
@@ -146,43 +147,35 @@ namespace TelegramAggregator.WebAPI.Services
 
                     if (!string.IsNullOrEmpty(item.VideoUrl))
                     {
-                        sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl,
-                            caption: caption, parseMode: ParseMode.Html, disableNotification: true);
+                        sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl, caption: caption, parseMode: ParseMode.Html, disableNotification: true);
                     }
                     else if (!string.IsNullOrEmpty(item.ImageUrl))
                     {
-                        sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl,
-                            caption: caption, parseMode: ParseMode.Html, disableNotification: true);
+                        sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl, caption: caption, parseMode: ParseMode.Html, disableNotification: true);
                     }
                     else
                     {
-                        sentMessage = await _bot.SendMessage(_hiddenGroupId, caption,
-                            parseMode: ParseMode.Html, disableNotification: true);
+                        sentMessage = await _bot.SendMessage(_hiddenGroupId, caption, parseMode: ParseMode.Html, disableNotification: true);
                     }
 
-                    await _bot.CopyMessage(channelConfig.ChannelId,
-                        _hiddenGroupId, sentMessage.MessageId,
-                        disableNotification: true);
-
+                    // 📤 ارسال به کانال اصلی
+                    await _bot.CopyMessage(channelConfig.ChannelId, _hiddenGroupId, sentMessage.MessageId, disableNotification: true);
                     await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
 
-                    // ذخیره زمان آخرین پست از این منبع
+                    // 🧠 ثبت آخرین ارسال
                     _lastPublishedBySource[item.SourceName] = DateTime.UtcNow;
+                    _lastGlobalPostTime = DateTime.UtcNow;
 
-                    // تأخیر بین پست‌ها (برای طبیعی بودن)
-                    var delay = TimeSpan.FromSeconds(new Random().Next(30, 90));
-                    _logger.LogDebug("⏱ انتظار {Seconds} ثانیه تا خبر بعدی در کانال {Channel}",
-                        delay.TotalSeconds, channelConfig.Name);
-                    await Task.Delay(delay);
+                    // ⏳ فاصله طبیعی تا پست بعدی
+                    var delay = TimeSpan.FromSeconds(_random.Next(60, 150));
+                    _logger.LogInformation("✅ خبر از {Source} ارسال شد. انتظار {Seconds} ثانیه تا بعدی.", item.SourceName, delay.TotalSeconds);
+                    await Task.Delay(delay, ct);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "⚠️ خطا در ارسال پیام به کانال {Channel}", channelConfig.Name);
+                    _logger.LogError(ex, "⚠️ خطا در ارسال پیام از منبع {Source}", item.SourceName);
                 }
             }
         }
-
-
-
     }
 }
