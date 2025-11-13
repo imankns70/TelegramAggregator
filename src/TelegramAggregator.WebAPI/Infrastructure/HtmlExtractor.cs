@@ -31,6 +31,12 @@ namespace TelegramAggregator.Infrastructure
                         doc.DocumentNode.SelectSingleNode("//div[contains(@class,'node-content') or contains(@class,'field--name-body') or contains(@class,'field-name-body')]")
                         ?? doc.DocumentNode,
 
+                    var h when h.Contains("khabarvarzeshi.com") =>
+                        doc.DocumentNode.SelectSingleNode("//div[contains(@class,'story-body')]//div[contains(@class,'story')]")
+                        ?? doc.DocumentNode.SelectSingleNode("//div[contains(@class,'story-body')]")
+                        ?? doc.DocumentNode.SelectSingleNode("//div[contains(@class,'story')]")
+                        ?? doc.DocumentNode,
+
                     _ => doc.DocumentNode.SelectSingleNode(
                         "//article" +
                         " | //div[contains(@class,'content')]" +
@@ -64,6 +70,7 @@ namespace TelegramAggregator.Infrastructure
                 {
                     var h when h.Contains("tarafdari.com") => CleanTarafdariText(text),
                     var h when h.Contains("varzesh3.com") => CleanVarzesh3Text(text),
+                    var h when h.Contains("khabarvarzeshi.com") => CleanKhabarVarzeshiText(text),
                     _ => text
                 };
 
@@ -88,6 +95,7 @@ namespace TelegramAggregator.Infrastructure
                 {
                     var h when h.Contains("varzesh3.com") => doc.DocumentNode.SelectSingleNode("//meta[@property='og:image']"),
                     var h when h.Contains("tarafdari.com") => doc.DocumentNode.SelectSingleNode("//meta[@name='twitter:image']"),
+                    var h when h.Contains("khabarvarzeshi.com") => doc.DocumentNode.SelectSingleNode("//meta[@property='og:image']"),
                     _ => doc.DocumentNode.SelectSingleNode("//meta[@property='og:image']")
                 };
 
@@ -103,7 +111,6 @@ namespace TelegramAggregator.Infrastructure
                     var imgUrl = imgNode.GetAttributeValue("content", null) ?? imgNode.GetAttributeValue("src", null);
                     if (!string.IsNullOrWhiteSpace(imgUrl))
                     {
-                        // نادیده گرفتن عکس ویدیو تلگرام یا آیکون‌ها
                         if (!imgUrl.Contains("telegram") && !imgUrl.Contains("video"))
                             return NormalizeUrl(url, imgUrl);
                     }
@@ -139,9 +146,7 @@ namespace TelegramAggregator.Infrastructure
                              .Replace("\u200C", "")
                              .Replace("\u200B", "");
 
-            // حذف کاراکتر | ابتدای متن و فاصله‌های اضافی بعدش
-            text = Regex.Replace(text, @"^\|+\s*", "");
-
+            text = Regex.Replace(text, @"^\|+\s*", ""); // حذف | اول متن
             text = Regex.Replace(text, @"\s{2,}", " ");
 
             var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
@@ -151,11 +156,10 @@ namespace TelegramAggregator.Infrastructure
             return string.Join(Environment.NewLine + Environment.NewLine, lines).Trim();
         }
 
-
         private string CleanTarafdariText(string text)
         {
-            text = Regex.Replace(text, @"@\w+", ""); // حذف @username
-            text = Regex.Replace(text, @"#\w+", ""); // حذف هشتگ‌ها
+            text = Regex.Replace(text, @"@\w+", "");
+            text = Regex.Replace(text, @"#\w+", "");
             text = Regex.Replace(text, @"با دعوت.*?هدیه بگیرید\.?", "", RegexOptions.Singleline);
             text = Regex.Replace(text, @"تبدیل\s*،?\s*\d+\s*هزار\s*تومان.*", "", RegexOptions.Singleline);
             return text.Trim();
@@ -167,6 +171,24 @@ namespace TelegramAggregator.Infrastructure
             text = Regex.Replace(text, @"برای\s*مشاهده.*", "", RegexOptions.Multiline);
             text = Regex.Replace(text, @"ورود\s*\|\s*ثبت\s*نام.*", "", RegexOptions.Multiline);
             return text.Trim();
+        }
+
+        private string CleanKhabarVarzeshiText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+            text = Regex.Replace(text, @"خبر[:：]\s*\d+", "");
+            text = Regex.Replace(text, @"زمان مطالعه[:：]\s*\d+\s*دقیقه", "");
+            text = Regex.Replace(text, @"صفحه اصلی.*?-\s*", "");
+            text = Regex.Replace(text, @"\|\s*", " ");
+            text = Regex.Replace(text, @"\s{2,}", " ");
+            text = text.Trim();
+
+            var lastDot = text.LastIndexOf('.');
+            if (lastDot > 0)
+                text = text[..(lastDot + 1)];
+
+            return text;
         }
 
         private string NormalizeUrl(string baseUrl, string src)
