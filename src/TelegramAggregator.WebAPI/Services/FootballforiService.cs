@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.Options;
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using TelegramAggregator.Infrastructure;
@@ -8,209 +10,172 @@ using TelegramAggregator.WebAPI.Models;
 
 namespace TelegramAggregator.WebAPI.Services
 {
-    public class FootballforiService
+    public partial class FootballforiService
     {
         private readonly ITelegramBotClient _bot;
         private readonly ILogger<FootballforiService> _logger;
         private readonly List<ChannelConfig> _channels;
-        private readonly HttpHelper _httpHelper;
-        private readonly RssParser _rssParser;
-        private readonly DuplicateChecker _duplicateChecker;
+        private readonly IHttpHelper _httpHelper;
+        private readonly IRssParser _rssParser; 
         private readonly NewsStorage _newsStorage;
-        private readonly HtmlExtractor _htmlExtractor;
+        private readonly IHtmlExtractor _htmlExtractor;
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
-        private readonly Dictionary<string, DateTime> _lastPublishedBySource = new();
-   
+        private readonly LineupFilter _lineupFilter; 
+
+
 
         public FootballforiService(
             ITelegramBotClient bot,
             ILogger<FootballforiService> logger,
-            HttpHelper httpHelper,
-            RssParser rssParser,
-            DuplicateChecker duplicateChecker,
+            IHttpHelper httpHelper,
+            IRssParser rssParser,
             NewsStorage newsStorage,
             IOptions<AppSettings> appSettings,
-            HtmlExtractor htmlExtractor)
+            IHtmlExtractor htmlExtractor,
+            LineupFilter lineupFilter)
         {
             _bot = bot;
             _logger = logger;
             _appSettings = appSettings.Value;
             _httpHelper = httpHelper;
             _rssParser = rssParser;
-            _duplicateChecker = duplicateChecker;
             _newsStorage = newsStorage;
             _hiddenGroupId = _appSettings.HiddenGroupId;
             _htmlExtractor = htmlExtractor;
             _channels = _appSettings.Channels;
+            _lineupFilter = lineupFilter;
         }
 
         public async Task RunAsync(CancellationToken ct)
         {
-            foreach (var channel in _channels)
+            while (!ct.IsCancellationRequested)
             {
-                try
+                foreach (var channel in _channels)
                 {
-                    _logger.LogInformation("🚀 شروع پردازش کانال: {Channel}", channel.Name);
+                    try
+                    {
+                        _logger.LogInformation("🚀 شروع پردازش کانال: {Channel}", channel.Name);
 
-                    await FetchNews(channel.Sources);
-                    await PublishAsync(channel, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "⚠️ خطا در پردازش کانال {Channel}", channel.Name);
+                        await FetchAndFilterNewsAsync(channel.Sources, ct);
+                        await PublishAsync(channel, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "⚠️ خطا در پردازش کانال {Channel}", channel.Name);
+                    }
                 }
             }
-        }
 
-        private async Task FetchNews(List<SourceConfig> sources)
+        }
+        /// <summary>
+        /// واکشی + فیلتر + اضافه به NewsStorage
+        /// </summary>
+        private async Task FetchAndFilterNewsAsync(List<SourceConfig> sources, CancellationToken ct)
         {
-            var newsItems = new List<NewsItem>();
+            var allItems = new List<NewsItem>();
+            var footballKeywords = _appSettings.FootballKeywords;
+            var nonSportKeywords = _appSettings.NonSportKeywords;
+          
 
             foreach (var source in sources)
             {
                 try
                 {
-                    var rssContent = await _httpHelper.GetStringAsync(source.Url);
-                    newsItems.AddRange(_rssParser.Parse(rssContent));
+                    var rssContent = await _httpHelper.GetStringAsync(source.Url, ct);
+                    allItems.AddRange(_rssParser.Parse(rssContent));
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "⚠️ خطا در واکشی منبع: {Source}", source.Url);
+                    _logger.LogError(ex, "خطا در واکشی منبع: {Source}", source.Url);
                 }
             }
 
-            await FilterNewsAsync(newsItems);
-        }
-
-        private Task FilterNewsAsync(List<NewsItem> items)
-        {
-            var footballKeywords = _appSettings.FootballKeywords;
-            var nonSportKeywords = _appSettings.NonSportKeywords;
-
-
-            var filtered = items
+            // فیلتر: فقط اخبار فوتبال، بدون ویدیو، بدون غیرورزشی
+            var filtered = allItems
                 .Where(item =>
-                    !_duplicateChecker.IsDuplicateOrOld(item) &&
-                    footballKeywords.Any(k => (item.Title + " " + item.ShortDescription).Contains(k)) &&
-                    !nonSportKeywords.Any(k => item.Title.Contains(k) || item.ShortDescription.Contains(k)) &&
-                    string.IsNullOrEmpty(item.VideoUrl) && !IsLineupOrPreMatchNews(item))
+                    footballKeywords.Any(k => (item.Title + " " + item.ShortDescription)
+                        .Contains(k, StringComparison.OrdinalIgnoreCase)) &&
+                    !nonSportKeywords.Any(k =>
+                        item.Title.Contains(k, StringComparison.OrdinalIgnoreCase) ||
+                        item.ShortDescription.Contains(k, StringComparison.OrdinalIgnoreCase)) &&
+                    string.IsNullOrEmpty(item.VideoUrl) && !_lineupFilter.IsLineupOrPreMatchNews(item)
+                )
                 .OrderByDescending(i => i.PubDate)
-                .Take(30)
+                .Take(10) // فقط 10 خبر برتر
                 .ToList();
 
+            // اضافه به NewsStorage (خودش تکرار، تاریخ و ظرفیت رو چک می‌کنه)
             foreach (var item in filtered)
             {
-
-                _newsStorage.Add(item);
+                await _newsStorage.AddAsync(item, ct);
             }
-
-            return Task.CompletedTask;
         }
-
-        private async Task PublishAsync(ChannelConfig channelConfig, CancellationToken ct)
+        private async Task PublishAsync(ChannelConfig channel, CancellationToken ct)
         {
-
-
-            while (_newsStorage.Queue.Count > 0 && !ct.IsCancellationRequested)
+            await foreach (var item in _newsStorage.PublishReader.ReadAllAsync(ct))
             {
-                var item = _newsStorage.Queue.Peek();
-
-                // بررسی فاصله از آخرین پست همان منبع
-                if (_lastPublishedBySource.TryGetValue(item.SourceName, out var lastTime))
+                // فقط چک — بدون خالی کردن صف
+                if (_newsStorage.LastSourcePublished == item.SourceName &&
+                    _newsStorage.HasOtherSource(item.SourceName))
                 {
-                    var timeSinceLast = DateTime.UtcNow - lastTime;
-
-                    if (timeSinceLast < TimeSpan.FromMinutes(2))
-                    {
-                        // اگر هنوز حداقل 2 دقیقه نگذشته، منتظر بمان
-                        var wait = TimeSpan.FromMinutes(2) - timeSinceLast;
-                        _logger.LogDebug("⏱ انتظار {Minutes} دقیقه برای رعایت حداقل فاصله از آخرین پست منبع {Source}",
-                            wait.TotalMinutes, item.SourceName);
-                        await Task.Delay(wait);
-                    }
+                    // عقب ببر
+                    await _newsStorage.RepublishAsync(item, ct);
+                    await Task.Delay(TimeSpan.FromSeconds(2), ct);
+                    continue;
                 }
 
-                item = _newsStorage.Queue.Dequeue();
+                _logger.LogInformation("Source Name ===>" + item.SourceName);
+                //await SendToTelegramAsync(item, channel, ct);
 
-                try
-                {
-                    // واکشی تصویر و شرح کامل
-                    item.ImageUrl = await _htmlExtractor.ExtractMainImageAsync(item.Link);
-                    item.FullDescription = await _htmlExtractor.GetFullDescriptionAsync(item.Link);
+                _newsStorage.UpdateLastPublished(item.SourceName, DateTimeOffset.Now);
 
-     
-
-                    string caption = await MessageTemplateFormatter.PrepareMessageAsync(item, channelConfig, _htmlExtractor);
-
-                    Telegram.Bot.Types.Message sentMessage;
-
-                    if (!string.IsNullOrEmpty(item.VideoUrl))
-                    {
-                        sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl,
-                            caption: caption, parseMode: ParseMode.Html, disableNotification: true);
-                    }
-                    else if (!string.IsNullOrEmpty(item.ImageUrl))
-                    {
-                        sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl,
-                            caption: caption, parseMode: ParseMode.Html, disableNotification: true);
-                    }
-                    else
-                    {
-                        sentMessage = await _bot.SendMessage(_hiddenGroupId, caption,
-                            parseMode: ParseMode.Html, disableNotification: true);
-                    }
-
-                    await _bot.CopyMessage(channelConfig.ChannelId,
-                        _hiddenGroupId, sentMessage.MessageId,
-                        disableNotification: true);
-
-                    await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
-
-                    //ذخیره زمان آخرین پست از این منبع
-                   _lastPublishedBySource[item.SourceName] = DateTime.UtcNow;
-
-                    //تأخیر تصادفی بین 2 تا 20 دقیقه برای طبیعی بودن
-                    var randomDelay = TimeSpan.FromMinutes(new Random().Next(2, 16));
-                    _logger.LogDebug("⏱ انتظار {Minutes} دقیقه تا پست بعدی در کانال {Channel}",
-                        randomDelay.TotalMinutes, channelConfig.Name);
-                    await Task.Delay(randomDelay);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "⚠️ خطا در ارسال پیام به کانال {Channel}", channelConfig.Name);
-                }
+                var delay = TimeSpan.FromSeconds(3);
+                //var delay = TimeSpan.FromMinutes(Random.Shared.Next(2, 16));
+                await Task.Delay(delay, ct);
             }
         }
 
-        private bool IsLineupOrPreMatchNews(NewsItem item)
+        private async Task SendToTelegramAsync(NewsItem item, ChannelConfig channelConfig, CancellationToken ct)
         {
-            // ترکیب عنوان + توضیح کوتاه + متن کامل
-            var text = $"{item.Title} {item.ShortDescription} {item.FullDescription}"
-                       .Replace("‌", " ")  // نیم‌فاصله
-                       .Replace("ي", "ی")
-                       .Replace("ك", "ک")
-                       .ToLowerInvariant();
+            if (!ct.IsCancellationRequested)
+            {
 
-            // --- 1. کلیدواژه‌های دقیق ---
-            var lineupKeywords = _appSettings.LineupKeywords;
+                item.ImageUrl = await _htmlExtractor.ExtractMainImageAsync(item.Link);
+                item.FullDescription = await _htmlExtractor.GetFullDescriptionAsync(item.Link);
 
-            if (lineupKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
-                return true;
 
-            // --- 2. الگوی عنوان: "ترکیب پرسپولیس و استقلال مشخص شد" ---
-            if (Regex.IsMatch(item.Title, @"ترکیب\s+.+?\s+(و|با)\s+.+?\s+(مشخص|اعلام)\s+شد", RegexOptions.IgnoreCase))
-                return true;
 
-            // --- 3. ساختار لیست بازیکنان (مثلاً: 1. علیرضا بیرانوند، مدافع، هافبک...) ---
-            if (Regex.IsMatch(text, @"\b(\d{1,2}\.?\s*[-–]?\s*.+?)\b") &&
-                Regex.IsMatch(text, @"\b(دروازه.?بان|مدافع|هافبک|مهاجم|فوروارد|وینگر|مدافع کناری|هافبک دفاعی)\b"))
-                return true;
+                string caption = await MessageTemplateFormatter.PrepareMessageAsync(item, channelConfig, _htmlExtractor);
 
-            // --- 4. وجود چندین نام بازیکن معروف در یک خط (اختیاری، برای دقت بیشتر) ---
-            // اگر بخوای می‌تونی لیست بازیکنان معروف رو داشته باشی، ولی سنگین میشه
+                Telegram.Bot.Types.Message sentMessage;
 
-            return false;
+                if (!string.IsNullOrEmpty(item.VideoUrl))
+                {
+                    sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl,
+                        caption: caption, parseMode: ParseMode.Html, disableNotification: true);
+                }
+                else if (!string.IsNullOrEmpty(item.ImageUrl))
+                {
+                    sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl,
+                        caption: caption, parseMode: ParseMode.Html, disableNotification: true);
+                }
+                else
+                {
+                    sentMessage = await _bot.SendMessage(_hiddenGroupId, caption,
+                        parseMode: ParseMode.Html, disableNotification: true);
+                }
+
+                await _bot.CopyMessage(channelConfig.ChannelId,
+                    _hiddenGroupId, sentMessage.MessageId,
+                    disableNotification: true);
+
+                await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
+
+            }
+
         }
+
+        
     }
 }

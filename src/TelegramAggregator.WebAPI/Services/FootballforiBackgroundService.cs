@@ -35,7 +35,8 @@ public class FootballforiBackgroundService : BackgroundService
             if (_isRunning)
             {
                 _logger.LogWarning("⚠️ اجرای قبلی هنوز به پایان نرسیده است، اجرای جدید لغو شد.");
-                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                //await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
                 continue;
             }
 
@@ -65,7 +66,8 @@ public class FootballforiBackgroundService : BackgroundService
 
             // 🕒 محاسبه فاصله بین دو اجرای متوالی (از شروع تا شروع)
             var elapsed = DateTime.UtcNow - startTime;
-            var randomDelay = TimeSpan.FromMinutes(_random.Next(10, 20));
+            var randomDelay = TimeSpan.FromSeconds(_random.Next(10, 20));
+            //var randomDelay = TimeSpan.FromMinutes(_random.Next(10, 20));
             var delay = randomDelay - elapsed;
             if (delay < TimeSpan.Zero)
                 delay = TimeSpan.Zero;

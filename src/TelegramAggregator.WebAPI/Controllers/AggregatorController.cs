@@ -46,21 +46,19 @@ namespace TelegramAggregator.WebAPI.Controllers
             });
         }
         [HttpGet]
-        [Route("GetPostedInQueue")]
-        public ActionResult GetPostedInQueue()
+        [Route("queue")]
+        public ActionResult Queue()
         {
-            var news = _newsStorage.Queue.GroupBy(a => a.SourceName)
-                            .Select(s => new
-                            {
+            var queue = _newsStorage.GetCurrentPublishQueue();
+            var items = queue.Select(x => new
+            {
+                x.Title,
+                x.SourceName,
+                x.PubDate,
+                x.Link
+            }).ToList();
 
-                                Source = s.Key,
-                                news = s.Select(a => new
-                                {
-                                    a.Title,
-                                    a.Link
-                                }).ToList()
-                            });
-            return Ok(news);
+            return Ok(new { Count = items.Count, Items = items });
         }
 
         /// <summary>

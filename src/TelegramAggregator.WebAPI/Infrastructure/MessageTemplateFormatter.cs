@@ -7,7 +7,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 {
     public static class MessageTemplateFormatter
     {
-        public static async Task<string> PrepareMessageAsync(NewsItem item, ChannelConfig channel, HtmlExtractor htmlExtractor)
+        public static async Task<string> PrepareMessageAsync(NewsItem item, ChannelConfig channel, IHtmlExtractor htmlExtractor)
         {
             item.Title = CleanText(item.Title);
             item.ShortDescription = CleanText(item.ShortDescription);

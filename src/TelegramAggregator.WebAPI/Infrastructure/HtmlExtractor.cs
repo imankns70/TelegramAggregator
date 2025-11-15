@@ -3,20 +3,20 @@ using System.Text.RegularExpressions;
 
 namespace TelegramAggregator.Infrastructure
 {
-    public class HtmlExtractor
+    public class HtmlExtractor: IHtmlExtractor
     {
         private readonly HttpClient _httpClient;
 
-        public HtmlExtractor(HttpClient? httpClient = null)
+        public HtmlExtractor(IHttpClientFactory httpClientFactory)
         {
-            _httpClient = httpClient ?? new HttpClient();
+            _httpClient = httpClientFactory.CreateClient("HtmlExtractor");
         }
 
-        public async Task<string> GetFullDescriptionAsync(string url)
+        public async Task<string> GetFullDescriptionAsync(string url,CancellationToken ct)
         {
             try
             {
-                var html = await _httpClient.GetStringAsync(url);
+                var html = await _httpClient.GetStringAsync(url,ct);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
@@ -82,7 +82,7 @@ namespace TelegramAggregator.Infrastructure
             }
         }
 
-        public async Task<string?> ExtractMainImageAsync(string url)
+        public async Task<string?> ExtractMainImageAsync(string url, CancellationToken ct)
         {
             try
             {
