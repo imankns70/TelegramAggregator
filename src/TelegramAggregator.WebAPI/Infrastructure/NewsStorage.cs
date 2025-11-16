@@ -6,7 +6,7 @@ using TelegramAggregator.WebAPI.Models;
 namespace TelegramAggregator.WebAPI.Infrastructure;
 
 /// <summary>
-/// ذخیره‌سازی هوشمند خبرها با چک منبع‌محور، شباهت و تاریخ
+/// ذخیره‌سازی هوشمند خبرها با چک منبع‌محور، شباهت، تاریخ و پشتیبانی از عملیات موازی
 /// </summary>
 public sealed class NewsStorage
 {
@@ -20,15 +20,16 @@ public sealed class NewsStorage
 
     private const int PublishQueueCapacity = 10;
     private const double SimilarityThreshold = 0.85;
-    private int MaxItemsPerSource = 0; // حداکثر خبر در حافظه هر منبع
+    private readonly int _maxItemsPerSource;
 
     public string? LastSourcePublished { get; private set; }
     public DateTimeOffset? LastPublishedAt { get; private set; }
     public ChannelReader<NewsItem> PublishReader => _publishChannel.Reader;
 
-    public NewsStorage(int maxItem)
+    public NewsStorage(int maxItemsPerSource)
     {
-        MaxItemsPerSource= maxItem;
+        _maxItemsPerSource = maxItemsPerSource > 0 ? maxItemsPerSource : 100;
+
         _publishChannel = Channel.CreateBounded<NewsItem>(
             new BoundedChannelOptions(PublishQueueCapacity)
             {
@@ -38,16 +39,16 @@ public sealed class NewsStorage
     }
 
     /// <summary>
-    /// اضافه کردن خبر با چک منبع‌محور
+    /// اضافه کردن خبر با چک منبع‌محور (موازی با انتشار)
     /// </summary>
     public async ValueTask AddAsync(NewsItem item, CancellationToken ct = default)
     {
-        if (item?.Link is null || item.SourceName is null) return;
+        if (item?.Link is null || item?.SourceName is null) return;
 
         var source = item.SourceName;
         var key = $"{item.Link}-{item.PubDate:yyyyMMddHHmm}";
 
-        // 1. چک کلید سراسری
+        // 1. چک کلید سراسری (Thread-Safe)
         if (_seenKeys.ContainsKey(key))
             return;
 
@@ -85,7 +86,7 @@ public sealed class NewsStorage
         _seenKeys[key] = 1;
 
         // 6. محدود کردن حافظه هر منبع
-        if (buffer.Count > MaxItemsPerSource)
+        if (buffer.Count > _maxItemsPerSource)
         {
             if (buffer.Last is { } oldest)
             {
@@ -94,11 +95,11 @@ public sealed class NewsStorage
             }
         }
 
-        // 7. حذف بافر خالی
+        // 7. حذف بافر خالی (اختیاری)
         if (buffer.Count == 0)
             _sourceBuffers.TryRemove(source, out _);
 
-        // 8. اضافه به صف انتشار
+        // 8. اضافه به صف انتشار (موازی با مصرف)
         if (!_publishChannel.Writer.TryWrite(item))
         {
             await _publishChannel.Writer.WriteAsync(item, ct);
@@ -106,21 +107,29 @@ public sealed class NewsStorage
     }
 
     /// <summary>
-    /// چک وجود منبع دیگر در صف
+    /// چک وجود منبع دیگر در صف — بدون خالی کردن صف (Thread-Safe)
     /// </summary>
-    public bool HasOtherSource(string currentSource)
+    public bool HasOtherSourceSafe(string currentSource)
     {
-        var reader = _publishChannel.Reader;
-        while (reader.TryRead(out var item))
+        var temp = new List<NewsItem>();
+        while (_publishChannel.Reader.TryRead(out var item))
         {
+            temp.Add(item);
             if (item.SourceName != currentSource)
+            {
+                // بازگرداندن همه آیتم‌ها
+                foreach (var i in temp)
+                    _publishChannel.Writer.TryWrite(i);
                 return true;
+            }
         }
+        foreach (var i in temp)
+            _publishChannel.Writer.TryWrite(i);
         return false;
     }
 
     /// <summary>
-    /// عقب انداختن خبر
+    /// عقب انداختن خبر (برای موازی‌سازی)
     /// </summary>
     public async ValueTask RepublishAsync(NewsItem item, CancellationToken ct = default)
     {
@@ -137,7 +146,7 @@ public sealed class NewsStorage
     }
 
     /// <summary>
-    /// دریافت کپی از صف فعلی (بدون اختلال)
+    /// دریافت کپی از صف فعلی — بدون اختلال در مصرف‌کننده
     /// </summary>
     public IReadOnlyList<NewsItem> GetCurrentPublishQueue()
     {
@@ -153,5 +162,8 @@ public sealed class NewsStorage
         return list;
     }
 
+    /// <summary>
+    /// پایان دادن به کانال
+    /// </summary>
     public void Complete() => _publishChannel.Writer.Complete();
 }

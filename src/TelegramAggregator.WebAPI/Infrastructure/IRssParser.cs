@@ -12,5 +12,5 @@ public interface IRssParser
     /// </summary>
     /// <param name="rssContent">محتوای RSS به صورت XML</param>
     /// <returns>لیست NewsItem</returns>
-    List<NewsItem> Parse(string rssContent);
+    public IEnumerable<NewsItem> Parse(string xml);
 }

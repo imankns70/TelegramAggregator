@@ -50,15 +50,13 @@ namespace TelegramAggregator.WebAPI.Controllers
         public ActionResult Queue()
         {
             var queue = _newsStorage.GetCurrentPublishQueue();
-            var items = queue.Select(x => new
+            var items = queue.GroupBy(a => a.SourceName).Select(x => new
             {
-                x.Title,
-                x.SourceName,
-                x.PubDate,
-                x.Link
+                SourceName = x.Key,
+                Count = x.Count()
             }).ToList();
 
-            return Ok(new { Count = items.Count, Items = items });
+            return Ok(items);
         }
 
         /// <summary>
