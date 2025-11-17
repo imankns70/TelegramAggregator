@@ -9,6 +9,7 @@
         public List<ChannelConfig> Channels { get; set; } = new();
         public List<string> FootballKeywords { get; set; } = new();
         public List<string> NonSportKeywords { get; set; } = new();
+        public FilterSettings FilterSettings { get; set; } = new();
         public string[]? LineupKeywords { get; set; }
         public int PublishQueueCapacity { get; set; } 
         public int MaxItemsPerSource { get; set; } 

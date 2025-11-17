@@ -3,168 +3,163 @@ using System.Threading.Channels;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 
-namespace TelegramAggregator.WebAPI.Infrastructure;
-
-/// <summary>
-/// ذخیره‌سازی هوشمند خبرها با چک منبع‌محور، شباهت، تاریخ و پشتیبانی از عملیات موازی
-/// </summary>
-public sealed class NewsStorage
+namespace TelegramAggregator.WebAPI.Infrastructure
 {
-    private readonly Channel<NewsItem> _publishChannel;
-
-    // بافر جداگانه برای هر منبع — Thread-Safe
-    private readonly ConcurrentDictionary<string, LinkedList<NewsItem>> _sourceBuffers = new();
-
-    // کلید سراسری برای جلوگیری از تکرار کامل
-    private readonly ConcurrentDictionary<string, byte> _seenKeys = new();
-
-    private readonly int _publishQueueCapacity;
-    private const double SimilarityThreshold = 0.85;
-    private readonly int _maxItemsPerSource;
-
-    public string? LastSourcePublished { get; private set; }
-    public DateTimeOffset? LastPublishedAt { get; private set; }
-    public ChannelReader<NewsItem> PublishReader => _publishChannel.Reader;
-
-    public NewsStorage(int maxItemsPerSource, int publishQueueCapacity)
+    public class NewsStorage
     {
-        _maxItemsPerSource = maxItemsPerSource;
-        _publishQueueCapacity = publishQueueCapacity;
+        // تنظیمات
+        private readonly int _maxItemsPerSource;
+        private readonly int _publishQueueCapacity;
 
-        _publishChannel = Channel.CreateBounded<NewsItem>(
-            new BoundedChannelOptions(_publishQueueCapacity)
+        // بافر هر منبع (برای فیلتر شباهت و تاریخ)
+        private readonly ConcurrentDictionary<string, LinkedList<NewsItem>> _sourceBuffers = new();
+
+        // کلیدهای دیده‌شده (جهانی — برای جلوگیری از تکرار کامل)
+        private readonly ConcurrentDictionary<string, byte> _seenKeys = new();
+
+        // کلیدهای ارسال‌شده (برای جلوگیری از ارسال دوباره)
+        private readonly ConcurrentDictionary<string, byte> _processedKeys = new();
+
+        // صف انتشار (Channel)
+        public Channel<NewsItem> PublishChannel { get; }
+        public ChannelReader<NewsItem> PublishReader => PublishChannel.Reader;
+        public ChannelWriter<NewsItem> PublishWriter => PublishChannel.Writer;
+
+        // آخرین منبع ارسال‌شده + قفل برای Thread-Safety
+        private string? _lastSourcePublished;
+        private readonly object _lastSourceLock = new();
+
+        public string? LastSourcePublished
+        {
+            get => _lastSourcePublished;
+            private set
             {
-                FullMode = BoundedChannelFullMode.DropWrite,
-                SingleReader = true
-            });
-    }
+                lock (_lastSourceLock)
+                    _lastSourcePublished = value;
+            }
+        }
 
-    /// <summary>
-    /// اضافه کردن خبر با چک منبع‌محور (موازی با انتشار)
-    /// </summary>
-    public async ValueTask AddAsync(NewsItem item, CancellationToken ct = default)
-    {
-        if (item?.Link is null || item?.SourceName is null) return;
+        public NewsStorage(int maxItemsPerSource = 8, int publishQueueCapacity = 20)
+        {
+            _maxItemsPerSource = maxItemsPerSource;
+            _publishQueueCapacity = publishQueueCapacity;
 
-        var source = item.SourceName;
-        var key = $"{item.Link}-{item.PubDate:yyyyMMddHHmm}";
+            var options = new BoundedChannelOptions(publishQueueCapacity)
+            {
+                SingleWriter = false,
+                SingleReader = false,
+                FullMode = BoundedChannelFullMode.Wait
+            };
 
-        // 1. چک کلید سراسری (Thread-Safe)
-        if (_seenKeys.ContainsKey(key))
+            PublishChannel = Channel.CreateBounded<NewsItem>(options);
+        }
+
+        public async ValueTask AddAsync(NewsItem item, CancellationToken ct = default)
+        {
+            if (item?.Link == null || item?.SourceName == null) return;
+
+            var source = item.SourceName;
+            var pubDate = item.PubDate;
+            var globalKey = $"{item.Link}-{pubDate:yyyyMMddHHmm}";
+
+            // 1. جلوگیری از تکرار کامل (جهانی)
+            if (!_seenKeys.TryAdd(globalKey, 1)) return;
+
+            // 2. دریافت یا ایجاد بافر منبع
+            var buffer = _sourceBuffers.GetOrAdd(source, _ => new LinkedList<NewsItem>());
+
+            // 3. چک شباهت با خبرهای اخیر همین منبع
+            foreach (var old in buffer)
+            {
+                if (TextSimilarity.GetSimilarity(item.Title, old.Title) >= 0.92)
+                    goto Rejected;
+
+                var contentA = $"{item.Title} {item.ShortDescription} {item.FullDescription}".Trim();
+                var contentB = $"{old.Title} {old.ShortDescription} {old.FullDescription}".Trim();
+                if (!string.IsNullOrWhiteSpace(contentA) && !string.IsNullOrWhiteSpace(contentB))
+                {
+                    if (TextSimilarity.GetSimilarity(contentA, contentB) >= 0.90)
+                        goto Rejected;
+                }
+
+                if (item.Link == old.Link)
+                    goto Rejected;
+            }
+
+            // 4. فقط خبرهایی که خیلی قدیمی‌تر از آخرین خبر منبع نیستند
+            if (buffer.Count > 0)
+            {
+                var newest = buffer.First!.Value;
+                if (pubDate < newest.PubDate.AddHours(-12))
+                    goto Rejected;
+            }
+
+            // قبول شد!
+            buffer.AddFirst(item);
+
+            // محدود کردن حافظه هر منبع
+            while (buffer.Count > _maxItemsPerSource)
+            {
+                if (buffer.Last is { } oldest)
+                {
+                    var oldKey = $"{oldest.Value.Link}-{oldest.Value.PubDate:yyyyMMddHHmm}";
+                    buffer.RemoveLast();
+                    _seenKeys.TryRemove(oldKey, out _);
+                }
+            }
+
+            // تمیزکاری بافر خالی
+            if (buffer.Count == 0)
+                _sourceBuffers.TryRemove(source, out _);
+
+            // اضافه به صف انتشار
+            if (!PublishWriter.TryWrite(item))
+                await PublishWriter.WriteAsync(item, ct);
+
             return;
 
-        // 2. دریافت یا ایجاد بافر منبع
-        var buffer = _sourceBuffers.GetOrAdd(source, _ => new LinkedList<NewsItem>());
-
-        // 3. چک شباهت با خبرهای اخیر همین منبع
-        foreach (var old in buffer)
-        {
-            if (TextSimilarity.GetSimilarity(item.Title, old.Title) >= SimilarityThreshold)
-                return;
-
-            var contentA = $"{item.Title} {item.ShortDescription} {item.FullDescription}".Trim();
-            var contentB = $"{old.Title} {old.ShortDescription} {old.FullDescription}".Trim();
-            if (!string.IsNullOrWhiteSpace(contentA) && !string.IsNullOrWhiteSpace(contentB))
-            {
-                if (TextSimilarity.GetSimilarity(contentA, contentB) >= SimilarityThreshold)
-                    return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(item.Link) && item.Link == old.Link)
-                return;
+        Rejected:
+            _seenKeys.TryRemove(globalKey, out _);
         }
 
-        // 4. چک تاریخ: فقط جدیدتر از آخرین خبر همین منبع
-        if (buffer.Count > 0)
+        public void UpdateLastPublished(string source, DateTimeOffset time)
         {
-            var lastItemInSource = buffer.First!.Value;
-            if (item.PubDate <= lastItemInSource.PubDate)
-                return;
+            LastSourcePublished = source;
         }
 
-        // 5. اضافه به ابتدای بافر منبع
-        buffer.AddFirst(item);
-        _seenKeys[key] = 1;
-
-        // 6. محدود کردن حافظه هر منبع
-        if (buffer.Count > _maxItemsPerSource)
+        public bool HasOtherSourceSafe(string currentSource)
         {
-            if (buffer.Last is { } oldest)
-            {
-                buffer.RemoveLast();
-                _seenKeys.TryRemove($"{oldest.Value.Link}-{oldest.Value.PubDate:yyyyMMddHHmm}", out _);
-            }
+            // اگر صف خالی باشه یا فقط خبر از همین منبع باشه → false
+            if (PublishReader.Count == 0) return false;
+
+            // اگر آخرین منبع با فعلی یکی باشه و خبر از منبع دیگه باشه → true
+            return PublishReader.Count > 1 ||
+                   (PublishReader.TryPeek(out var next) && next?.SourceName != currentSource);
         }
 
-        // 7. حذف بافر خالی (اختیاری)
-        if (buffer.Count == 0)
-            _sourceBuffers.TryRemove(source, out _);
-
-        // 8. اضافه به صف انتشار (موازی با مصرف)
-        if (!_publishChannel.Writer.TryWrite(item))
+        public async ValueTask RepublishAsync(NewsItem item, CancellationToken ct = default)
         {
-            await _publishChannel.Writer.WriteAsync(item, ct);
+            if (!PublishWriter.TryWrite(item))
+                await PublishWriter.WriteAsync(item, ct);
+        }
+
+        public bool IsAlreadyProcessed(string key) => _processedKeys.ContainsKey(key);
+        public void MarkAsProcessed(string key) => _processedKeys[key] = 1;
+
+        public IReadOnlyCollection<NewsItem> GetCurrentPublishQueue()
+        {
+            var list = new List<NewsItem>();
+            while (PublishReader.TryRead(out var item))
+                list.Add(item);
+            // دوباره برگردون به صف
+            foreach (var i in list)
+                PublishWriter.TryWrite(i);
+            return list;
+        }
+
+        public void Complete()
+        {
+            PublishWriter.Complete();
         }
     }
-
-    /// <summary>
-    /// چک وجود منبع دیگر در صف — بدون خالی کردن صف (Thread-Safe)
-    /// </summary>
-    public bool HasOtherSourceSafe(string currentSource)
-    {
-        var temp = new List<NewsItem>();
-        while (_publishChannel.Reader.TryRead(out var item))
-        {
-            temp.Add(item);
-            if (item.SourceName != currentSource)
-            {
-                // بازگرداندن همه آیتم‌ها
-                foreach (var i in temp)
-                    _publishChannel.Writer.TryWrite(i);
-                return true;
-            }
-        }
-        foreach (var i in temp)
-            _publishChannel.Writer.TryWrite(i);
-        return false;
-    }
-
-    /// <summary>
-    /// عقب انداختن خبر (برای موازی‌سازی)
-    /// </summary>
-    public async ValueTask RepublishAsync(NewsItem item, CancellationToken ct = default)
-    {
-        await _publishChannel.Writer.WriteAsync(item, ct);
-    }
-
-    /// <summary>
-    /// به‌روزرسانی آخرین منبع منتشرشده
-    /// </summary>
-    public void UpdateLastPublished(string sourceName, DateTimeOffset publishedAt)
-    {
-        LastSourcePublished = sourceName;
-        LastPublishedAt = publishedAt;
-    }
-
-    /// <summary>
-    /// دریافت کپی از صف فعلی — بدون اختلال در مصرف‌کننده
-    /// </summary>
-    public IReadOnlyList<NewsItem> GetCurrentPublishQueue()
-    {
-        var list = new List<NewsItem>();
-        while (_publishChannel.Reader.TryRead(out var item))
-        {
-            list.Add(item);
-        }
-        foreach (var item in list)
-        {
-            _publishChannel.Writer.TryWrite(item);
-        }
-        return list;
-    }
-
-    /// <summary>
-    /// پایان دادن به کانال
-    /// </summary>
-    public void Complete() => _publishChannel.Writer.Complete();
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
@@ -22,8 +23,8 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
         private readonly LineupFilter _lineupFilter;
-
-
+        private readonly DebugStorage _debugStorage;
+        private readonly Random _random = new();
 
         public FootballforiService(
             ITelegramBotClient bot,
@@ -33,7 +34,8 @@ namespace TelegramAggregator.WebAPI.Services
             NewsStorage newsStorage,
             IOptions<AppSettings> appSettings,
             IHtmlExtractor htmlExtractor,
-            LineupFilter lineupFilter)
+            LineupFilter lineupFilter,
+            DebugStorage debugStorage)
         {
             _bot = bot;
             _logger = logger;
@@ -45,94 +47,201 @@ namespace TelegramAggregator.WebAPI.Services
             _htmlExtractor = htmlExtractor;
             _channels = _appSettings.Channels;
             _lineupFilter = lineupFilter;
+            _debugStorage = debugStorage;
         }
-        public async Task RunAsync(CancellationToken ct)
-        {
-            var publishTask = Task.CompletedTask;
 
+        // این متد فقط یک بار توسط BackgroundService کال میشه
+        public async Task StartAsync(CancellationToken ct)
+        {
+            _logger.LogInformation("FootballforiService استارت شد");
+
+            // فقط یک بار! Publish تا ابد زنده می‌مونه
+            var publishTask = PublishContinuouslyAsync(ct);
+
+            // Fetch هر 3 دقیقه (با حالت شبانه)
+            var fetchTask = StartFetchingLoopAsync(ct);
+
+            await Task.WhenAll(publishTask, fetchTask);
+        }
+
+        private async Task StartFetchingLoopAsync(CancellationToken ct)
+        {
             while (!ct.IsCancellationRequested)
             {
-                foreach (var channel in _channels)
+                var now = DateTime.Now;
+                if (now.Hour >= 1 && now.Hour < 8)
                 {
-                    try
-                    {
-                        _logger.LogInformation("شروع پردازش کانال: {Channel}", channel.Name);
-
-                        // 1. شروع انتشار (فقط یک بار)
-                        if (publishTask.IsCompleted)
-                        {
-                            publishTask = PublishContinuouslyAsync(channel, ct);
-                        }
-
-                        // 2. واکشی و اضافه به صف (همزمان)
-                        await FetchAndFilterNewsAndAddToQueueAsync(channel.Sources, ct);
-
-                        // 3. تاخیر بین کانال‌ها
-                        await Task.Delay(TimeSpan.FromSeconds(10), ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "خطا در پردازش کانال {Channel}", channel.Name);
-                    }
+                    _logger.LogInformation("حالت شبانه فعال — تاخیر 30 دقیقه");
+                    await Task.Delay(TimeSpan.FromMinutes(30), ct);
+                    continue;
                 }
 
-                // 4. تاخیر بین چرخه‌های کامل
+                try
+                {
+                    foreach (var channel in _channels)
+                    {
+                        await FetchAndFilterNewsAndAddToQueueAsync(channel.Sources, ct);
+                        await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "خطا در چرخه Fetch");
+                }
 
                 await Task.Delay(TimeSpan.FromMinutes(3), ct);
             }
-
-            // 5. پایان تمیز: صبر تا پایان انتشار
-            _newsStorage.Complete();
-            await publishTask;
         }
+
         private async Task FetchAndFilterNewsAndAddToQueueAsync(List<SourceConfig> sources, CancellationToken ct)
         {
             var allItems = new List<NewsItem>();
-            var footballKeywords = _appSettings.FootballKeywords;
-            var nonSportKeywords = _appSettings.NonSportKeywords;
+            var cutoff = DateTimeOffset.Now.AddHours(-6);
 
+            // مرحله ۱: واکشی همه RSSها
             foreach (var source in sources)
             {
                 try
                 {
                     var rssContent = await _httpHelper.GetStringAsync(source.Url, ct);
-                    allItems.AddRange(_rssParser.Parse(rssContent));
+                    if (string.IsNullOrWhiteSpace(rssContent))
+                    {
+                        _logger.LogWarning("RSS خالی از {Source}", source.Name);
+                        continue;
+                    }
+
+                    var parsed = _rssParser.Parse(rssContent);
+                    allItems.AddRange(parsed);
+                    
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "خطا در واکشی منبع: {Source}", source.Url);
+                    _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name, source.Url);
                 }
             }
 
-            var filtered = allItems
-                .Where(item =>
-                    footballKeywords.Any(k => (item.Title + " " + item.ShortDescription)
-                        .Contains(k, StringComparison.OrdinalIgnoreCase)) &&
-                    !nonSportKeywords.Any(k =>
-                        item.Title.Contains(k, StringComparison.OrdinalIgnoreCase) ||
-                        item.ShortDescription.Contains(k, StringComparison.OrdinalIgnoreCase)) &&
-                    string.IsNullOrEmpty(item.VideoUrl) && !_lineupFilter.IsLineupOrPreMatchNews(item)
-                )
+            if (!allItems.Any())
+            {
+                _logger.LogInformation("هیچ خبری از هیچ منبعی دریافت نشد.");
+                return;
+            }
+
+            var footballKeywords = _appSettings.FootballKeywords;
+            var trashRegexes = _appSettings.FilterSettings.TrashPatterns
+                .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                .ToList();
+
+            var acceptedItems = new List<NewsItem>();
+
+            // مرحله ۲: فیلتر دقیق + استخراج محتوا + چک ویدیو
+            foreach (var item in allItems)
+            {
+                var text = $"{item.Title} {item.ShortDescription}".ToLowerInvariant();
+                string? rejectReason = null;
+
+                // ۱. تاریخ
+                if (item.PubDate < cutoff)
+                    rejectReason = "قدیمی‌تر از ۶ ساعت";
+
+                // ۲. الگوهای آشغال (گل لحظه‌ای، پیش‌بینی، هشتگ و ...)
+                else if (trashRegexes.Any(r => r.IsMatch(text)))
+                    rejectReason = "گل لحظه‌ای / تیم ملی / پیش‌بینی / هشتگ";
+
+                // ۳. عنوان خیلی کوتاه
+                else if (item.Title.Length < 20)
+                    rejectReason = "عنوان خیلی کوتاه";
+
+                // ۴. ترکیب احتمالی یا پیش‌بازی
+                else if (_lineupFilter.IsLineupOrPreMatchNews(item))
+                    rejectReason = "ترکیب احتمالی یا پیش‌بازی";
+
+                // ۵. بدون کلمه کلیدی مهم
+                else if (!footballKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
+                    rejectReason = "کلمه کلیدی فوتبال ندارد";
+
+                // ۶. چک ویدیو (مهم‌ترین درخواست تو!)
+                else
+                {
+                    var hasVideo = await _htmlExtractor.HasVideoAsync(item.Link, ct);
+                    if (hasVideo)
+                        rejectReason = "حاوی ویدیو (حذف کامل)";
+                }
+
+                // ثبت در دیباگ (همه خبرها — قبول یا رد)
+                _debugStorage.Add(new DebugFeedItem
+                {
+                    SourceName = item.SourceName!,
+                    Title = item.Title,
+                    Link = item.Link,
+                    PubDate = item.PubDate,
+                    IsAccepted = rejectReason == null,
+                    RejectReason = rejectReason,
+                    ProcessedAt = DateTimeOffset.Now
+                });
+
+                if (rejectReason != null)
+                {
+                    _logger.LogWarning("رد شد ← [{Source}] {Title} | دلیل: {Reason}",
+                        item.SourceName, item.Title.Truncate(80), rejectReason);
+                    continue;
+                }
+
+                // خبر قبول شد → استخراج عکس و متن کامل (برای ارسال بهتر و دیباگ دقیق‌تر)
+                try
+                {
+                    var imageTask = _htmlExtractor.ExtractMainImageAsync(item.Link, ct);
+                    var descTask = _htmlExtractor.GetFullDescriptionAsync(item.Link, ct);
+
+                    await Task.WhenAll(imageTask, descTask);
+
+                    item.ImageUrl = await imageTask;
+                    item.FullDescription = await descTask;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "خطا در استخراج محتوا برای خبر: {Title}", item.Title.Truncate(80));
+                    item.ImageUrl = null;
+                    item.FullDescription = "متن کامل در دسترس نیست.";
+                }
+
+                _logger.LogInformation("قبول شد و آماده ارسال ← [{Source}] {Title}", item.SourceName, item.Title.Truncate(100));
+                acceptedItems.Add(item);
+            }
+
+            // مرحله ۳: فقط ۱۰ خبر جدیدتر و طلایی رو به صف بفرست
+            var finalItems = acceptedItems
                 .OrderByDescending(i => i.PubDate)
                 .Take(10)
                 .ToList();
 
-            foreach (var item in filtered)
+            foreach (var item in finalItems)
             {
                 await _newsStorage.AddAsync(item, ct);
             }
+
+            _logger.LogInformation(
+                "چرخه تمام شد → کل: {Total} | قبول: {Accepted} | رد: {Rejected} | به صف: {Queued}",
+                allItems.Count,
+                acceptedItems.Count,
+                allItems.Count - acceptedItems.Count,
+                finalItems.Count
+            );
         }
-        private async Task PublishContinuouslyAsync(ChannelConfig channel, CancellationToken ct)
+
+        private async Task PublishContinuouslyAsync(CancellationToken ct)
         {
-            var processed = new HashSet<NewsItem>(NewsItemComparer.Instance);
-            var queue = _newsStorage.GetCurrentPublishQueue();
+            _logger.LogInformation("PublishContinuouslyAsync شروع شد — تا ابد زنده می‌مونه");
 
-
-            try
+            while (!ct.IsCancellationRequested)
             {
-                await foreach (var item in _newsStorage.PublishReader.ReadAllAsync(ct))
+                try
                 {
-                    if (processed.Contains(item)) continue;
+                    var item = await _newsStorage.PublishReader.ReadAsync(ct);
+
+                    if (item?.Link == null) continue;
+
+                    var itemKey = $"{item.SourceName}:{item.Link}";
+                    if (_newsStorage.IsAlreadyProcessed(itemKey)) continue;
 
                     if (_newsStorage.LastSourcePublished == item.SourceName &&
                         _newsStorage.HasOtherSourceSafe(item.SourceName))
@@ -142,75 +251,62 @@ namespace TelegramAggregator.WebAPI.Services
                         continue;
                     }
 
-                    try
+                    foreach (var channel in _channels)
                     {
-                        _logger.LogInformation("Source Name ===>" + item.SourceName);
-                        await SendToTelegramAsync(item, channel, ct);
-                        _newsStorage.UpdateLastPublished(item.SourceName, DateTimeOffset.Now);
-                        processed.Add(item);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "خطا در ارسال خبر: {Title}", item.Title);
-                        await _newsStorage.RepublishAsync(item, ct);
-                    }
+                        try
+                        {
+                            _logger.LogInformation($"SourceName::::{item.SourceName}");
+                           // await SendToTelegramAsync(item, channel, ct);
+                            _newsStorage.UpdateLastPublished(item.SourceName!, DateTimeOffset.Now);
+                            _newsStorage.MarkAsProcessed(itemKey);
 
-
-                    var delay = TimeSpan.FromMinutes(Random.Shared.Next(2, 16));
-                    await Task.Delay(delay, ct);
+                            //var delay = TimeSpan.FromMinutes(_random.Next(2, 17));
+                            var delay = TimeSpan.FromSeconds(3);
+                            await Task.Delay(delay, ct);
+                            break;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "خطا در ارسال به کانال {Channel}", channel.Name);
+                        }
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "خطای غیرمنتظره در Publish");
+                    await Task.Delay(TimeSpan.FromSeconds(10), ct);
                 }
             }
-            catch (OperationCanceledException) { }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "خطا در انتشار مداوم");
-            }
+
+            _logger.LogWarning("PublishContinuouslyAsync خاتمه یافت");
         }
+
         private async Task SendToTelegramAsync(NewsItem item, ChannelConfig channelConfig, CancellationToken ct)
         {
-            if (!ct.IsCancellationRequested)
-            {
+            var imageTask = _htmlExtractor.ExtractMainImageAsync(item.Link, ct);
+            var fullDescTask = _htmlExtractor.GetFullDescriptionAsync(item.Link, ct);
+            await Task.WhenAll(imageTask, fullDescTask);
 
-                // 1. استخراج تصویر و توضیح کامل (موازی)
-                var imageTask = _htmlExtractor.ExtractMainImageAsync(item.Link, ct);
-                var fullDescTask = _htmlExtractor.GetFullDescriptionAsync(item.Link, ct);
+            item.ImageUrl = await imageTask;
+            item.FullDescription = await fullDescTask;
 
-                await Task.WhenAll(imageTask, fullDescTask);
+            var caption = await MessageTemplateFormatter.PrepareMessageAsync(item, channelConfig, _htmlExtractor);
 
-                item.ImageUrl = await imageTask;
-                item.FullDescription = await fullDescTask;
+            Telegram.Bot.Types.Message sentMessage;
 
+            if (!string.IsNullOrEmpty(item.VideoUrl))
+                sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl, caption: caption, parseMode: ParseMode.Html);
+            else if (!string.IsNullOrEmpty(item.ImageUrl))
+                sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl, caption: caption, parseMode: ParseMode.Html);
+            else
+                sentMessage = await _bot.SendMessage(_hiddenGroupId, caption, parseMode: ParseMode.Html);
 
-                string caption = await MessageTemplateFormatter.PrepareMessageAsync(item, channelConfig, _htmlExtractor);
-
-                Telegram.Bot.Types.Message sentMessage;
-
-                if (!string.IsNullOrEmpty(item.VideoUrl))
-                {
-                    sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl,
-                        caption: caption, parseMode: ParseMode.Html, disableNotification: true);
-                }
-                else if (!string.IsNullOrEmpty(item.ImageUrl))
-                {
-                    sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl,
-                        caption: caption, parseMode: ParseMode.Html, disableNotification: true);
-                }
-                else
-                {
-                    sentMessage = await _bot.SendMessage(_hiddenGroupId, caption,
-                        parseMode: ParseMode.Html, disableNotification: true);
-                }
-
-                await _bot.CopyMessage(channelConfig.ChannelId,
-                    _hiddenGroupId, sentMessage.MessageId,
-                    disableNotification: true);
-
-                await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
-
-            }
-
+            await _bot.CopyMessage(channelConfig.ChannelId, _hiddenGroupId, sentMessage.MessageId);
+            await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
         }
-
-
     }
 }

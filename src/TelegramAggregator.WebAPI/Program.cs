@@ -8,19 +8,26 @@ using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Services;
 
-
-Console.OutputEncoding = Encoding.UTF8; // مهم
+Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding = Encoding.UTF8;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load configuration
-builder.Configuration.AddJsonFile("footballKeywords.json", optional: true, reloadOnChange: true);
+// ------------------- تنظیمات و کانفیگ -------------------
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile("footballKeywords.json", optional: true, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
+
+// Bind تنظیمات
 builder.Services.Configure<AppSettings>(builder.Configuration);
 
-// Add controllers and CORS
+// ------------------- سرویس‌ها -------------------
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddEndpointsApiExplorer(); 
+
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -31,21 +38,33 @@ builder.Services.AddCors(options =>
     });
 });
 
-// NewsStorage and DuplicateChecker
-builder.Services.AddSingleton(sp =>
+// استاتیک فایل‌ها (برای debug.html)
+builder.Services.AddDirectoryBrowser(); // اختیاری: برای مرور فایل‌ها در wwwroot
+builder.Logging.AddConsole();
+
+// ------------------- سرویس‌های اصلی -------------------
+
+// NewsStorage با تنظیمات دقیق
+builder.Services.AddSingleton<NewsStorage>(sp =>
 {
     var settings = sp.GetRequiredService<IOptions<AppSettings>>().Value;
-    return new NewsStorage(settings.MaxItemsPerSource,settings.PublishQueueCapacity);
+    return new NewsStorage(
+        maxItemsPerSource: settings.MaxItemsPerSource ,
+        publishQueueCapacity: settings.PublishQueueCapacity 
+    );
 });
 
+// DebugStorage (برای دیباگ زنده)
+builder.Services.AddSingleton<DebugStorage>();
 
+// LineupFilter
 builder.Services.AddSingleton<LineupFilter>(sp =>
 {
     var keywords = sp.GetRequiredService<IOptions<AppSettings>>().Value.LineupKeywords;
     return new LineupFilter(keywords);
 });
 
-// HttpClient Factory
+// HttpClient ها
 builder.Services.AddHttpClient<HttpHelper>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
@@ -57,50 +76,61 @@ builder.Services.AddHttpClient("HtmlExtractor", client =>
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; FootballforiBot/1.0)");
 });
+
 builder.Services.AddHttpClient("RssHttpClient", client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(10);
+    client.Timeout = TimeSpan.FromSeconds(15);
     client.DefaultRequestHeaders.UserAgent.ParseAdd(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36");
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
 }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
     AutomaticDecompression = DecompressionMethods.All,
     AllowAutoRedirect = true
 });
 
+// سرویس‌های Scoped
 builder.Services.AddScoped<IHttpHelper, HttpHelper>();
-
 builder.Services.AddScoped<IRssParser, RssParser>();
 builder.Services.AddScoped<IHtmlExtractor, HtmlExtractor>();
 
+// Telegram Bot
 builder.Services.AddSingleton<ITelegramBotClient>(sp =>
 {
-    var settings = sp.GetRequiredService<IOptions<AppSettings>>().Value;
-    var token = settings.BotToken;
-    return new Telegram.Bot.TelegramBotClient(token);
+    var token = sp.GetRequiredService<IOptions<AppSettings>>().Value.BotToken
+                 ?? throw new InvalidOperationException("BotToken تنظیم نشده است!");
+    return new TelegramBotClient(token);
 });
 
+// سرویس اصلی + سرویس پس‌زمینه
 builder.Services.AddScoped<FootballforiService>();
+builder.Services.AddHostedService<FootballforiBackgroundService>(); // این خودش Publish رو یک بار استارت می‌کنه
 
-
-
-builder.Services.AddHostedService<FootballforiBackgroundService>();
+// ------------------- اپلیکیشن -------------------
 var app = builder.Build();
 
-
-
-
-
-// Map endpoints and middleware
+// Middleware ها
 app.UseHttpsRedirection();
 app.UseHsts();
+app.UseStaticFiles();        // مهم: برای debug.html و wwwroot
+app.UseRouting();
 app.UseCors("AllowAll");
+
+ 
+
 app.MapControllers();
 
-
+// در پروداکشن روی همه آی‌پی‌ها گوش بده
 if (app.Environment.IsProduction())
 {
-    app.Urls.Add("http://0.0.0.0:5000");
+    app.Urls.Add("http://0.0.0.0:5000"); 
 }
+
+// ------------------- استارت -------------------
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    Console.WriteLine("ربات فوتبالفوری با موفقیت استارت شد!");
+    Console.WriteLine($"محیط: {app.Environment.EnvironmentName}");
+    Console.WriteLine($"دسترسی به داشبورد: http://localhost:5000/debug.html");
+});
 
 app.Run();

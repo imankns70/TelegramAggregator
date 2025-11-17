@@ -1,0 +1,130 @@
+﻿<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <title>دیباگ زنده ربات</title>
+    <style>
+        body {
+            font-family: Tahoma;
+            background: #111;
+            color: #0f0;
+            margin: 0;
+            padding: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            gap: 15px;
+        }
+
+        .box {
+            background: #1a1a1a;
+            border: 1px solid #0f0;
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        h1 {
+            color: #0f0;
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+            text-align: right;
+        }
+
+        th {
+            background: #002200;
+        }
+
+        .ok {
+            color: #0f0;
+            font-weight: bold;
+        }
+
+        .no {
+            color: #f44;
+            font-weight: bold;
+        }
+
+        .stats {
+            line-height: 2;
+        }
+
+        a {
+            color: #88f;
+        }
+
+        .refresh {
+            text-align: center;
+            color: #888;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>دیباگ زنده ربات فوتبالفوری</h1>
+    <div class="grid">
+        <div class="box">
+            <h2>آخرین خبرها (100 تا)</h2>
+            <div id="feed">در حال بارگذاری...</div>
+        </div>
+        <div class="box stats">
+            <h2>آمار لحظه‌ای</h2>
+            <div id="stats">در حال بارگذاری...</div>
+            <div class="refresh">به‌روزرسانی هر 10 ثانیه</div>
+        </div>
+    </div>
+
+    <script>
+    async function load() {
+      try {
+        const [f, s] = await Promise.all([
+          fetch('/api/debug/feed').then(r => r.json()),
+          fetch('/api/debug/stats').then(r => r.json())
+        ]);
+
+        document.getElementById('feed').innerHTML = `
+          <table>
+            <tr><th>زمان</th><th>منبع</th><th>عنوان</th><th>وضعیت</th><th>دلیل</th></tr>
+            ${f.map(x => `
+              <tr>
+                <td>${x.زمان}</td>
+                <td>${x.منبع}</td>
+                <td style="max-width:280px; overflow:hidden; white-space:nowrap;">
+                  <a href="${x.لینک}" target="_blank">${x.عنوان}</a>
+                </td>
+                <td class="${x.وضعیت.includes('قبول')?'ok':'no'}">${x.وضعیت}</td>
+                <td>${x.دلیل}</td>
+              </tr>
+            `).join('')}
+          </table>
+        `;
+
+        document.getElementById('stats').innerHTML = `
+          <div>صف فعلی: <strong>${s.صف_فعلی}</strong> خبر</div>
+          <div>ساعت اخیر: ${s.در_ساعت_اخیر.کل_خبرها} خبر →
+            <span class="ok">${s.در_ساعت_اخیر.قبول_شده} قبول</span> |
+            <span class="no">${s.در_ساعت_اخیر.رد_شده} رد</span>
+          </div>
+          <div>درصد قبولی: <strong>${s.در_ساعت_اخیر.درصد_قبولی}%</strong></div>
+          <hr>
+          <div>امروز: ${s.امروز.قبول_شده} خبر قبول شده</div>
+        `;
+      } catch (e) { console.error(e); }
+    }
+    load();
+    setInterval(load, 10000);
+    </script>
+</body>
+</html>

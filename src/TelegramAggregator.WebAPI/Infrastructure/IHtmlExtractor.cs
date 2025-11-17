@@ -20,4 +20,6 @@ public interface IHtmlExtractor
     /// <param name="ct">توکن لغو عملیات</param>
     /// <returns>آدرس تصویر یا null</returns>
     Task<string?> ExtractMainImageAsync(string url, CancellationToken ct = default);
+
+    Task<bool> HasVideoAsync(string url, CancellationToken ct = default);
 }
