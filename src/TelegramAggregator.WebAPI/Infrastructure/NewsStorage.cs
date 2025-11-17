@@ -18,7 +18,7 @@ public sealed class NewsStorage
     // کلید سراسری برای جلوگیری از تکرار کامل
     private readonly ConcurrentDictionary<string, byte> _seenKeys = new();
 
-    private const int PublishQueueCapacity = 10;
+    private readonly int _publishQueueCapacity;
     private const double SimilarityThreshold = 0.85;
     private readonly int _maxItemsPerSource;
 
@@ -26,12 +26,13 @@ public sealed class NewsStorage
     public DateTimeOffset? LastPublishedAt { get; private set; }
     public ChannelReader<NewsItem> PublishReader => _publishChannel.Reader;
 
-    public NewsStorage(int maxItemsPerSource)
+    public NewsStorage(int maxItemsPerSource, int publishQueueCapacity)
     {
-        _maxItemsPerSource = maxItemsPerSource > 0 ? maxItemsPerSource : 100;
+        _maxItemsPerSource = maxItemsPerSource;
+        _publishQueueCapacity = publishQueueCapacity;
 
         _publishChannel = Channel.CreateBounded<NewsItem>(
-            new BoundedChannelOptions(PublishQueueCapacity)
+            new BoundedChannelOptions(_publishQueueCapacity)
             {
                 FullMode = BoundedChannelFullMode.DropWrite,
                 SingleReader = true

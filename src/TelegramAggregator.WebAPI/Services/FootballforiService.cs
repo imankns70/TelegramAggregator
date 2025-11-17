@@ -16,12 +16,12 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly ILogger<FootballforiService> _logger;
         private readonly List<ChannelConfig> _channels;
         private readonly IHttpHelper _httpHelper;
-        private readonly IRssParser _rssParser; 
+        private readonly IRssParser _rssParser;
         private readonly NewsStorage _newsStorage;
         private readonly IHtmlExtractor _htmlExtractor;
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
-        private readonly LineupFilter _lineupFilter; 
+        private readonly LineupFilter _lineupFilter;
 
 
 
@@ -77,7 +77,7 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
                 // 4. تاخیر بین چرخه‌های کامل
-                
+
                 await Task.Delay(TimeSpan.FromMinutes(3), ct);
             }
 
@@ -127,7 +127,7 @@ namespace TelegramAggregator.WebAPI.Services
             var processed = new HashSet<NewsItem>(NewsItemComparer.Instance);
             var queue = _newsStorage.GetCurrentPublishQueue();
 
-           
+
             try
             {
                 await foreach (var item in _newsStorage.PublishReader.ReadAllAsync(ct))
@@ -155,7 +155,7 @@ namespace TelegramAggregator.WebAPI.Services
                         await _newsStorage.RepublishAsync(item, ct);
                     }
 
-               
+
                     var delay = TimeSpan.FromMinutes(Random.Shared.Next(2, 16));
                     await Task.Delay(delay, ct);
                 }
@@ -211,6 +211,6 @@ namespace TelegramAggregator.WebAPI.Services
 
         }
 
-        
+
     }
 }

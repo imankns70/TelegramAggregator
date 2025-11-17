@@ -35,7 +35,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddSingleton(sp =>
 {
     var settings = sp.GetRequiredService<IOptions<AppSettings>>().Value;
-    return new NewsStorage(settings.MaxItems);
+    return new NewsStorage(settings.MaxItemsPerSource,settings.PublishQueueCapacity);
 });
 
 
