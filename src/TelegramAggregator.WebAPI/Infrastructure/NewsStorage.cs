@@ -129,12 +129,30 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
         public bool HasOtherSourceSafe(string currentSource)
         {
-            // اگر صف خالی باشه یا فقط خبر از همین منبع باشه → false
+            // اگه تو صف فقط از همین منبع باشه → اجازه بده بفرسته
             if (PublishReader.Count == 0) return false;
 
-            // اگر آخرین منبع با فعلی یکی باشه و خبر از منبع دیگه باشه → true
-            return PublishReader.Count > 1 ||
-                   (PublishReader.TryPeek(out var next) && next?.SourceName != currentSource);
+            // اگه فقط ۱ خبر تو صف باشه → چه از همین منبع چه نه → بذار بره
+            if (PublishReader.Count == 1) return false;
+
+            // نگاه کن ببین تو صف، خبر از منبع دیگه هست یا نه
+            var hasOther = false;
+            var tempList = new List<NewsItem>();
+
+            while (PublishReader.TryRead(out var next))
+            {
+                if (next != null && next.SourceName != currentSource)
+                {
+                    hasOther = true;
+                }
+                tempList.Add(next!);
+            }
+
+            // همه رو دوباره برگردون به صف
+            foreach (var item in tempList)
+                PublishWriter.TryWrite(item);
+
+            return hasOther;
         }
 
         public async ValueTask RepublishAsync(NewsItem item, CancellationToken ct = default)

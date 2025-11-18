@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using TelegramAggregator.Infrastructure;
+using TelegramAggregator.Services;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 
@@ -98,7 +99,7 @@ namespace TelegramAggregator.WebAPI.Services
             var allItems = new List<NewsItem>();
             var cutoff = DateTimeOffset.Now.AddHours(-6);
 
-            // مرحله ۱: واکشی همه RSSها
+            // مرحله ۱: واکشی RSS
             foreach (var source in sources)
             {
                 try
@@ -109,10 +110,8 @@ namespace TelegramAggregator.WebAPI.Services
                         _logger.LogWarning("RSS خالی از {Source}", source.Name);
                         continue;
                     }
-
                     var parsed = _rssParser.Parse(rssContent);
                     allItems.AddRange(parsed);
-                    
                 }
                 catch (Exception ex)
                 {
@@ -133,82 +132,62 @@ namespace TelegramAggregator.WebAPI.Services
 
             var acceptedItems = new List<NewsItem>();
 
-            // مرحله ۲: فیلتر دقیق + استخراج محتوا + چک ویدیو
+            // مرحله ۲: فیلتر + جمع‌آوری همه دلایل رد شدن
             foreach (var item in allItems)
             {
                 var text = $"{item.Title} {item.ShortDescription}".ToLowerInvariant();
-                string? rejectReason = null;
+                var reasons = new List<string>(); // همه دلایل رو جمع می‌کنیم!
 
-                // ۱. تاریخ
+                // چک فیلترها — به ترتیب اولویت
                 if (item.PubDate < cutoff)
-                    rejectReason = "قدیمی‌تر از ۶ ساعت";
+                    reasons.Add("قدیمی‌تر از ۶ ساعت");
 
-                // ۲. الگوهای آشغال (گل لحظه‌ای، پیش‌بینی، هشتگ و ...)
-                else if (trashRegexes.Any(r => r.IsMatch(text)))
-                    rejectReason = "گل لحظه‌ای / تیم ملی / پیش‌بینی / هشتگ";
+                if (trashRegexes.Any(r => r.IsMatch(text)))
+                    reasons.Add("گل لحظه‌ای / پیش‌بینی / هشتگ / تیم ملی");
 
-                // ۳. عنوان خیلی کوتاه
-                else if (item.Title.Length < 20)
-                    rejectReason = "عنوان خیلی کوتاه";
+                if (item.Title.Length < 15) // کمی انعطاف دادم (۱۰ → ۱۵)
+                    reasons.Add("عنوان خیلی کوتاه");
 
-                // ۴. ترکیب احتمالی یا پیش‌بازی
-                else if (_lineupFilter.IsLineupOrPreMatchNews(item))
-                    rejectReason = "ترکیب احتمالی یا پیش‌بازی";
+                if (_lineupFilter.IsLineupOrPreMatchNews(item))
+                    reasons.Add("ترکیب احتمالی یا پیش‌بازی");
 
-                // ۵. بدون کلمه کلیدی مهم
-                else if (!footballKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
-                    rejectReason = "کلمه کلیدی فوتبال ندارد";
+                if (!footballKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
+                    reasons.Add("کلمه کلیدی فوتبال ندارد");
 
-                // ۶. چک ویدیو (مهم‌ترین درخواست تو!)
-                else
-                {
-                    var hasVideo = await _htmlExtractor.HasVideoAsync(item.Link, ct);
-                    if (hasVideo)
-                        rejectReason = "حاوی ویدیو (حذف کامل)";
-                }
+                // اگه ویدیو داشت (اختیاری — الان غیرفعاله ولی می‌تونی برگردونی)
+                // var hasVideo = await _htmlExtractor.HasVideoAsync(item.Link, ct);
+                // if (hasVideo) reasons.Add("حاوی ویدیو");
 
-                // ثبت در دیباگ (همه خبرها — قبول یا رد)
+                // ذخیره در دیباگ — حتی اگه قبول شد
+                var finalReason = reasons.Any() ? string.Join(" | ", reasons) : null;
+
                 _debugStorage.Add(new DebugFeedItem
                 {
                     SourceName = item.SourceName!,
                     Title = item.Title,
                     Link = item.Link,
                     PubDate = item.PubDate,
-                    IsAccepted = rejectReason == null,
-                    RejectReason = rejectReason,
+                    IsAccepted = !reasons.Any(),
+                    RejectReason = finalReason, // همه دلایل با | جدا شدن!
+                    PublishStatus = !reasons.Any() ? "در صف انتشار" : null,
+                    PublishedAt = null,
                     ProcessedAt = DateTimeOffset.Now
                 });
 
-                if (rejectReason != null)
+                // اگه حتی یه دلیل داشت → رد شد
+                if (reasons.Any())
                 {
-                    _logger.LogWarning("رد شد ← [{Source}] {Title} | دلیل: {Reason}",
-                        item.SourceName, item.Title.Truncate(80), rejectReason);
+                    _logger.LogWarning("رد شد ← [{Source}] {Title} | دلایل: {Reasons}",
+                        item.SourceName, item.Title.Truncate(80), string.Join(" + ", reasons));
                     continue;
                 }
 
-                // خبر قبول شد → استخراج عکس و متن کامل (برای ارسال بهتر و دیباگ دقیق‌تر)
-                try
-                {
-                    var imageTask = _htmlExtractor.ExtractMainImageAsync(item.Link, ct);
-                    var descTask = _htmlExtractor.GetFullDescriptionAsync(item.Link, ct);
-
-                    await Task.WhenAll(imageTask, descTask);
-
-                    item.ImageUrl = await imageTask;
-                    item.FullDescription = await descTask;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "خطا در استخراج محتوا برای خبر: {Title}", item.Title.Truncate(80));
-                    item.ImageUrl = null;
-                    item.FullDescription = "متن کامل در دسترس نیست.";
-                }
-
-                _logger.LogInformation("قبول شد و آماده ارسال ← [{Source}] {Title}", item.SourceName, item.Title.Truncate(100));
+                // قبول شد!
+                _logger.LogInformation("قبول شد → [{Source}] {Title}", item.SourceName, item.Title.Truncate(80));
                 acceptedItems.Add(item);
             }
 
-            // مرحله ۳: فقط ۱۰ خبر جدیدتر و طلایی رو به صف بفرست
+            // مرحله ۳: ۱۰ خبر برتر رو به صف بفرست
             var finalItems = acceptedItems
                 .OrderByDescending(i => i.PubDate)
                 .Take(10)
@@ -219,13 +198,7 @@ namespace TelegramAggregator.WebAPI.Services
                 await _newsStorage.AddAsync(item, ct);
             }
 
-            _logger.LogInformation(
-                "چرخه تمام شد → کل: {Total} | قبول: {Accepted} | رد: {Rejected} | به صف: {Queued}",
-                allItems.Count,
-                acceptedItems.Count,
-                allItems.Count - acceptedItems.Count,
-                finalItems.Count
-            );
+            _logger.LogInformation("تعداد خبرهای اضافه شده به صف: {Count}", finalItems.Count);
         }
 
         private async Task PublishContinuouslyAsync(CancellationToken ct)
@@ -255,13 +228,27 @@ namespace TelegramAggregator.WebAPI.Services
                     {
                         try
                         {
-                            _logger.LogInformation($"SourceName::::{item.SourceName}");
-                           // await SendToTelegramAsync(item, channel, ct);
+
+
+                            await SendToTelegramAsync(item, channel, ct);
                             _newsStorage.UpdateLastPublished(item.SourceName!, DateTimeOffset.Now);
                             _newsStorage.MarkAsProcessed(itemKey);
 
+                            _debugStorage.Add(new DebugFeedItem
+                            {
+                                SourceName = item.SourceName,
+                                Title = item.Title,
+                                Link = item.Link,
+                                PubDate = item.PubDate,
+                                IsAccepted = true,
+                                RejectReason = null,
+                                PublishStatus = "ارسال شد",
+                                PublishedAt = DateTimeOffset.Now,
+                                ProcessedAt = DateTimeOffset.Now
+                            });
+
                             //var delay = TimeSpan.FromMinutes(_random.Next(2, 17));
-                            var delay = TimeSpan.FromSeconds(3);
+                            var delay = TimeSpan.FromMinutes(2);
                             await Task.Delay(delay, ct);
                             break;
                         }
@@ -294,16 +281,22 @@ namespace TelegramAggregator.WebAPI.Services
             item.ImageUrl = await imageTask;
             item.FullDescription = await fullDescTask;
 
-            var caption = await MessageTemplateFormatter.PrepareMessageAsync(item, channelConfig, _htmlExtractor);
+            // ساخت کپشن نهایی با فوتر
+            var caption = MessageTemplateFormatter.GetFullCaption(item, addFooter: true);
+
+            // کوتاه کردن هوشمند فقط اگر خیلی طولانی شد (تلگرام حداکثر 1024 کاراکتر اجازه می‌ده)
+            var finalCaption = MessageTemplateFormatter.SmartTruncate(caption, 1015); // یا 1020
+            // دکمه «مشاهده خبر کامل»
+            var replyMarkup = MessageTemplateFormatter.GetFullNewsButton(item.Link);
 
             Telegram.Bot.Types.Message sentMessage;
 
             if (!string.IsNullOrEmpty(item.VideoUrl))
-                sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl, caption: caption, parseMode: ParseMode.Html);
+                sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl, caption: finalCaption, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
             else if (!string.IsNullOrEmpty(item.ImageUrl))
-                sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl, caption: caption, parseMode: ParseMode.Html);
+                sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl, caption: finalCaption, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
             else
-                sentMessage = await _bot.SendMessage(_hiddenGroupId, caption, parseMode: ParseMode.Html);
+                sentMessage = await _bot.SendMessage(_hiddenGroupId, finalCaption, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
 
             await _bot.CopyMessage(channelConfig.ChannelId, _hiddenGroupId, sentMessage.MessageId);
             await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);

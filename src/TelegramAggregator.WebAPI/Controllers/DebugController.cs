@@ -1,77 +1,105 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using TelegramAggregator.WebAPI.Infrastructure;
-using TelegramAggregator.WebAPI.Models;
 
-namespace TelegramAggregator.WebAPI.Controllers
+[ApiController]
+[Route("api/debug")]
+public class DebugApiController : ControllerBase
 {
-    [ApiController]
-    [Route("api/[controller]")]
-    public class DebugController : ControllerBase
+    private readonly DebugStorage _debugStorage;
+
+    public DebugApiController(DebugStorage debugStorage)
     {
-        private readonly DebugStorage _debugStorage;
-        private readonly NewsStorage _newsStorage;
-
-        public DebugController(DebugStorage debugStorage, NewsStorage newsStorage)
+        _debugStorage = debugStorage;
+    }
+    [HttpGet("feed")]
+    public IActionResult Feed()
+    {
+        return Ok(new
         {
-            _debugStorage = debugStorage;
-            _newsStorage = newsStorage;
-        }
-
-        // API اصلی: همه خبرهای پردازش‌شده (قبول و رد)
-        [HttpGet("feed")]
-        public IActionResult Feed([FromQuery] string? source = null, [FromQuery] bool? accepted = null)
-        {
-            var result = _debugStorage.GetRecentItems()
-                .Where(x => string.IsNullOrEmpty(source) ||
-                            x.SourceName?.Contains(source!, StringComparison.OrdinalIgnoreCase) == true)
-                .Where(x => !accepted.HasValue || x.IsAccepted == accepted.Value)
-                .OrderByDescending(x => x.ProcessedAt)
-                .Take(100)
+            // ۱. صف فعلی انتشار
+            currentQueue = _debugStorage.GetCurrentPublishQueue()
                 .Select(x => new
                 {
-                    زمان = x.ProcessedAt.ToString("HH:mm:ss"),
-                    منبع = x.SourceName ?? "نامشخص",
-                    عنوان = x.Title,
-                    لینک = x.Link,
-                    وضعیت = x.IsAccepted ? "قبول شد → صف" : "رد شد",
-                    دلیل = x.RejectReason ?? "—",
-                    تاریخ_خبر = x.PubDate.ToString("MM/dd HH:mm")
+                    sourceName = x.SourceName ?? "نامشخص",
+                    title = x.Title ?? "بدون عنوان",
+                    pubDate = x.PubDate.ToString("o"),
+                    x.PublishStatus
                 })
-                .ToList();
+                .ToList(),
 
-            return Ok(result);
-        }
-        // آمار ساده بدون نیاز به SentStorage
-        [HttpGet("stats")]
-        public IActionResult Stats()
+            // ۲. آخرین خبرهای ارسال‌شده
+            publishedItems = _debugStorage.GetPublishedItems()
+                .Select(x => new
+                {
+                    sourceName = x.SourceName ?? "نامشخص",
+                    title = x.Title ?? "بدون عنوان",
+                    publishedAt = x.PublishedAt?.ToString("o"),
+                    x.Link
+                })
+                .ToList(),
+
+            // ۳. آخرین خبرهای پردازش‌شده (قبول + رد با دلیل!)
+            recentProcessed = _debugStorage.GetAllItems()
+    .OrderByDescending(x => x.ProcessedAt)
+    .Take(40)
+    .Select(x => new
+    {
+        sourceName = x.SourceName ?? "نامشخص",
+        title = x.Title ?? "بدون عنوان",
+        link = x.Link,                    // اینو اضافه کن!
+        processedAt = x.ProcessedAt.ToString("o"),
+        isAccepted = x.IsAccepted,
+        rejectReason = x.RejectReason,
+        publishStatus = x.PublishStatus
+    })
+    .ToList()
+        });
+    }
+
+    [HttpGet("stats")]
+    public IActionResult Stats()
+    {
+        var summary = _debugStorage.GetSummary();
+        var now = DateTimeOffset.Now;
+
+        // آمار صف با جزئیات منبع
+        var queueBySource = _debugStorage.GetCurrentPublishQueue()
+            .GroupBy(x => x.SourceName ?? "نامشخص")
+            .Select(g => new { Source = g.Key, Count = g.Count() })
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.Source)
+            .ToList();
+
+        var queueDetails = queueBySource.Any()
+            ? string.Join(" | ", queueBySource.Select(x => $"{x.Source} ({x.Count})"))
+            : "خالی";
+
+        var lastHourItems = _debugStorage.GetAllItems()
+            .Where(x => x.ProcessedAt > now.AddHours(-1))
+            .ToList();
+
+        var todayAccepted = _debugStorage.GetAllItems()
+            .Count(x => x.IsAccepted && x.ProcessedAt.Date == now.Date);
+
+        var lastHourTotal = lastHourItems.Count;
+        var lastHourAccepted = lastHourItems.Count(x => x.IsAccepted);
+        var acceptanceRate = lastHourTotal > 0
+            ? Math.Round((double)lastHourAccepted * 100 / lastHourTotal)
+            : 0;
+
+        return Ok(new
         {
-            var all = _debugStorage.GetRecentItems();
-            var lastHour = DateTimeOffset.Now.AddHours(-1);
-            var today = DateTimeOffset.Now.Date;
-
-            var recent = all.Where(x => x.ProcessedAt >= lastHour).ToList();
-
-            return Ok(new
+            در_صف = summary.InQueueCount,
+            جزئیات_صف = queueDetails,  // ← جدید و خفن!
+            کل_ارسال_شده = summary.PublishedCount,
+            ساعت_اخیر = new
             {
-                زمان_سرور = DateTimeOffset.Now.ToString("yyyy/MM/dd HH:mm:ss"),
-                صف_فعلی = _newsStorage.GetCurrentPublishQueue().Count,
-
-                در_ساعت_اخیر = new
-                {
-                    کل_خبرها = recent.Count,
-                    قبول_شده = recent.Count(x => x.IsAccepted),
-                    رد_شده = recent.Count(x => !x.IsAccepted),
-                    درصد_قبولی = recent.Any()
-                        ? Math.Round(100.0 * recent.Count(x => x.IsAccepted) / recent.Count, 1)
-                        : 0
-                },
-
-                امروز = new
-                {
-                    کل_خبرها = all.Count(x => x.ProcessedAt.Date == today),
-                    قبول_شده = all.Count(x => x.ProcessedAt.Date == today && x.IsAccepted)
-                }
-            });
-        }
+                کل = lastHourTotal,
+                قبول = lastHourAccepted,
+                رد = lastHourTotal - lastHourAccepted,
+                درصد_قبولی = acceptanceRate
+            },
+            امروز = new { قبول = todayAccepted }
+        });
     }
 }

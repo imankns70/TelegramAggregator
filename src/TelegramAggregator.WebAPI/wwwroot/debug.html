@@ -2,129 +2,325 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8" />
-    <title>دیباگ زنده ربات</title>
+    <title>دیباگ زنده ربات فوتبالفوری</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
         body {
-            font-family: Tahoma;
-            background: #111;
+            font-family: Tahoma, Arial;
+            background: #000;
             color: #0f0;
             margin: 0;
-            padding: 10px;
-        }
-
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 350px;
-            gap: 15px;
-        }
-
-        .box {
-            background: #1a1a1a;
-            border: 1px solid #0f0;
-            border-radius: 10px;
-            padding: 15px;
+            padding: 12px;
+            line-height: 1.6;
         }
 
         h1 {
             color: #0f0;
             text-align: center;
+            margin: 0 0 15px;
+            font-size: 24px;
+            text-shadow: 0 0 10px #0f0;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 15px;
+        }
+
+        .box {
+            background: #111;
+            border: 1px solid #0f0;
+            border-radius: 12px;
+            padding: 16px;
+            overflow: auto;
+            box-shadow: 0 0 15px rgba(0,255,0,0.3);
+        }
+
+        h2 {
+            color: #0f0;
+            margin: 0 0 15px;
+            text-align: center;
+            font-size: 18px;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
             font-size: 13px;
+            margin: 12px 0;
         }
-
+ 
         th, td {
-            padding: 8px;
-            border-bottom: 1px solid #333;
+            padding: 9px 8px;
+            border-bottom: 1px solid #003300;
             text-align: right;
         }
 
         th {
             background: #002200;
+            color: #0f0;
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background: #001a00;
         }
 
         .ok {
             color: #0f0;
             font-weight: bold;
+            text-shadow: 0 0 8px #0f0;
         }
 
         .no {
             color: #f44;
             font-weight: bold;
+            text-shadow: 0 0 8px #f44;
+        }
+
+        .queue {
+            background: #8e44ad;
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+        }
+
+        .sent {
+            background: #27ae60;
+            color: #fff;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+        }
+
+        .rejected {
+            background: #440000;
+            color: #faa;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+        }
+
+        .reason {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 5px;
+            display: inline-block;
+            margin: 2px 0;
+        }
+
+        .reason-old {
+            background: #333;
+            color: #aaa;
+        }
+
+        .reason-trash {
+            background: #550;
+            color: #ff8;
+        }
+
+        .reason-short {
+            background: #505;
+            color: #ff8;
+        }
+
+        .reason-lineup {
+            background: #055;
+            color: #8f8;
+        }
+
+        .reason-keyword {
+            background: #500;
+            color: #f88;
+        }
+
+        .reason-video {
+            background: #303;
+            color: #8ff;
+        }
+
+        .reason-duplicate {
+            background: #530;
+            color: #ff8;
         }
 
         .stats {
-            line-height: 2;
+            font-size: 15px;
+            line-height: 2.3;
         }
 
-        a {
-            color: #88f;
-        }
+            .stats strong {
+                font-size: 25px;
+            }
 
         .refresh {
             text-align: center;
-            color: #888;
-            margin-top: 10px;
-            font-size: 12px;
+            color: #008800;
+            margin: 15px 0;
+            font-size: 13px;
         }
+
+        .loading {
+            color: #88f;
+            text-align: center;
+            padding: 30px;
+            font-size: 16px;
+        }
+
+        a.link {
+            color: #0cf;
+            text-decoration: underline;
+        }
+
+            a.link:hover {
+                color: #fff;
+                text-shadow: 0 0 8px #0cf;
+            }
     </style>
 </head>
 <body>
     <h1>دیباگ زنده ربات فوتبالفوری</h1>
+
     <div class="grid">
         <div class="box">
-            <h2>آخرین خبرها (100 تا)</h2>
-            <div id="feed">در حال بارگذاری...</div>
+            <h2>وضعیت زنده سیستم</h2>
+            <div id="main" class="loading">در حال بارگذاری...</div>
         </div>
         <div class="box stats">
             <h2>آمار لحظه‌ای</h2>
-            <div id="stats">در حال بارگذاری...</div>
-            <div class="refresh">به‌روزرسانی هر 10 ثانیه</div>
+            <div id="stats" class="loading">در حال بارگذاری...</div>
+            <div class="refresh">رفرش خودکار هر ۱۰ ثانیه</div>
         </div>
     </div>
 
     <script>
-    async function load() {
-      try {
-        const [f, s] = await Promise.all([
-          fetch('/api/debug/feed').then(r => r.json()),
-          fetch('/api/debug/stats').then(r => r.json())
-        ]);
+        const e = t => t ? String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : '';
+        const time = iso => iso ? new Date(iso).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) : '—';
 
-        document.getElementById('feed').innerHTML = `
-          <table>
-            <tr><th>زمان</th><th>منبع</th><th>عنوان</th><th>وضعیت</th><th>دلیل</th></tr>
-            ${f.map(x => `
-              <tr>
-                <td>${x.زمان}</td>
-                <td>${x.منبع}</td>
-                <td style="max-width:280px; overflow:hidden; white-space:nowrap;">
-                  <a href="${x.لینک}" target="_blank">${x.عنوان}</a>
-                </td>
-                <td class="${x.وضعیت.includes('قبول')?'ok':'no'}">${x.وضعیت}</td>
-                <td>${x.دلیل}</td>
-              </tr>
-            `).join('')}
-          </table>
-        `;
+        function getReasonBadge(reason) {
+            if (!reason) return '<span class="reason" style="background:#006600;color:#0f0;">قبول شد</span>';
+            reason = reason.trim();
+            let cls = 'reason';
+            if (reason.includes('قدیمی')) cls += ' reason-old';
+            else if (reason.includes('گل') || reason.includes('کرنر') || reason.includes('آفساید')) cls += ' reason-trash';
+            else if (reason.includes('کوتاه')) cls += ' reason-short';
+            else if (reason.includes('ترکیب') || reason.includes('پیش‌بازی')) cls += ' reason-lineup';
+            else if (reason.includes('کلمه کلیدی')) cls += ' reason-keyword';
+            else if (reason.includes('ویدیو')) cls += ' reason-video';
+            else if (reason.includes('تکراری') || reason.includes('شبیه')) cls += ' reason-duplicate';
+            else cls += ' reason-old';
+            return `<span class="${cls}">${e(reason)}</span>`;
+        }
 
-        document.getElementById('stats').innerHTML = `
-          <div>صف فعلی: <strong>${s.صف_فعلی}</strong> خبر</div>
-          <div>ساعت اخیر: ${s.در_ساعت_اخیر.کل_خبرها} خبر →
-            <span class="ok">${s.در_ساعت_اخیر.قبول_شده} قبول</span> |
-            <span class="no">${s.در_ساعت_اخیر.رد_شده} رد</span>
-          </div>
-          <div>درصد قبولی: <strong>${s.در_ساعت_اخیر.درصد_قبولی}%</strong></div>
-          <hr>
-          <div>امروز: ${s.امروز.قبول_شده} خبر قبول شده</div>
-        `;
-      } catch (e) { console.error(e); }
-    }
-    load();
-    setInterval(load, 10000);
+        async function load() {
+            try {
+                const [feedRes, statsRes] = await Promise.all([
+                    fetch('/api/debug/feed'),
+                    fetch('/api/debug/stats')
+                ]);
+
+                if (!feedRes.ok || !statsRes.ok) throw 'خطا';
+
+                const data = await feedRes.json();
+                const stats = await statsRes.json();
+
+                let html = '';
+
+                // 1. صف فعلی
+                if (data.currentQueue?.length > 0) {
+                    html += `<h2>صف فعلی انتشار (${data.currentQueue.length} خبر)</h2>
+<table><tr><th>منبع</th><th>عنوان</th><th>زمان خبر</th></tr>`;
+                    data.currentQueue.forEach(item => {
+                        html += `<tr style="background:#001a00;">
+                                <td><strong>${e(item.sourceName)}</strong></td>
+                                <td>${e((item.title || '').substring(0, 90))}</td>
+                                <td>${time(item.pubDate)}</td>
+                            </tr>`;
+                    });
+                    html += `</table>`;
+                }
+
+                // 2. آخرین ارسال‌شده‌ها
+                if (data.publishedItems?.length > 0) {
+                    html += `<h2>آخرین خبرهای ارسال‌شده (${data.publishedItems.length} تا)</h2>
+<table><tr><th>منبع</th><th>عنوان</th><th>لینک</th><th>زمان ارسال</th></tr>`;
+                    data.publishedItems.forEach(item => {
+                        const linkHtml = item.link ? `<a href="${e(item.link)}" target="_blank" class="link">باز کردن</a>` : '—';
+                        html += `<tr style="background:#001a00;">
+                                <td><strong>${e(item.sourceName)}</strong></td>
+                                <td>${e((item.title || '').substring(0, 90))}</td>
+                                <td>${linkHtml}</td>
+                                <td>${time(item.publishedAt)}</td>
+                            </tr>`;
+                    });
+                    html += `</table>`;
+                }
+
+                // 3. آخرین پردازش‌شده‌ها با دلیل دقیق رد شدن!
+                html += `<h2>آخرین خبرهای پردازش‌شده (قبول و رد)</h2>
+<table>
+<tr>
+        <th>وضعیت</th>
+        <th>منبع</th>
+        <th>عنوان</th>
+        <th>لینک</th>
+        <th>دلیل دقیق رد شدن</th>
+        <th>زمان</th>
+</tr>`;
+
+                if (data.recentProcessed?.length > 0) {
+                    data.recentProcessed.forEach(item => {
+                        let statusHtml = '';
+                        if (item.publishStatus === "ارسال شد") {
+                            statusHtml = '<span class="sent">ارسال شد</span>';
+                        } else if (item.isAccepted) {
+                            statusHtml = '<span class="queue">در صف</span>';
+                        } else {
+                            statusHtml = '<span class="rejected">رد شد</span>';
+                        }
+
+                        const reasonBadge = getReasonBadge(item.rejectReason);
+                        const linkHtml = item.link ? `<a href="${e(item.link)}" target="_blank" class="link">باز کردن</a>` : '—';
+
+                        html += `<tr style="background:${item.isAccepted ? '#001a00' : '#1a0000'};">
+                                <td>${statusHtml}</td>
+                                <td><strong>${e(item.sourceName)}</strong></td>
+                                <td>${e((item.title || '').substring(0, 65))}</td>
+                                <td>${linkHtml}</td>
+                                <td>${reasonBadge}</td>
+                                <td>${time(item.processedAt)}</td>
+                            </tr>`;
+                    });
+                } else {
+                    html += '<tr><td colspan="6" style="text-align:center;color:#666;">هیچ خبری پردازش نشده</td></tr>';
+                }
+                html += `</table>`;
+
+                document.getElementById('main').innerHTML = html;
+
+                // آمار
+                document.getElementById('stats').innerHTML = `
+                        <div>صف فعلی: <strong class="ok">${stats.در_صف || 0}</strong> خبر</div>
+                        <div>ساعت اخیر: <strong>${stats.ساعت_اخیر?.کل || 0}</strong> خبر →
+                            <span class="ok">${stats.ساعت_اخیر?.قبول || 0}</span> قبول |
+                            <span class="no">${stats.ساعت_اخیر?.رد || 0}</span> رد
+                        </div>
+                        <div>درصد قبولی: <strong class="ok">${stats.ساعت_اخیر?.درصد_قبولی || 0}%</strong></div>
+                        <hr style="border-color:#003300;">
+                        <div>امروز: <strong class="ok">${stats.امروز?.قبول || 0}</strong> خبر قبول شده</div>
+                        <div>کل ارسال‌شده: <strong class="ok">${stats.کل_ارسال_شده || 0}</strong></div>
+                    `;
+
+            } catch (err) {
+                document.getElementById('main').innerHTML = '<p style="color:#f44;text-align:center;">خطا در دریافت داده</p>';
+                console.error(err);
+            }
+        }
+
+        load();
+        setInterval(load, 10000);
     </script>
 </body>
 </html>
