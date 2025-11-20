@@ -230,7 +230,7 @@ namespace TelegramAggregator.WebAPI.Services
                         {
 
 
-                            await SendToTelegramAsync(item, channel, ct);
+                            //await SendToTelegramAsync(item, channel, ct);
                             _newsStorage.UpdateLastPublished(item.SourceName!, DateTimeOffset.Now);
                             _newsStorage.MarkAsProcessed(itemKey);
 
@@ -248,7 +248,7 @@ namespace TelegramAggregator.WebAPI.Services
                             });
 
                             //var delay = TimeSpan.FromMinutes(_random.Next(2, 17));
-                            var delay = TimeSpan.FromMinutes(2);
+                            var delay = TimeSpan.FromMinutes(1);
                             await Task.Delay(delay, ct);
                             break;
                         }
@@ -288,15 +288,16 @@ namespace TelegramAggregator.WebAPI.Services
             var finalCaption = MessageTemplateFormatter.SmartTruncate(caption, 1015); // یا 1020
             // دکمه «مشاهده خبر کامل»
             var replyMarkup = MessageTemplateFormatter.GetFullNewsButton(item.Link);
+            //var (caption, keyboard) = MessageTemplateFormatter.GetFinalMessage(item);
 
             Telegram.Bot.Types.Message sentMessage;
 
             if (!string.IsNullOrEmpty(item.VideoUrl))
-                sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl, caption: finalCaption, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
+                sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl, caption: caption, parseMode: ParseMode.Html, replyMarkup: keyboard);
             else if (!string.IsNullOrEmpty(item.ImageUrl))
-                sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl, caption: finalCaption, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
+                sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl, caption: caption, parseMode: ParseMode.Html, replyMarkup: keyboard);
             else
-                sentMessage = await _bot.SendMessage(_hiddenGroupId, finalCaption, parseMode: ParseMode.Html, replyMarkup: replyMarkup);
+                sentMessage = await _bot.SendMessage(_hiddenGroupId, caption, parseMode: ParseMode.Html, replyMarkup: caption);
 
             await _bot.CopyMessage(channelConfig.ChannelId, _hiddenGroupId, sentMessage.MessageId);
             await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);

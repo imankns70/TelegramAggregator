@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using TelegramAggregator.WebAPI.Infrastructure;
+namespace TelegramAggregator.WebAPI.Controllers;
 
 [ApiController]
 [Route("api/debug")]
@@ -100,6 +101,19 @@ public class DebugApiController : ControllerBase
                 درصد_قبولی = acceptanceRate
             },
             امروز = new { قبول = todayAccepted }
+        });
+    }
+    [HttpGet("latest-preview")]
+    public IActionResult GetLatestPreview()
+    {
+        var latest = DebugService.GetRecent().FirstOrDefault();
+        if (latest == null) return NotFound();
+
+        return Ok(new
+        {
+            title = latest.Title,
+            previewHtml = latest.PreviewHtml,
+            link = latest.Link
         });
     }
 }

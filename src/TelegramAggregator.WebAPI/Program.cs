@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using Telegram.Bot;
 using TelegramAggregator.Infrastructure;
+using TelegramAggregator.Services;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Services;
@@ -100,6 +101,10 @@ builder.Services.AddSingleton<ITelegramBotClient>(sp =>
                  ?? throw new InvalidOperationException("BotToken تنظیم نشده است!");
     return new TelegramBotClient(token);
 });
+
+//builder.Services.AddHostedService<TelegramUpdateService>(); // این خط طلاییه!
+
+ 
 
 // سرویس اصلی + سرویس پس‌زمینه
 builder.Services.AddScoped<FootballforiService>();
