@@ -9,20 +9,25 @@ namespace TelegramAggregator.WebAPI.Infrastructure;
 /// </summary>
 public class HttpHelper : IHttpHelper
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<HttpHelper> _logger;
 
     public HttpHelper(IHttpClientFactory factory, ILogger<HttpHelper> logger)
     {
         _logger = logger;
-        _httpClient = factory.CreateClient("RssHttpClient");
+        _httpClientFactory = factory;
     }
 
     public async Task<string?> GetStringAsync(string url, CancellationToken ct = default)
     {
         try
         {
-            var response = await _httpClient.GetAsync(url, ct);
+            // این خط مهمه! از کلاینت تنظیم‌شده استفاده کن
+            var client = _httpClientFactory.CreateClient("RssHttpClient");
+
+            var requestUrl = $"{url}?_={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+            var response = await client.GetAsync(requestUrl, ct);
+
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("درخواست ناموفق ({StatusCode}) برای URL: {Url}", response.StatusCode, url);
@@ -40,18 +45,7 @@ public class HttpHelper : IHttpHelper
         }
     }
 
-    public async Task<bool> CheckAvailabilityAsync(string url)
-    {
-        try
-        {
-            var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
-            return response.IsSuccessStatusCode;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+ 
 
     private static Encoding? DetectEncoding(HttpContentHeaders headers)
     {

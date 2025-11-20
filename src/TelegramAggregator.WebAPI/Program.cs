@@ -65,13 +65,6 @@ builder.Services.AddSingleton<LineupFilter>(sp =>
     return new LineupFilter(keywords);
 });
 
-// HttpClient ها
-builder.Services.AddHttpClient<HttpHelper>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-    client.DefaultRequestHeaders.Add("User-Agent", "FootballforiBot/1.0");
-});
-
 builder.Services.AddHttpClient("HtmlExtractor", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
@@ -80,13 +73,17 @@ builder.Services.AddHttpClient("HtmlExtractor", client =>
 
 builder.Services.AddHttpClient("RssHttpClient", client =>
 {
-    client.Timeout = TimeSpan.FromSeconds(15);
+    client.Timeout = TimeSpan.FromSeconds(30);
+
+    // فقط این یه خط کافیه — بقیه رو می‌تونی کامنت کنی
     client.DefaultRequestHeaders.UserAgent.ParseAdd(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
-}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+})
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
 {
     AutomaticDecompression = DecompressionMethods.All,
-    AllowAutoRedirect = true
+    AllowAutoRedirect = true,
+    UseCookies = false
 });
 
 // سرویس‌های Scoped

@@ -187,11 +187,13 @@ namespace TelegramAggregator.WebAPI.Services
                 acceptedItems.Add(item);
             }
 
-            // مرحله ۳: ۱۰ خبر برتر رو به صف بفرست
-            var finalItems = acceptedItems
-                .OrderByDescending(i => i.PubDate)
-                .Take(10)
-                .ToList();
+            var finalItems = NewsBalancer.BalanceNews(
+                items: acceptedItems,
+                totalNeeded: 10,
+                minPerSource: 2,
+                maxPerSource: 5,
+                logger: _logger 
+                );
 
             foreach (var item in finalItems)
             {
@@ -282,13 +284,13 @@ namespace TelegramAggregator.WebAPI.Services
             item.FullDescription = await fullDescTask;
 
             // ساخت کپشن نهایی با فوتر
-            var caption = MessageTemplateFormatter.GetFullCaption(item, addFooter: true);
+            // var caption = MessageTemplateFormatter.GetFullCaption(item, addFooter: true);
 
             // کوتاه کردن هوشمند فقط اگر خیلی طولانی شد (تلگرام حداکثر 1024 کاراکتر اجازه می‌ده)
-            var finalCaption = MessageTemplateFormatter.SmartTruncate(caption, 1015); // یا 1020
+            //var finalCaption = MessageTemplateFormatter.SmartTruncate(caption, 1015); // یا 1020
             // دکمه «مشاهده خبر کامل»
             var replyMarkup = MessageTemplateFormatter.GetFullNewsButton(item.Link);
-            //var (caption, keyboard) = MessageTemplateFormatter.GetFinalMessage(item);
+            var (caption, keyboard) = MessageTemplateFormatter.GetFinalMessage(item);
 
             Telegram.Bot.Types.Message sentMessage;
 
