@@ -1,12 +1,12 @@
-﻿// فایل: Services/TelegramUpdateService.cs
+﻿// Services/TelegramUpdateService.cs
+using System.Collections.Concurrent;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Extensions.Polling;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.Enums;    // این حتماً باشه!
 using Telegram.Bot.Types.ReplyMarkups;
-using TelegramAggregator.WebAPI.Infrastructure;
-using static TelegramAggregator.WebAPI.Infrastructure.DebugService;
+using TelegramAggregator.WebAPI.Models;
 
 namespace TelegramAggregator.Services
 {
@@ -14,104 +14,103 @@ namespace TelegramAggregator.Services
     {
         private readonly ITelegramBotClient _botClient;
         private readonly ILogger<TelegramUpdateService> _logger;
-        private readonly IServiceProvider _services;
 
-        public TelegramUpdateService(ITelegramBotClient botClient, ILogger<TelegramUpdateService> logger, IServiceProvider services)
+        // ذخیره موقت خبر + عکس (برای کلیک بعدی)
+        private static readonly ConcurrentDictionary<string, ExpandData> ExpandStorage = new();
+
+        private record ExpandData(NewsItem Item, InputFileUrl Photo, DateTime ExpireAt);
+
+        public TelegramUpdateService(ITelegramBotClient botClient, ILogger<TelegramUpdateService> logger)
         {
             _botClient = botClient;
             _logger = logger;
-            _services = services;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var receiverOptions = new ReceiverOptions()
-            {
-                AllowedUpdates = new[] { UpdateType.CallbackQuery, UpdateType.Message } // فقط این دو تا رو گوش بده
-            };
-
             _botClient.StartReceiving(
                 HandleUpdateAsync,
                 HandleErrorAsync,
-                receiverOptions,
+                new ReceiverOptions { AllowedUpdates = new[] { UpdateType.CallbackQuery } },
                 stoppingToken);
 
-            _logger.LogInformation("ربات شروع به دریافت آپدیت کرد...");
-            await Task.Delay(Timeout.Infinite, stoppingToken); // تا ابد زنده بمونه
+            _logger.LogInformation("TelegramUpdateService فعال شد — فقط کلیک روی دکمه");
+
+            // پاک‌سازی خودکار هر ۶ ساعت
+            _ = Task.Run(async () =>
+            {
+                while (!stoppingToken.IsCancellationRequested)
+                {
+                    var now = DateTime.UtcNow;
+                    foreach (var kvp in ExpandStorage)
+                    {
+                        if (kvp.Value.ExpireAt < now)
+                            ExpandStorage.TryRemove(kvp.Key, out _);
+                    }
+                    await Task.Delay(TimeSpan.FromHours(6), stoppingToken);
+                }
+            }, stoppingToken);
+
+            await Task.Delay(Timeout.Infinite, stoppingToken);
         }
 
-        // اینجا همه پیام‌ها و کلیک‌ها میان
         private async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken ct)
         {
-            // فقط به کلیک روی دکمه‌ها (CallbackQuery) واکنش نشون بده
-            if (update.Type == UpdateType.CallbackQuery && update.CallbackQuery?.Data != null)
-            {
-                await HandleCallbackQuery(botClient, update.CallbackQuery, ct);
-            }
+            if (update.CallbackQuery?.Data?.StartsWith("exp_") == true)
+                await HandleExpand(botClient, update.CallbackQuery!, ct);
         }
 
-        // خطاها رو بگیر که ربات هنگ نکنه
-        private Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception, CancellationToken ct)
+        private Task HandleErrorAsync(ITelegramBotClient botClient, Exception ex, CancellationToken ct)
         {
-            var errorMessage = exception switch
-            {
-                ApiRequestException apiEx => $"خطای تلگرام: {apiEx.ErrorCode} - {apiEx.Message}",
-                _ => exception.ToString()
-            };
-            _logger.LogError(exception, errorMessage);
+            _logger.LogError(ex, "خطا در دریافت آپدیت تلگرام");
             return Task.CompletedTask;
         }
 
-        // قلب تپنده! اینجا کلیک روی "نمایش ادامه خبر" رو هندل می‌کنیم
-        private async Task HandleCallbackQuery(ITelegramBotClient botClient, CallbackQuery callback, CancellationToken ct)
+        private async Task HandleExpand(ITelegramBotClient bot, CallbackQuery cb, CancellationToken ct)
         {
-            var data = callback.Data!;
+            var callbackId = cb.Data!;
+            var message = cb.Message!;
 
             try
             {
-                if (data.StartsWith("expand_"))
+                if (!ExpandStorage.TryRemove(callbackId, out var data))
                 {
-                    // استخراج هش از دیتا
-                    var hashString = data["expand_".Length..];
-                    if (!int.TryParse(hashString, out int hash)) return;
-
-                    // پیدا کردن خبر از DebugService (آخرین ۱۵۰ تا رو داره)
-                    var debugItem = DebugService.GetRecent()
-                        .FirstOrDefault(x => Math.Abs(x.Link.GetHashCode()) == hash);
-
-                    if (debugItem == null)
-                    {
-                        await botClient.AnswerCallbackQuery(callback.Id, "خبر یافت نشد یا منقضی شده", true, cancellationToken: ct);
-                        return;
-                    }
-                    var newsItem = debugItem.ToNewsItem();
-                    // متن کامل + فوتر
-                    var fullCaption = MessageTemplateFormatter.GetFullCaption(newsItem);
-
-                    // دکمه جدید
-                    var keyboard = new InlineKeyboardMarkup(new[]
-                    {
-                        new[] { InlineKeyboardButton.WithCallbackData("بستن متن کامل", "collapse") },
-                        new[] { InlineKeyboardButton.WithUrl("مشاهده خبر کامل", newsItem.Link!) }
-                    });
-
-                    // ویرایش همون پیام
-                    await botClient.EditMessageCaption(
-                        chatId: callback.Message!.Chat.Id,
-                        messageId: callback.Message.MessageId,
-                        caption: fullCaption,
-                        replyMarkup: keyboard,
-                        cancellationToken: ct);
-
-                    // یه تیک کوچیک نشون بده
-                  await  botClient.AnswerCallbackQuery(callback.Id, cancellationToken: ct);
+                    await bot.AnswerCallbackQuery(cb.Id, "خبر منقضی شده یا قبلاً باز شده", true);
+                    return;
                 }
+
+                var (item, photo, _) = data;
+
+                // استفاده از متد جدید با HTML و دکمه کو چیک کن
+                var (fullCaption, keyboard) = MessageTemplateFormatter.GetFinalMessage(item);
+
+                await bot.EditMessageMedia(
+                    chatId: message.Chat.Id,
+                    messageId: message.MessageId,
+                    media: new InputMediaPhoto(photo)
+                    {
+                        Caption = fullCaption,
+                        ParseMode = ParseMode.Html           // HTML فعال
+                    },
+                    replyMarkup: keyboard,                   // دکمه کو چیک کن از Formatter میاد
+                    cancellationToken: ct
+                );
+
+                await bot.AnswerCallbackQuery(cb.Id, cancellationToken: ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "خطا در هندل کردن Collapse");
-               await botClient.AnswerCallbackQuery(callback.Id, "خطایی رخ داد", true, cancellationToken: ct);
+                _logger.LogError(ex, "خطا در باز کردن خبر کامل - CallbackId: {CallbackId}", callbackId);
+                await bot.AnswerCallbackQuery(cb.Id, "خطایی رخ داد", true);
             }
+        }
+
+        // متد استاتیک برای ذخیره خبر موقع ارسال اولیه
+        public static string StoreForExpand(NewsItem item, InputFileUrl photo)
+        {
+            var callbackId = $"exp_{Math.Abs(item.Link.GetHashCode()):X8}";
+            ExpandStorage[callbackId] = new ExpandData(item, photo, DateTime.UtcNow.AddHours(24));
+            return callbackId;
         }
     }
 }

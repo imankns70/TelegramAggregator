@@ -15,8 +15,12 @@ namespace TelegramAggregator.Infrastructure
 
         public async Task<bool> HasVideoAsync(string url, CancellationToken ct = default)
         {
-            // الان غیرفعاله — فقط برای دیباگ
-            return false;
+            try
+            {
+                var html = await _httpClient.GetStringAsync(url, ct);
+                return html.Contains("video") || html.Contains("mp4") || html.Contains("aparat.com");
+            }
+            catch { return false; }
         }
 
         public async Task<string> GetFullDescriptionAsync(string url, CancellationToken ct = default)
@@ -33,11 +37,12 @@ namespace TelegramAggregator.Infrastructure
 
                 CleanNode(contentNode);
 
-                var rawText = contentNode.InnerText;
-                var cleanText = NormalizeText(rawText);
-                cleanText = ApplySiteSpecificCleanup(cleanText, url);
+                var text = HtmlEntity.DeEntitize(contentNode.InnerText);
+                text = Regex.Replace(text, @"\s{3,}", " ");
+                text = Regex.Replace(text, @"[\u200B-\u200F\uFEFF]", "");
+                text = ApplySiteSpecificCleanup(text, url);
 
-                return cleanText.Length > 80 ? cleanText.Trim() : "متن خبر کوتاه است.";
+                return text.Length > 80 ? text.Trim() : "متن خبر کوتاه است.";
             }
             catch (Exception ex)
             {
@@ -53,42 +58,94 @@ namespace TelegramAggregator.Infrastructure
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
-                var og = doc.DocumentNode.SelectSingleNode("//meta[@property='og:image']")?.GetAttributeValue("content", null);
-                if (!string.IsNullOrWhiteSpace(og) && IsValidMainImage(og))
-                    return NormalizeUrl(url, og.Trim());
+                var host = new Uri(url).Host.ToLowerInvariant();
+                var candidates = new List<ImageCandidate>();
 
-                var twitter = doc.DocumentNode.SelectSingleNode("//meta[@name='twitter:image']")?.GetAttributeValue("content", null);
-                if (!string.IsNullOrWhiteSpace(twitter) && IsValidMainImage(twitter))
-                    return NormalizeUrl(url, twitter.Trim());
+                // 1. og:image و twitter:image — اولویت اول
+                var og = doc.DocumentNode.SelectSingleNode("//meta[@property='og:image' or @name='og:image']")
+                           ?.GetAttributeValue("content", null);
+                if (TryAddImage(og, url, 10000, candidates)) return candidates.First().Url;
 
-                var imgs = doc.DocumentNode.SelectNodes("//article//img | //div[contains(@class,'content')]//img | //figure//img");
-                if (imgs != null)
+                var twitter = doc.DocumentNode.SelectSingleNode("//meta[@name='twitter:image' or @property='twitter:image']")
+                                 ?.GetAttributeValue("content", null);
+                if (TryAddImage(twitter, url, 9000, candidates)) return candidates.First().Url;
+
+                // 2. عکس‌های داخل محتوا
+                var imgNodes = doc.DocumentNode.SelectNodes(
+                    "//article//img | //figure//img | //div[contains(@class,'news')]//img | " +
+                    "//div[contains(@class,'content')]//img | //img[contains(@class,'main') or contains(@class,'lead')]"
+                );
+
+                if (imgNodes != null)
                 {
-                    foreach (var img in imgs)
+                    foreach (var img in imgNodes)
                     {
                         var src = img.GetAttributeValue("src", "") ??
                                   img.GetAttributeValue("data-src", "") ??
+                                  img.GetAttributeValue("data-lazy-src", "") ??
                                   img.GetAttributeValue("data-original", "") ??
-                                  img.GetAttributeValue("data-lazy-src", "");
+                                  img.GetAttributeValue("srcset", "").Split(' ', ',')[0];
 
-                        if (!string.IsNullOrWhiteSpace(src) && IsValidMainImage(src))
-                            return NormalizeUrl(url, src.Trim());
+                        if (string.IsNullOrWhiteSpace(src)) continue;
+
+                        var fullUrl = NormalizeUrl(url, src.Trim());
+                        if (!IsValidMainImage(fullUrl)) continue;
+
+                        var score = CalculateImageScore(fullUrl, img, host);
+                        candidates.Add(new ImageCandidate(fullUrl, score));
                     }
                 }
-            }
-            catch { /* ignore */ }
 
-            return null;
+                return candidates.OrderByDescending(c => c.Score).FirstOrDefault()?.Url;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private record ImageCandidate(string Url, int Score);
+
+        private bool TryAddImage(string? url, string baseUrl, int score, List<ImageCandidate> list)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return false;
+            var normalized = NormalizeUrl(baseUrl, url.Trim());
+            if (!IsValidMainImage(normalized)) return false;
+            list.Add(new ImageCandidate(normalized, score));
+            return true;
+        }
+
+        private int CalculateImageScore(string url, HtmlNode img, string host)
+        {
+            int score = 100;
+            var lower = url.ToLowerInvariant();
+
+            var sizeMatch = Regex.Match(lower, @"(\d{3,})x(\d{3,})");
+            if (sizeMatch.Success && int.TryParse(sizeMatch.Groups[1].Value, out var w))
+                score += w * 2;
+
+            if (lower.Contains("main") || lower.Contains("lead") || lower.Contains("hero") || lower.Contains("large")) score += 800;
+            if (lower.Contains("inline") && host.Contains("varzesh3")) score += 2000;
+            if (lower.Contains("upload") && (host.Contains("tarafdari") || host.Contains("90tv"))) score += 1500;
+
+            var classAttr = (img.GetAttributeValue("class", "") + img.GetAttributeValue("id", "")).ToLowerInvariant();
+            if (classAttr.Contains("main") || classAttr.Contains("lead") || classAttr.Contains("photo")) score += 1000;
+
+            var bad = new[] { "logo", "avatar", "icon", "thumb", "small", "advert", "banner" };
+            if (bad.Any(b => lower.Contains(b))) score -= 5000;
+
+            return Math.Max(score, 0);
         }
 
         private HtmlNode? SelectContentNode(HtmlDocument doc, string host)
         {
             var selectors = new[]
             {
-                "//article", "//div[@itemprop='articleBody']", "//div[contains(@class,'news-body')]",
-                "//div[contains(@class,'story-body')]", "//div[contains(@class,'node-content')]",
-                "//div[contains(@class,'field--name-body')]", "//div[contains(@class,'content')]",
-                "//div[contains(@class,'text')]", "//div[contains(@class,'item-body')]"
+                "//article",
+                "//div[@itemprop='articleBody']",
+                "//div[contains(@class,'news-body') or contains(@class,'story-body')]",
+                "//div[contains(@class,'content') or contains(@class,'text') or contains(@class,'body')]",
+                "//div[contains(@class,'item-body')]"
             };
 
             foreach (var sel in selectors)
@@ -98,57 +155,25 @@ namespace TelegramAggregator.Infrastructure
                     return node;
             }
 
-            var candidates = doc.DocumentNode.SelectNodes("//div | //section | //main");
-            if (candidates != null)
-            {
-                return candidates
-                    .Where(n => n.InnerText.Length > 300)
-                    .OrderByDescending(n => n.InnerText.Length)
-                    .FirstOrDefault();
-            }
-
-            return doc.DocumentNode.SelectSingleNode("//body");
+            // درست و بدون خطا
+            return doc.DocumentNode.SelectNodes("//div | //section | //main | //article")
+                ?.Where(n => !string.IsNullOrWhiteSpace(n.InnerText))
+                ?.Where(n => n.InnerText.Length > 300)
+                ?.OrderByDescending(n => n.InnerText.Length)
+                ?.ThenByDescending(n => n.XPath.Contains("article") ? 1 : 0)
+                ?.FirstOrDefault()
+                ?? doc.DocumentNode.SelectSingleNode("//body");
         }
 
         private void CleanNode(HtmlNode node)
         {
             if (node == null) return;
-
-            var junk = new[]
-            {
-                "//script", "//style", "//iframe", "//noscript",
-                "//div[contains(@class,'ad')]", "//div[contains(@class,'advert')]",
-                "//div[contains(@class,'share')]", "//div[contains(@class,'social')]",
-                "//aside", "//footer", "//header", "//nav"
-            };
-
+            var junk = new[] { "//script", "//style", "//iframe", "//noscript", "//div[contains(@class,'ad')]", "//aside", "//footer", "//nav" };
             foreach (var sel in junk)
             {
                 foreach (var n in node.SelectNodes(sel) ?? Enumerable.Empty<HtmlNode>())
                     n.Remove();
             }
-        }
-
-        private string NormalizeText(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-
-            text = HtmlEntity.DeEntitize(text);
-            text = Regex.Replace(text, @"[\u200B-\u200F\uFEFF]", "");
-            text = Regex.Replace(text, @"\s{3,}", " ");
-            text = Regex.Replace(text, @"^[\|\->•★✔✨]\s*", "", RegexOptions.Multiline);
-
-            var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(l => l.Trim())
-                .Where(l => l.Length > 25
-                    && !Regex.IsMatch(l, @"^\w+\s+\w+\s+\d{1,2}\/\d{1,2}\/\d{4}")   // مهدی همدانی 11/18/2025
-                    && !Regex.IsMatch(l, @"^\d{1,2}:\d{2}")                          // 20:13
-                    && !l.Contains("مشاهده") && !l.Contains("دیدگاه") && !l.Contains("نظرات")
-                    && !l.Contains("کد خبر") && !l.Contains("ورود") && !l.Contains("دانلود اپ")
-                    && !l.Contains("منبع") && !l.Contains("طرفداری") && !l.Contains("ورزش۳"))
-                .Take(40);
-
-            return string.Join("\n\n", lines).Trim();
         }
 
         private string ApplySiteSpecificCleanup(string text, string url)
@@ -157,48 +182,66 @@ namespace TelegramAggregator.Infrastructure
 
             var host = new Uri(url).Host.ToLowerInvariant();
 
-            // فقط برای طرفداری — روش خط به خط و کاملاً ایمن
+            // ۱. طرفداری — قبلاً داشتیم، بهترش کردیم
             if (host.Contains("tarafdari.com"))
             {
-                var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                                .Select(l => l.Trim())
-                                .Where(l => l.Length > 0)
-                                .ToList();
+                text = string.Join("\n\n", text.Split('\n')
+                    .Select(l => l.Trim())
+                    .Where(l => !Regex.IsMatch(l, @"(مشاهده|دیدگاه|\d{1,2}/\d{1,2}/\d{4}|ترجمه|داغ‌ترین‌ها|منبع:.*?(دیلی|آس|گاردین|میل|بی‌بی‌سی)|تصاویری از|ویدئویی از)", RegexOptions.IgnoreCase))
+                    .Where(l => l.Length > 20)
+                );
+            }
+            // ۲. ورزش سه — قبلاً داشتیم، بهترش کردیم
+            else if (host.Contains("varzesh3.com"))
+            {
+                text = Regex.Replace(text, @"(کد خبر.*|ورود\s*\|\s*ثبت نام|باشگاه خبرنگاران|برای ادامه مطلب.*|ورزش سه -.*)", "", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            }
+            // ۳. خبرورزشی — جدید و ۱۰۰٪ تمیز!
+            else if (host.Contains("khabarvarzeshi.com") || host.Contains("khabarvarzeshi.ir"))
+            {
+                var lines = text.Split('\n')
+                    .Select(l => l.Trim())
+                    .Where(l => l.Length > 0)
+                    .ToList();
 
                 var cleaned = new List<string>();
 
                 foreach (var line in lines)
                 {
+                    // حذف خطوط کاملاً مزاحم خبرورزشی
                     bool isTrash = false;
 
-                    // ۱. خط نویسنده + تاریخ + مشاهده/دیدگاه (همیشه وجود داره!)
-                    if (Regex.IsMatch(line, @"\d{1,2}/\d{1,2}/\d{4}") &&
-                        (line.Contains("مشاهده") || line.Contains("دیدگاه") || line.Contains("نظرات")))
+                    // ۱. خط نویسنده + تاریخ + مشاهده + دیدگاه
+                    if (Regex.IsMatch(line, @"\d{1,2}\/\d{1,2}\/\d{4}") ||
+                        line.Contains("مشاهده") ||
+                        line.Contains("دیدگاه") ||
+                        line.Contains("نظرات") ||
+                        line.Contains("بازدید"))
                         isTrash = true;
 
-                    // ۲. خط مترجم/ترجمه (هر اسمی باشه می‌گیره!)
-                    else if (Regex.IsMatch(line, @"^(ترجمه|ترجمه شده|مترجم|نویسنده)[:：]?\s", RegexOptions.IgnoreCase))
+                    // ۲. خطوط معروف تبلیغاتی خبرورزشی
+                    else if (line.Contains("دانلود اپلیکیشن") ||
+                             line.Contains("ورود به سایت") ||
+                             line.Contains("صفحه اصلی") ||
+                             line.Contains("خبر بعدی") ||
+                             line.Contains("خبر قبلی") ||
+                             line.Contains("اخبار پیشنهادی") ||
+                             line.Contains("پرطرفدارترین اخبار") ||
+                             line.Contains("آخرین اخبار") ||
+                             line.Contains("تبلیغات"))
                         isTrash = true;
 
-                    // ۳. تبلیغات معروف طرفداری
-                    else if (line.Contains("داغترینها") ||
-                             line.Contains("داغ‌ترین‌ها") ||
-                             Regex.IsMatch(line, @"[↓👇]{2,}"))
-                        isTrash = true;
-
-                    // ۴. منبع خارجی + دیلی میل + آس + گاردین + تصاویری از
-                    else if (line.StartsWith("دیلی میل", StringComparison.OrdinalIgnoreCase) ||
-                             line.StartsWith("آس", StringComparison.OrdinalIgnoreCase) ||
-                             line.StartsWith("گاردین", StringComparison.OrdinalIgnoreCase) ||
-                             line.Contains("تصاویری از") ||
-                             line.Contains("ویدئویی از") ||
-                             (line.Contains("منبع:") && !Regex.IsMatch(line, @"منبع:\s*طرفداری", RegexOptions.IgnoreCase)))
-                        isTrash = true;
-
-                    // ۵. ساعت تنها یا خطوط خیلی کوتاه/فقط ایموجی
-                    else if (line.Length < 18 ||
+                    // ۳. خطوط خیلی کوتاه یا فقط عدد/ساعت
+                    else if (line.Length < 25 ||
                              Regex.IsMatch(line, @"^\d{1,2}:\d{2}$") ||
-                             Regex.IsMatch(line, @"^[\W_]+$"))
+                             Regex.IsMatch(line, @"^[\d\.\-\s]+$"))
+                        isTrash = true;
+
+                    // ۴. منبع خارجی یا مترجم
+                    else if (line.Contains("منبع:") && !line.Contains("خبرورزشی") ||
+                             line.Contains("مترجم") ||
+                             line.Contains("ترجمه") ||
+                             line.Contains("گردآوری"))
                         isTrash = true;
 
                     if (!isTrash)
@@ -207,25 +250,17 @@ namespace TelegramAggregator.Infrastructure
 
                 text = string.Join("\n\n", cleaned);
             }
-            // سایت‌های دیگر
-            else if (host.Contains("varzesh3.com"))
-            {
-                text = Regex.Replace(text, @"کد خبر.*|ورود\s*\|\s*ثبت نام.*|برای مشاهده.*|باشگاه خبرنگاران.*", "", RegexOptions.IgnoreCase);
-            }
-            else if (host.Contains("khabarvarzeshi.com"))
-            {
-                text = Regex.Replace(text, @"خبر[:：]\s*\d+.*?دقیقه|صفحه اصلی The End|نام نویسنده.*:", "", RegexOptions.IgnoreCase);
-            }
 
             return text.Trim();
         }
+
         private bool IsValidMainImage(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return false;
             var lower = url.ToLowerInvariant();
-            var bad = new[] { "logo", "avatar", "icon", "banner", "header", "footer", "ad", "advert", "telegram", "placeholder", "thumb", "150x", "100x", "favicon" };
-            if (bad.Any(b => lower.Contains(b))) return false;
-            return lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".png") || lower.EndsWith(".webp") || lower.EndsWith(".gif");
+            var bad = new[] { "logo", "avatar", "icon", "banner", "ad", "advert", "thumb", "150x", "100x", "favicon" };
+            return !bad.Any(b => lower.Contains(b)) &&
+                   (lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".png") || lower.EndsWith(".webp"));
         }
 
         private string NormalizeUrl(string baseUrl, string src)

@@ -154,13 +154,27 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             return hasOther;
         }
-
         public async ValueTask RepublishAsync(NewsItem item, CancellationToken ct = default)
         {
             if (!PublishWriter.TryWrite(item))
                 await PublishWriter.WriteAsync(item, ct);
         }
+        public NewsItem? GetNextFromSourceBuffer(string source)
+        {
+            if (string.IsNullOrWhiteSpace(source)) return null;
 
+            if (!_sourceBuffers.TryGetValue(source, out var buffer)) return null;
+            if (buffer.Count == 0) return null;
+
+            // اولین خبر بافر = قدیمی‌ترین خبر قبول‌شده هست (چون AddFirst کردیم)
+            var item = buffer.Last!.Value; // آخرین نود = قدیمی‌ترین خبر
+            buffer.RemoveLast();
+
+            if (buffer.Count == 0)
+                _sourceBuffers.TryRemove(source, out _);
+
+            return item;
+        }
         public bool IsAlreadyProcessed(string key) => _processedKeys.ContainsKey(key);
         public void MarkAsProcessed(string key) => _processedKeys[key] = 1;
 

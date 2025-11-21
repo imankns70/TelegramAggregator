@@ -15,7 +15,7 @@ namespace TelegramAggregator.Services
             var finalCaption = cleanText + "\n\n@FOOTBALFORI #iman";
 
             // همون SmartTruncate که توی ربات استفاده می‌کنی
-            finalCaption = MessageTemplateFormatter.SmartTruncate(finalCaption, 1015);
+           /// finalCaption = MessageTemplateFormatter.SmartTruncate(finalCaption, 1015);
 
             return finalCaption
                 .Replace("&", "&amp;")

@@ -4,83 +4,73 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 {
     public static class NewsBalancer
     {
-        /// <summary>
-        /// انتخاب عادلانه خبرها با رعایت حداقل و حداکثر از هر منبع
-        /// </summary>
-        /// <param name="items">لیست همه خبرهای فیلتر شده</param>
-        /// <param name="totalNeeded">تعداد خبر نهایی (مثلاً 10)</param>
-        /// <param name="minPerSource">حداقل از هر منبع (مثلاً 2)</param>
-        /// <param name="maxPerSource">حداکثر از هر منبع (مثلاً 5)</param>
-        /// <param name="logger">اختیاری: برای لاگ کردن نتیجه هر منبع</param>
-        /// <returns>لیست نهایی متعادل</returns>
         public static List<NewsItem> BalanceNews(
             List<NewsItem> items,
-            int totalNeeded = 10,
-            int minPerSource = 2,
+            int totalNeeded = 12,
+            int minPerSource = 1,
             int maxPerSource = 5,
             ILogger? logger = null)
         {
             if (items == null || !items.Any())
                 return new List<NewsItem>();
 
-            // مرحله ۱: حداقل تعداد از هر منبع (جدیدترین‌ها)
-            var guaranteed = items
-                .GroupBy(i => i.SourceName) // ← حتماً Source یا SourceName داشته باشه
-                .SelectMany(g => g.OrderByDescending(x => x.PubDate).Take(minPerSource))
-                .ToList();
+            // گروه‌بندی بر اساس منبع
+            var grouped = items
+                .GroupBy(i => i.SourceName)
+                .ToDictionary(g => g.Key!, g => g.OrderByDescending(x => x.PubDate).ToList());
 
-            logger?.LogInformation("مرحله تضمینی: {Count} خبر از {Sources} منبع",
-                guaranteed.Count, guaranteed.Select(x => x.SourceName).Distinct().Count());
+            var result = new List<NewsItem>();
 
-            // مرحله ۲: محاسبه جای خالی
-            int remaining = totalNeeded - guaranteed.Count;
-            if (remaining <= 0)
+            // مرحله ۱: حداقل از هر منبع (minPerSource)
+            foreach (var kvp in grouped)
             {
-                var result = guaranteed.OrderByDescending(i => i.PubDate).Take(totalNeeded).ToList();
-                LogDistribution(result, logger);
-                return result;
+                var sourceItems = kvp.Value;
+                result.AddRange(sourceItems.Take(minPerSource));
             }
 
-            // مرحله ۳: خبرهای اضافی با رعایت حداکثر
-            var additional = items
-                .Except(guaranteed) // اونایی که هنوز انتخاب نشدن
-                .GroupBy(i => i.SourceName)
-                .SelectMany(g =>
-                {
-                    int alreadyTaken = guaranteed.Count(x => x.SourceName == g.Key);
-                    int canStillTake = maxPerSource - alreadyTaken;
-                    return canStillTake > 0
-                        ? g.OrderByDescending(x => x.PubDate).Take(canStillTake)
-                        : Enumerable.Empty<NewsItem>();
-                })
-                .OrderByDescending(i => i.PubDate)
-                .Take(remaining)
-                .ToList();
+            logger?.LogInformation("مرحله تضمینی (حداقل {Min} تا از هر منبع): {Count} خبر", minPerSource, result.Count);
 
-            // مرحله ۴: ترکیب نهایی
-            var finalList = guaranteed
-                .Concat(additional)
+            // مرحله ۲: پر کردن تا totalNeeded با رعایت حداکثر
+            int added = result.Count;
+            if (added < totalNeeded)
+            {
+                var candidates = items
+                    .Where(i => !result.Contains(i)) // اونایی که هنوز انتخاب نشدن
+                    .OrderByDescending(i => i.PubDate)
+                    .ToList();
+
+                foreach (var item in candidates)
+                {
+                    if (result.Count >= totalNeeded) break;
+
+                    int currentCount = result.Count(x => x.SourceName == item.SourceName);
+                    if (currentCount < maxPerSource)
+                    {
+                        result.Add(item);
+                    }
+                }
+            }
+
+            // مرحله ۳: مرتب‌سازی نهایی بر اساس زمان
+            var final = result
                 .OrderByDescending(i => i.PubDate)
                 .Take(totalNeeded)
                 .ToList();
 
-            LogDistribution(finalList, logger);
+            // لاگ توزیع — درست و بدون خطا
+            if (logger != null)
+            {
+                var distribution = final
+                    .GroupBy(i => i.SourceName)
+                    .OrderByDescending(g => g.Count())
+                    .Select(g => $"{g.Key}: {g.Count()}");
 
-            return finalList;
-        }
+                logger.LogInformation("توزیع نهایی خبرها: {Distribution} | مجموع: {Total}",
+                    string.Join(" | ", distribution),
+                    final.Count);
+            }
 
-        // لاگ توزیع نهایی (اختیاری ولی خیلی مفیده)
-        private static void LogDistribution(List<NewsItem> items, ILogger? logger)
-        {
-            if (logger == null) return;
-
-            var distribution = items
-                .GroupBy(i => i.SourceName)
-                .OrderByDescending(g => g.Count())
-                .Select(g => $"{g.Key}: {g.Count()} تا");
-
-            logger?.LogInformation("توزیع نهایی خبرها: {Distribution} | مجموع: {Total}",
-                string.Join(" | ", distribution), items.Count);
+            return final;
         }
     }
 }

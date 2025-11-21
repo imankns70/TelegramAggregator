@@ -2,65 +2,83 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8" />
-    <title>لاگ زنده ربات فوتبال فوری</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>دیباگ زنده ربات فوتبال فوری</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="https://v1.fontapi.ir/css/Estedad" rel="stylesheet">
     <style>
+        :root {
+            --green: #0f9;
+            --dark: #000;
+            --box: #0a0a0a;
+            --border: #0f9;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Estedad, sans-serif;
-            background: #000;
-            color: #0f0;
+            font-family: 'Estedad', sans-serif;
+            background: var(--dark);
+            color: var(--green);
             margin: 0;
             padding: 12px;
             line-height: 1.6;
+            min-height: 100vh;
         }
 
         h1 {
-            color: #0f0;
+            color: var(--green);
             text-align: center;
-            margin: 0 0 15px;
-            font-size: 24px;
-            text-shadow: 0 0 10px #0f0;
+            margin: 0 0 16px;
+            font-size: clamp(20px,5vw,26px);
+            text-shadow: 0 0 12px var(--green);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 8px;
         }
 
         .grid {
             display: grid;
-            grid-template-columns: 1fr 380px;
-            gap: 15px;
+            grid-template-columns: 1fr;
+            gap: 16px;
         }
 
         .box {
-            background: #111;
-            border: 1px solid #0f0;
+            background: var(--box);
+            border: 1px solid var(--border);
             border-radius: 12px;
             padding: 16px;
-            overflow: auto;
-            box-shadow: 0 0 15px rgba(0,255,0,0.3);
+            box-shadow: 0 0 20px rgba(0,255,150,0.15);
         }
 
         h2 {
-            color: #0f0;
-            margin: 0 0 15px;
+            color: var(--green);
+            margin: 0 0 14px;
             text-align: center;
-            font-size: 18px;
+            font-size: clamp(16px,4vw,20px);
+            text-shadow: 0 0 8px var(--green);
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 13px;
-            margin: 12px 0;
+            font-size: clamp(11px,3.5vw,13.5px);
+            margin: 10px 0;
         }
 
         th, td {
-            padding: 9px 8px;
+            padding: 9px 6px;
             border-bottom: 1px solid #003300;
             text-align: right;
         }
 
         th {
-            background: #002200;
-            color: #0f0;
+            background: #001a00;
+            color: var(--green);
             font-weight: bold;
         }
 
@@ -68,131 +86,121 @@
             background: #001a00;
         }
 
-        .ok {
+        .num {
+            width: 40px;
+            text-align: center;
+            font-weight: bold;
+            color: var(--green);
+            font-size: 14px;
+        }
+
+        .status {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 11px;
+        }
+
+        .status-sent {
+            background: #006400;
             color: #0f0;
-            font-weight: bold;
-            text-shadow: 0 0 8px #0f0;
         }
 
-        .no {
-            color: #f44;
-            font-weight: bold;
-            text-shadow: 0 0 8px #f44;
+        .status-queue {
+            background: #4a148c;
+            color: #e0b0ff;
         }
 
-        .queue {
-            background: #8e44ad;
-            color: #fff;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-        }
-
-        .sent {
-            background: #27ae60;
-            color: #fff;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-        }
-
-        .rejected {
-            background: #440000;
-            color: #faa;
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 11px;
+        .status-rejected {
+            background: #330000;
+            color: #ff6666;
         }
 
         .reason {
-            font-size: 11px;
+            font-size: 10px;
             padding: 3px 8px;
             border-radius: 5px;
             display: inline-block;
             margin: 2px 0;
         }
 
-        .reason-old {
-            background: #333;
-            color: #aaa;
+        .reason-balance {
+            background: #4a0033;
+            color: #ff99cc;
         }
 
-        .reason-trash {
-            background: #550;
-            color: #ff8;
+        .reason-filter {
+            background: #331100;
+            color: #ffaa66;
         }
 
-        .reason-short {
-            background: #505;
-            color: #ff8;
-        }
-
-        .reason-lineup {
-            background: #055;
-            color: #8f8;
-        }
-
-        .reason-keyword {
-            background: #500;
-            color: #f88;
-        }
-
-        .reason-video {
-            background: #303;
-            color: #8ff;
-        }
-
-        .reason-duplicate {
-            background: #530;
-            color: #ff8;
-        }
-
-        .stats {
-            font-size: 15px;
-            line-height: 2.3;
-        }
-
-            .stats strong {
-                font-size: 25px;
-            }
-
-        .refresh {
-            text-align: center;
-            color: #008800;
-            margin: 15px 0;
-            font-size: 13px;
-        }
-
-        .loading {
-            color: #88f;
-            text-align: center;
-            padding: 30px;
-            font-size: 16px;
-        }
-
-        a.link {
+        .link {
             color: #0cf;
             text-decoration: underline;
         }
 
-            a.link:hover {
+            .link:hover {
                 color: #fff;
-                text-shadow: 0 0 8px #0cf;
+                text-shadow: 0 0 10px #0cf;
             }
+
+        .empty {
+            text-align: center;
+            color: #006400;
+            font-weight: bold;
+            padding: 20px;
+            background: #001a00;
+            border-radius: 8px;
+        }
+
+        .stats > div {
+            margin: 12px 0;
+            padding: 10px;
+            border-bottom: 1px dashed #003300;
+            font-size: 15px;
+        }
+
+            .stats > div:last-child {
+                border: none;
+            }
+
+        .refresh {
+            font-size: 16px;
+            color: #0f9;
+            font-weight: bold;
+            text-shadow: 0 0 12px #0f9;
+            animation: pulse 1.8s infinite;
+        }
+
+        @keyframes pulse {
+            0%,100% {
+                opacity: 0.8;
+            }
+
+            50% {
+                opacity: 1;
+                text-shadow: 0 0 25px #0f9;
+            }
+        }
+
+        @media (min-width:900px) {
+            .grid {
+                grid-template-columns: 1fr 360px;
+                gap: 22px;
+            }
+        }
     </style>
 </head>
 <body>
-    <h1>دیباگ زنده ربات فوتبالفوری</h1>
-
-    <div class="grid">
-        <div class="box">
-            <h2>وضعیت زنده سیستم</h2>
-            <div id="main" class="loading">در حال بارگذاری...</div>
-        </div>
-        <div class="box stats">
-            <h2>آمار لحظه‌ای</h2>
-            <div id="stats" class="loading">در حال بارگذاری...</div>
-            <div class="refresh">رفرش خودکار هر ۱۰ ثانیه</div>
+    <div class="container">
+        <h1>دیباگ زنده ربات فوتبال فوری</h1>
+        <div class="grid">
+            <div class="box"><div id="main" class="loading">در حال بارگذاری...</div></div>
+            <div class="box stats">
+                <h2>آمار لحظه‌ای</h2>
+                <div id="stats" class="loading">در حال بارگذاری...</div>
+                <div class="refresh">رفرش خودکار در <span id="countdown">10</span> ثانیه</div>
+            </div>
         </div>
     </div>
 
@@ -200,19 +208,34 @@
         const e = t => t ? String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : '';
         const time = iso => iso ? new Date(iso).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) : '—';
 
+        function getStatusBadge(status, isAccepted, reason) {
+            if (status === "ارسال شد") return '<span class="status status-sent">ارسال شد</span>';
+            if (status === "در صف انتشار") return '<span class="status status-queue">در صف</span>';
+            if (reason?.includes("بالانس")) return '<span class="status status-rejected">رد شد (بالانس)</span>';
+            if (!isAccepted || reason) return '<span class="status status-rejected">رد شد</span>';
+            return '<span class="status status-queue">در صف</span>';
+        }
+
         function getReasonBadge(reason) {
-            if (!reason) return '<span class="reason" style="background:#006600;color:#0f0;">قبول شد</span>';
-            reason = reason.trim();
-            let cls = 'reason';
-            if (reason.includes('قدیمی')) cls += ' reason-old';
-            else if (reason.includes('گل') || reason.includes('کرنر') || reason.includes('آفساید')) cls += ' reason-trash';
-            else if (reason.includes('کوتاه')) cls += ' reason-short';
-            else if (reason.includes('ترکیب') || reason.includes('پیش‌بازی')) cls += ' reason-lineup';
-            else if (reason.includes('کلمه کلیدی')) cls += ' reason-keyword';
-            else if (reason.includes('ویدیو')) cls += ' reason-video';
-            else if (reason.includes('تکراری') || reason.includes('شبیه')) cls += ' reason-duplicate';
-            else cls += ' reason-old';
-            return `<span class="${cls}">${e(reason)}</span>`;
+            if (!reason) return '<span class="reason" style="background:#004400;color:#0f0;">قبول شد</span>';
+            if (reason.includes("بالانس")) return '<span class="reason reason-balance">بالانس</span>';
+            return `<span class="reason reason-filter">${e(reason)}</span>`;
+        }
+
+        let countdown = 10;
+        const countdownEl = document.getElementById('countdown');
+
+        function startCountdown() {
+            countdown = 10;
+            countdownEl.textContent = countdown;
+            const id = setInterval(() => {
+                countdown--;
+                countdownEl.textContent = countdown;
+                if (countdown <= 0) {
+                    clearInterval(id);
+                    load();
+                }
+            }, 1000);
         }
 
         async function load() {
@@ -222,106 +245,93 @@
                     fetch('/api/debug/stats')
                 ]);
 
-                if (!feedRes.ok || !statsRes.ok) throw 'خطا';
+                if (!feedRes.ok || !statsRes.ok) throw new Error('خطا در سرور');
 
                 const data = await feedRes.json();
                 const stats = await statsRes.json();
-
                 let html = '';
 
-                // 1. صف فعلی
+                // صف فعلی
+                html += `<h2>صف فعلی انتشار (${data.currentQueue?.length || 0} خبر)</h2>
+                             <table><tr><th class="num">#</th><th>منبع</th><th>عنوان</th><th>زمان</th></tr>`;
                 if (data.currentQueue?.length > 0) {
-                    html += `<h2>صف فعلی انتشار (${data.currentQueue.length} خبر)</h2>
-<table><tr><th>منبع</th><th>عنوان</th><th>زمان خبر</th></tr>`;
-                    data.currentQueue.forEach(item => {
-                        html += `<tr style="background:#001a00;">
+                    data.currentQueue.forEach((item, i) => {
+                        html += `<tr>
+                                <td class="num">${i + 1}</td>
                                 <td><strong>${e(item.sourceName)}</strong></td>
-                                <td>${e((item.title || '').substring(0, 90))}</td>
+                                <td>${e(item.title?.substring(0, 85))}${(item.title?.length > 85 ? '...' : '')}</td>
                                 <td>${time(item.pubDate)}</td>
                             </tr>`;
                     });
-                    html += `</table>`;
+                } else {
+                    html += `<tr><td colspan="4" class="empty">صف انتشار خالی است (عالی! همه خبرها ارسال شدن)</td></tr>`;
                 }
+                html += `</table>`;
 
-                // 2. آخرین ارسال‌شده‌ها
+                // آخرین ارسال‌شده‌ها
+                html += `<h2>آخرین خبرهای ارسال‌شده (${data.publishedItems?.length || 0} تا)</h2>
+                             <table><tr><th class="num">#</th><th>منبع</th><th>عنوان</th><th>لینک</th><th>زمان</th></tr>`;
                 if (data.publishedItems?.length > 0) {
-                    html += `<h2>آخرین خبرهای ارسال‌شده (${data.publishedItems.length} تا)</h2>
-<table><tr><th>منبع</th><th>عنوان</th><th>لینک</th><th>زمان ارسال</th></tr>`;
-                    data.publishedItems.forEach(item => {
-                        const linkHtml = item.link ? `<a href="${e(item.link)}" target="_blank" class="link">باز کردن</a>` : '—';
-                        html += `<tr style="background:#001a00;">
+                    data.publishedItems.forEach((item, i) => {
+                        const link = item.link ? `<a href="${e(item.link)}" target="_blank" class="link">باز کردن</a>` : '—';
+                        html += `<tr>
+                                <td class="num">${i + 1}</td>
                                 <td><strong>${e(item.sourceName)}</strong></td>
-                                <td>${e((item.title || '').substring(0, 90))}</td>
-                                <td>${linkHtml}</td>
+                                <td>${e(item.title?.substring(0, 70))}${(item.title?.length > 70 ? '...' : '')}</td>
+                                <td>${link}</td>
                                 <td>${time(item.publishedAt)}</td>
                             </tr>`;
                     });
-                    html += `</table>`;
+                } else {
+                    html += `<tr><td colspan="5" class="empty">هنوز خبری ارسال نشده</td></tr>`;
                 }
+                html += `</table>`;
 
-                // 3. آخرین پردازش‌شده‌ها با دلیل دقیق رد شدن!
-                html += `<h2>آخرین خبرهای پردازش‌شده (قبول و رد)</h2>
-<table>
-<tr>
-        <th>وضعیت</th>
-        <th>منبع</th>
-        <th>عنوان</th>
-        <th>لینک</th>
-        <th>دلیل دقیق رد شدن</th>
-        <th>زمان</th>
-</tr>`;
-
+                // آخرین پردازش‌شده‌ها
+                html += `<h2>آخرین خبرهای پردازش‌شده</h2>
+                             <table><tr><th class="num">#</th><th>وضعیت</th><th>منبع</th><th>عنوان</th><th>لینک</th><th>دلیل</th><th>زمان</th></tr>`;
                 if (data.recentProcessed?.length > 0) {
-                    data.recentProcessed.forEach(item => {
-                        let statusHtml = '';
-                        if (item.publishStatus === "ارسال شد") {
-                            statusHtml = '<span class="sent">ارسال شد</span>';
-                        } else if (item.isAccepted) {
-                            statusHtml = '<span class="queue">در صف</span>';
-                        } else {
-                            statusHtml = '<span class="rejected">رد شد</span>';
-                        }
-
-                        const reasonBadge = getReasonBadge(item.rejectReason);
-                        const linkHtml = item.link ? `<a href="${e(item.link)}" target="_blank" class="link">باز کردن</a>` : '—';
-
-                        html += `<tr style="background:${item.isAccepted ? '#001a00' : '#1a0000'};">
+                    const sorted = [...data.recentProcessed]
+                        .sort((a, b) => new Date(b.processedAt) - new Date(a.processedAt))
+                        .slice(0, 50);
+                    sorted.forEach((item, i) => {
+                        const statusHtml = getStatusBadge(item.publishStatus, item.isAccepted, item.rejectReason);
+                        const reasonHtml = getReasonBadge(item.rejectReason);
+                        const link = item.link ? `<a href="${e(item.link)}" target="_blank" class="link">باز کردن</a>` : '—';
+                        html += `<tr>
+                                <td class="num">${i + 1}</td>
                                 <td>${statusHtml}</td>
                                 <td><strong>${e(item.sourceName)}</strong></td>
-                                <td>${e((item.title || '').substring(0, 65))}</td>
-                                <td>${linkHtml}</td>
-                                <td>${reasonBadge}</td>
+                                <td>${e(item.title?.substring(0, 60))}${(item.title?.length > 60 ? '...' : '')}</td>
+                                <td>${link}</td>
+                                <td>${reasonHtml}</td>
                                 <td>${time(item.processedAt)}</td>
                             </tr>`;
                     });
                 } else {
-                    html += '<tr><td colspan="6" style="text-align:center;color:#666;">هیچ خبری پردازش نشده</td></tr>';
+                    html += `<tr><td colspan="7" class="empty">هیچ خبری پردازش نشده</td></tr>`;
                 }
                 html += `</table>`;
 
                 document.getElementById('main').innerHTML = html;
 
-                // آمار
                 document.getElementById('stats').innerHTML = `
-                        <div>صف فعلی: <strong class="ok">${stats.در_صف || 0}</strong> خبر</div>
-                        <div>ساعت اخیر: <strong>${stats.ساعت_اخیر?.کل || 0}</strong> خبر →
-                            <span class="ok">${stats.ساعت_اخیر?.قبول || 0}</span> قبول |
-                            <span class="no">${stats.ساعت_اخیر?.رد || 0}</span> رد
-                        </div>
-                        <div>درصد قبولی: <strong class="ok">${stats.ساعت_اخیر?.درصد_قبولی || 0}%</strong></div>
+                        <div>صف: <strong>${stats.در_صف || 0}</strong></div>
+                        <div>ساعت اخیر: <strong>${stats.ساعت_اخیر?.کل || 0}</strong> → <span style="color:#0f0">${stats.ساعت_اخیر?.قبول || 0}</span> | <span style="color:#f66">${stats.ساعت_اخیر?.رد || 0}</span></div>
+                        <div>درصد قبولی: <strong>${stats.ساعت_اخیر?.درصد_قبولی || 0}%</strong></div>
                         <hr style="border-color:#003300;">
-                        <div>امروز: <strong class="ok">${stats.امروز?.قبول || 0}</strong> خبر قبول شده</div>
-                        <div>کل ارسال‌شده: <strong class="ok">${stats.کل_ارسال_شده || 0}</strong></div>
+                        <div>امروز: <strong>${stats.امروز?.قبول || 0}</strong></div>
+                        <div>کل ارسال‌شده: <strong>${stats.کل_ارسال_شده || 0}</strong></div>
                     `;
 
+                startCountdown();
             } catch (err) {
-                document.getElementById('main').innerHTML = '<p style="color:#f44;text-align:center;">خطا در دریافت داده</p>';
-                console.error(err);
+                document.getElementById('main').innerHTML = '<p style="color:#f66;text-align:center;font-size:18px;">خطا در ارتباط با سرور</p>';
+                startCountdown();
             }
         }
 
         load();
-        setInterval(load, 10000);
     </script>
 </body>
 </html>
