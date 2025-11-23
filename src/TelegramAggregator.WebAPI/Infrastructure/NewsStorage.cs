@@ -7,176 +7,95 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 {
     public class NewsStorage
     {
-        // تنظیمات
-        private readonly int _maxItemsPerSource;
-        private readonly int _publishQueueCapacity;
+        // تنظیمات طلایی و ابدی برای سرور ۱۲۸ مگابایتی تو
+        private const int MaxSources = 50;        // حداکثر منبع همزمان
+        private const int MaxSeenKeys = 100;      // حداکثر کلید دیده‌شده (لینک + دقیقه)
+        private const int DefaultQueueCapacity = 10;
 
-        // بافر هر منبع (برای فیلتر شباهت و تاریخ)
-        private readonly ConcurrentDictionary<string, LinkedList<NewsItem>> _sourceBuffers = new();
+        // آخرین خبر هر منبع
+        private readonly ConcurrentDictionary<string, NewsItem> _lastSentBySource = new();
 
-        // کلیدهای دیده‌شده (جهانی — برای جلوگیری از تکرار کامل)
-        private readonly ConcurrentDictionary<string, byte> _seenKeys = new();
+        // ترتیب اضافه شدن منابع (برای حذف قدیمی‌ترین در صورت نیاز)
+        private static readonly ConcurrentQueue<string> _sourceOrder = new();
 
-        // کلیدهای ارسال‌شده (برای جلوگیری از ارسال دوباره)
-        private readonly ConcurrentDictionary<string, byte> _processedKeys = new();
+        // کلیدهای دیده‌شده + ترتیب (LRU)
+        private static readonly ConcurrentDictionary<string, byte> _seenKeys = new();
+        private static readonly ConcurrentQueue<string> _seenKeysOrder = new();
 
-        // صف انتشار (Channel)
+        // صف انتشار
         public Channel<NewsItem> PublishChannel { get; }
         public ChannelReader<NewsItem> PublishReader => PublishChannel.Reader;
         public ChannelWriter<NewsItem> PublishWriter => PublishChannel.Writer;
 
-        // آخرین منبع ارسال‌شده + قفل برای Thread-Safety
-        private string? _lastSourcePublished;
-        private readonly object _lastSourceLock = new();
-
-        public string? LastSourcePublished
+        public NewsStorage(int publishQueueCapacity = DefaultQueueCapacity)
         {
-            get => _lastSourcePublished;
-            private set
-            {
-                lock (_lastSourceLock)
-                    _lastSourcePublished = value;
-            }
-        }
-
-        public NewsStorage(int maxItemsPerSource = 8, int publishQueueCapacity = 20)
-        {
-            _maxItemsPerSource = maxItemsPerSource;
-            _publishQueueCapacity = publishQueueCapacity;
-
             var options = new BoundedChannelOptions(publishQueueCapacity)
             {
                 SingleWriter = false,
                 SingleReader = false,
-                FullMode = BoundedChannelFullMode.Wait
+                FullMode = BoundedChannelFullMode.DropOldest,
             };
-
             PublishChannel = Channel.CreateBounded<NewsItem>(options);
         }
 
         public async ValueTask AddAsync(NewsItem item, CancellationToken ct = default)
         {
-            if (item?.Link == null || item?.SourceName == null) return;
+            if (item?.SourceName is not { } source ||
+                item.Link is null ||
+                item.PubDate == default)
+                return;
 
-            var source = item.SourceName;
             var pubDate = item.PubDate;
+
+            // لایه ۱: خبر دقیقاً یکسان (لینک + دقیقه)
             var globalKey = $"{item.Link}-{pubDate:yyyyMMddHHmm}";
+            if (!_seenKeys.TryAdd(globalKey, 1))
+                return;
 
-            // 1. جلوگیری از تکرار کامل (جهانی)
-            if (!_seenKeys.TryAdd(globalKey, 1)) return;
-
-            // 2. دریافت یا ایجاد بافر منبع
-            var buffer = _sourceBuffers.GetOrAdd(source, _ => new LinkedList<NewsItem>());
-
-            // 3. چک شباهت با خبرهای اخیر همین منبع
-            foreach (var old in buffer)
+            _seenKeysOrder.Enqueue(globalKey);
+            if (_seenKeys.Count > MaxSeenKeys)
             {
-                if (TextSimilarity.GetSimilarity(item.Title, old.Title) >= 0.92)
-                    goto Rejected;
-
-                var contentA = $"{item.Title} {item.ShortDescription} {item.FullDescription}".Trim();
-                var contentB = $"{old.Title} {old.ShortDescription} {old.FullDescription}".Trim();
-                if (!string.IsNullOrWhiteSpace(contentA) && !string.IsNullOrWhiteSpace(contentB))
-                {
-                    if (TextSimilarity.GetSimilarity(contentA, contentB) >= 0.90)
-                        goto Rejected;
-                }
-
-                if (item.Link == old.Link)
-                    goto Rejected;
+                if (_seenKeysOrder.TryDequeue(out var oldestKey))
+                    _seenKeys.TryRemove(oldestKey, out _);
             }
 
-            // 4. فقط خبرهایی که خیلی قدیمی‌تر از آخرین خبر منبع نیستند
-            if (buffer.Count > 0)
+            // لایه ۲: جدیدتر از آخرین خبر همین منبع
+            if (_lastSentBySource.TryGetValue(source, out var lastFromSource))
             {
-                var newest = buffer.First!.Value;
-                if (pubDate < newest.PubDate.AddHours(-12))
-                    goto Rejected;
+                if (item.PubDate <= lastFromSource.PubDate)
+                    return;
             }
 
-            // قبول شد!
-            buffer.AddFirst(item);
-
-            // محدود کردن حافظه هر منبع
-            while (buffer.Count > _maxItemsPerSource)
+            // لایه ۳: چک شباهت با آخرین خبر منابع دیگر
+            foreach (var kvp in _lastSentBySource)
             {
-                if (buffer.Last is { } oldest)
+                if (kvp.Key == source) continue;
+
+                var other = kvp.Value;
+
+                if (TextSimilarity.GetSimilarity(item.Title, other.Title) >= 0.92)
+                    return;
+
+                var a = $"{item.Title} {item.ShortDescription} {item.FullDescription}".Trim();
+                var b = $"{other.Title} {other.ShortDescription} {other.FullDescription}".Trim();
+
+                if (!string.IsNullOrWhiteSpace(a) && !string.IsNullOrWhiteSpace(b))
                 {
-                    var oldKey = $"{oldest.Value.Link}-{oldest.Value.PubDate:yyyyMMddHHmm}";
-                    buffer.RemoveLast();
-                    _seenKeys.TryRemove(oldKey, out _);
+                    if (TextSimilarity.GetSimilarity(a, b) >= 0.90)
+                        return;
                 }
             }
 
-            // تمیزکاری بافر خالی
-            if (buffer.Count == 0)
-                _sourceBuffers.TryRemove(source, out _);
-
-            // اضافه به صف انتشار
+            // خبر قبول شد
             if (!PublishWriter.TryWrite(item))
                 await PublishWriter.WriteAsync(item, ct);
+         
+            _lastSentBySource[source] = item;
+ 
 
-            return;
-
-        Rejected:
-            _seenKeys.TryRemove(globalKey, out _);
+          
         }
-
-        public void UpdateLastPublished(string source, DateTimeOffset time)
-        {
-            LastSourcePublished = source;
-        }
-
-        public bool HasOtherSourceSafe(string currentSource)
-        {
-            // اگه تو صف فقط از همین منبع باشه → اجازه بده بفرسته
-            if (PublishReader.Count == 0) return false;
-
-            // اگه فقط ۱ خبر تو صف باشه → چه از همین منبع چه نه → بذار بره
-            if (PublishReader.Count == 1) return false;
-
-            // نگاه کن ببین تو صف، خبر از منبع دیگه هست یا نه
-            var hasOther = false;
-            var tempList = new List<NewsItem>();
-
-            while (PublishReader.TryRead(out var next))
-            {
-                if (next != null && next.SourceName != currentSource)
-                {
-                    hasOther = true;
-                }
-                tempList.Add(next!);
-            }
-
-            // همه رو دوباره برگردون به صف
-            foreach (var item in tempList)
-                PublishWriter.TryWrite(item);
-
-            return hasOther;
-        }
-        public async ValueTask RepublishAsync(NewsItem item, CancellationToken ct = default)
-        {
-            if (!PublishWriter.TryWrite(item))
-                await PublishWriter.WriteAsync(item, ct);
-        }
-        public NewsItem? GetNextFromSourceBuffer(string source)
-        {
-            if (string.IsNullOrWhiteSpace(source)) return null;
-
-            if (!_sourceBuffers.TryGetValue(source, out var buffer)) return null;
-            if (buffer.Count == 0) return null;
-
-            // اولین خبر بافر = قدیمی‌ترین خبر قبول‌شده هست (چون AddFirst کردیم)
-            var item = buffer.Last!.Value; // آخرین نود = قدیمی‌ترین خبر
-            buffer.RemoveLast();
-
-            if (buffer.Count == 0)
-                _sourceBuffers.TryRemove(source, out _);
-
-            return item;
-        }
-        public bool IsAlreadyProcessed(string key) => _processedKeys.ContainsKey(key);
-        public void MarkAsProcessed(string key) => _processedKeys[key] = 1;
+         
 
         public IReadOnlyCollection<NewsItem> GetCurrentPublishQueue()
         {
@@ -188,10 +107,6 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 PublishWriter.TryWrite(i);
             return list;
         }
-
-        public void Complete()
-        {
-            PublishWriter.Complete();
-        }
+ 
     }
 }

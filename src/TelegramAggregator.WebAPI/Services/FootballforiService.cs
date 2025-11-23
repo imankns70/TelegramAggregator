@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Telegram.Bot;
+using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramAggregator.Infrastructure;
 using TelegramAggregator.Services;
@@ -264,7 +265,7 @@ namespace TelegramAggregator.WebAPI.Services
                     try
                     {
                         // وقتی آماده شدی اینو فعال کن:
-                        // await SendToTelegramAsync(item, footbalForiChannel, ct);
+                         await SendToTelegramAsync(item, footbalForiChannel, ct);
 
                         // تست: فرض می‌کنیم ارسال موفق بود
                         _newsStorage.UpdateLastPublished(item.SourceName, DateTimeOffset.Now);
@@ -286,7 +287,7 @@ namespace TelegramAggregator.WebAPI.Services
                        
 
                         // تاخیر بین ارسال خبرها
-                        await Task.Delay(TimeSpan.FromSeconds(3), ct);
+                        await Task.Delay(TimeSpan.FromSeconds(60), ct);
                         // یا وقتی واقعی شد:
                         // await Task.Delay(TimeSpan.FromMinutes(_random.Next(2, 17)), ct);
 
@@ -321,6 +322,7 @@ namespace TelegramAggregator.WebAPI.Services
             item.ImageUrl = await imageTask;
             item.FullDescription = await fullDescTask;
 
+            var photo = new InputFileUrl(item.ImageUrl);
             // ساخت کپشن نهایی با فوتر
             // var caption = MessageTemplateFormatter.GetFullCaption(item, addFooter: true);
 
@@ -328,7 +330,7 @@ namespace TelegramAggregator.WebAPI.Services
             //var finalCaption = MessageTemplateFormatter.SmartTruncate(caption, 1015); // یا 1020
             // دکمه «مشاهده خبر کامل»
             //var replyMarkup = MessageTemplateFormatter.g(item.Link);
-            var (caption, keyboard) = MessageTemplateFormatter.GetFinalMessage(item);
+            var (caption, keyboard) = MessageTemplateFormatter.GetFinalMessage(item, photo); // photo رو حتماً بده!
 
             Telegram.Bot.Types.Message sentMessage;
 

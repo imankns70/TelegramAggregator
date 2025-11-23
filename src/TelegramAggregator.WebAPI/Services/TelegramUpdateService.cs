@@ -1,10 +1,9 @@
-﻿// Services/TelegramUpdateService.cs
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Extensions.Polling;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;    // این حتماً باشه!
+using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramAggregator.WebAPI.Models;
 
@@ -15,9 +14,7 @@ namespace TelegramAggregator.Services
         private readonly ITelegramBotClient _botClient;
         private readonly ILogger<TelegramUpdateService> _logger;
 
-        // ذخیره موقت خبر + عکس (برای کلیک بعدی)
         private static readonly ConcurrentDictionary<string, ExpandData> ExpandStorage = new();
-
         private record ExpandData(NewsItem Item, InputFileUrl Photo, DateTime ExpireAt);
 
         public TelegramUpdateService(ITelegramBotClient botClient, ILogger<TelegramUpdateService> logger)
@@ -75,14 +72,15 @@ namespace TelegramAggregator.Services
             {
                 if (!ExpandStorage.TryRemove(callbackId, out var data))
                 {
-                    await bot.AnswerCallbackQuery(cb.Id, "خبر منقضی شده یا قبلاً باز شده", true);
+                    await bot.AnswerCallbackQuery(cb.Id, "خبر منقضی شده یا قبلاً باز شده", true, cancellationToken: ct);
                     return;
                 }
 
                 var (item, photo, _) = data;
 
-                // استفاده از متد جدید با HTML و دکمه کو چیک کن
-                var (fullCaption, keyboard) = MessageTemplateFormatter.GetFinalMessage(item);
+                // متن کامل + دکمه منبع
+                var fullCaption = MessageTemplateFormatter.GetExpandedCaption(item);
+                var keyboard = MessageTemplateFormatter.GetFullNewsButton(item.Link);
 
                 await bot.EditMessageMedia(
                     chatId: message.Chat.Id,
@@ -90,9 +88,9 @@ namespace TelegramAggregator.Services
                     media: new InputMediaPhoto(photo)
                     {
                         Caption = fullCaption,
-                        ParseMode = ParseMode.Html           // HTML فعال
+                        ParseMode = ParseMode.Html
                     },
-                    replyMarkup: keyboard,                   // دکمه کو چیک کن از Formatter میاد
+                    replyMarkup: keyboard,
                     cancellationToken: ct
                 );
 
@@ -101,11 +99,10 @@ namespace TelegramAggregator.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "خطا در باز کردن خبر کامل - CallbackId: {CallbackId}", callbackId);
-                await bot.AnswerCallbackQuery(cb.Id, "خطایی رخ داد", true);
+                await bot.AnswerCallbackQuery(cb.Id, "خطایی رخ داد", true, cancellationToken: ct);
             }
         }
 
-        // متد استاتیک برای ذخیره خبر موقع ارسال اولیه
         public static string StoreForExpand(NewsItem item, InputFileUrl photo)
         {
             var callbackId = $"exp_{Math.Abs(item.Link.GetHashCode()):X8}";
