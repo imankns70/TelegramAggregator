@@ -35,7 +35,7 @@ public class RssParser : IRssParser
             result = feed.Items
             .Where(a => !a.Title.Text.Contains("ویدیو", StringComparison.OrdinalIgnoreCase))
             .Where(item => item.PublishDate >= cutoff)
-            .OrderByDescending(i => i.PublishDate.DateTime)
+            .OrderBy(i => i.PublishDate.DateTime)
             .Take(10)
             .Select(entry => new NewsItem
             {

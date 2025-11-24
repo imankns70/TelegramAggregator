@@ -26,7 +26,7 @@ builder.Services.Configure<AppSettings>(builder.Configuration);
 
 // ------------------- سرویس‌ها -------------------
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer(); 
+builder.Services.AddEndpointsApiExplorer();
 
 // CORS
 builder.Services.AddCors(options =>
@@ -49,15 +49,12 @@ builder.Logging.AddConsole();
 builder.Services.AddSingleton<NewsStorage>(sp =>
 {
     var settings = sp.GetRequiredService<IOptions<AppSettings>>().Value;
-    return new NewsStorage(
-        maxItemsPerSource: settings.MaxItemsPerSource ,
-        publishQueueCapacity: settings.PublishQueueCapacity 
+    return new NewsStorage(queueCapacityPerSource: settings.QueueCapacityPerSource,
+        maxSeenKeys: settings.MaxSeenKeys
     );
 });
 
-// DebugStorage (برای دیباگ زنده)
-builder.Services.AddSingleton<DebugStorage>();
-
+ 
 // LineupFilter
 builder.Services.AddSingleton<LineupFilter>(sp =>
 {
@@ -101,7 +98,7 @@ builder.Services.AddSingleton<ITelegramBotClient>(sp =>
 
 //builder.Services.AddHostedService<TelegramUpdateService>(); // این خط طلاییه!
 
- 
+
 
 // سرویس اصلی + سرویس پس‌زمینه
 builder.Services.AddScoped<FootballforiService>();
@@ -117,14 +114,14 @@ app.UseStaticFiles();        // مهم: برای debug.html و wwwroot
 app.UseRouting();
 app.UseCors("AllowAll");
 
- 
+
 
 app.MapControllers();
 
 // در پروداکشن روی همه آی‌پی‌ها گوش بده
 if (app.Environment.IsProduction())
 {
-    app.Urls.Add("http://0.0.0.0:5000"); 
+    app.Urls.Add("http://0.0.0.0:5000");
 }
 
 // ------------------- استارت -------------------

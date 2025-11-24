@@ -11,8 +11,8 @@
         public List<string> NonSportKeywords { get; set; } = new();
         public FilterSettings FilterSettings { get; set; } = new();
         public string[]? LineupKeywords { get; set; }
-        public int PublishQueueCapacity { get; set; } 
-        public int MaxItemsPerSource { get; set; } 
+        public int QueueCapacityPerSource { get; set; } 
+        public int MaxSeenKeys { get; set; } 
 
     }
 }

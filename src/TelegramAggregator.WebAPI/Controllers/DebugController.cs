@@ -1,119 +1,123 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using TelegramAggregator.WebAPI.Infrastructure;
-namespace TelegramAggregator.WebAPI.Controllers;
+using TelegramAggregator.WebAPI.Models;
 
-[ApiController]
-[Route("api/debug")]
-public class DebugApiController : ControllerBase
+namespace TelegramAggregator.WebAPI.Controllers
 {
-    private readonly DebugStorage _debugStorage;
+    [ApiController]
+    [Route("api/debug")]
+    public class DebugApiController : ControllerBase
+    {
+        private readonly NewsStorage _newsStorage;
 
-    public DebugApiController(DebugStorage debugStorage)
-    {
-        _debugStorage = debugStorage;
-    }
-    [HttpGet("feed")]
-    public IActionResult Feed()
-    {
-        return Ok(new
+        public DebugApiController(NewsStorage newsStorage)
         {
-            // ۱. صف فعلی انتشار
-            currentQueue = _debugStorage.GetCurrentPublishQueue()
-                .Select(x => new
-                {
-                    sourceName = x.SourceName ?? "نامشخص",
-                    title = x.Title ?? "بدون عنوان",
-                    pubDate = x.PubDate.ToString("o"),
-                    x.PublishStatus
-                })
-                .ToList(),
+            _newsStorage = newsStorage;
+        }
 
-            // ۲. آخرین خبرهای ارسال‌شده
-            publishedItems = _debugStorage.GetPublishedItems()
-                .Select(x => new
-                {
-                    sourceName = x.SourceName ?? "نامشخص",
-                    title = x.Title ?? "بدون عنوان",
-                    publishedAt = x.PublishedAt?.ToString("o"),
-                    x.Link
-                })
-                .ToList(),
-
-            // ۳. آخرین خبرهای پردازش‌شده (قبول + رد با دلیل!)
-            recentProcessed = _debugStorage.GetAllItems()
-    .OrderByDescending(x => x.ProcessedAt)
-    .Take(40)
-    .Select(x => new
-    {
-        sourceName = x.SourceName ?? "نامشخص",
-        title = x.Title ?? "بدون عنوان",
-        link = x.Link,                    // اینو اضافه کن!
-        processedAt = x.ProcessedAt.ToString("o"),
-        isAccepted = x.IsAccepted,
-        rejectReason = x.RejectReason,
-        publishStatus = x.PublishStatus
-    })
-    .ToList()
-        });
-    }
-
-    [HttpGet("stats")]
-    public IActionResult Stats()
-    {
-        var summary = _debugStorage.GetSummary();
-        var now = DateTimeOffset.Now;
-
-        // آمار صف با جزئیات منبع
-        var queueBySource = _debugStorage.GetCurrentPublishQueue()
-            .GroupBy(x => x.SourceName ?? "نامشخص")
-            .Select(g => new { Source = g.Key, Count = g.Count() })
-            .OrderByDescending(x => x.Count)
-            .ThenBy(x => x.Source)
-            .ToList();
-
-        var queueDetails = queueBySource.Any()
-            ? string.Join(" | ", queueBySource.Select(x => $"{x.Source} ({x.Count})"))
-            : "خالی";
-
-        var lastHourItems = _debugStorage.GetAllItems()
-            .Where(x => x.ProcessedAt > now.AddHours(-1))
-            .ToList();
-
-        var todayAccepted = _debugStorage.GetAllItems()
-            .Count(x => x.IsAccepted && x.ProcessedAt.Date == now.Date);
-
-        var lastHourTotal = lastHourItems.Count;
-        var lastHourAccepted = lastHourItems.Count(x => x.IsAccepted);
-        var acceptanceRate = lastHourTotal > 0
-            ? Math.Round((double)lastHourAccepted * 100 / lastHourTotal)
-            : 0;
-
-        return Ok(new
+        /// <summary>
+        /// صفحه اصلی دیباگ — داشبورد زنده با صف‌های کامل و شفاف
+        /// </summary>
+        [HttpGet("feed")]
+        public IActionResult Feed()
         {
-            در_صف = summary.InQueueCount,
-            جزئیات_صف = queueDetails,  // ← جدید و خفن!
-            کل_ارسال_شده = summary.PublishedCount,
-            ساعت_اخیر = new
+            var queueBySource = _newsStorage.GetQueueBySource();
+            var result = new
             {
-                کل = lastHourTotal,
-                قبول = lastHourAccepted,
-                رد = lastHourTotal - lastHourAccepted,
-                درصد_قبولی = acceptanceRate
-            },
-            امروز = new { قبول = todayAccepted }
-        });
-    }
-    [HttpGet("latest-preview")]
-    public IActionResult GetLatestPreview()
-    {
-        var latest = DebugService.GetRecent().FirstOrDefault();
-        if (latest == null) return NotFound();
+                // صف‌ها به تفکیک منبع — همه خبرها رو نشون میده!
+                queues = queueBySource.ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => kvp.Value.Select((item, index) => new
+                    {
+                        position = index + 1,
+                        title = item.Title?.Truncate(90),
+                        link = item.Link,
+                        pubDate = item.PubDate.ToString("HH:mm"),
+                        source = item.SourceName ?? kvp.Key
+                    }).ToList()
+                ),
 
-        return Ok(new
+                totalInQueue = queueBySource.Sum(x => x.Value.Count),
+
+                // آخرین خبرهای ارسال‌شده
+                publishedItems = _newsStorage.GetPublishedItems()
+                    .Select((x, i) => new
+                    {
+                        position = i + 1,
+                        source = x.SourceName ?? "نامشخص",
+                        title = x.Title?.Truncate(80),
+                        link = x.Link,
+                        sentAt = x.ProcessedAt.ToString("HH:mm:ss") // چون PublishedAt نداریم، از ProcessedAt استفاده می‌کنیم
+                    }).ToList(),
+
+                // آخرین پردازش‌شده‌ها (قبول + رد + در صف)
+                recentProcessed = _newsStorage.GetRecentProcessed(60)
+                    .Select(x => new
+                    {
+                        source = x.SourceName ?? "نامشخص",
+                        title = x.Title?.Truncate(70),
+                        link = x.Link,
+                        status = x.IsAccepted ? "قبول" : "رد",
+                        reason = x.RejectReason ?? (x.IsAccepted ? "قبول شد" : "فیلتر"),
+                        time = x.ProcessedAt.ToString("HH:mm:ss"),
+                        publishStatus = x.PublishStatus
+                    }).ToList()
+            };
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// آمار لحظه‌ای برای داشبورد — سریع، هوشمند و کاملاً استاندارد
+        /// </summary>
+        [HttpGet("stats")]
+        public IActionResult Stats()
         {
-            title = latest.Title,
-            previewHtml = latest.PreviewHtml,
-            link = latest.Link
-        });
+            var summary = _newsStorage.GetSummary();
+            var now = DateTimeOffset.Now;
+
+            // آخرین ساعت
+            var lastHourItems = _newsStorage.GetRecentProcessed(1000)
+                .Where(x => x.ProcessedAt > now.AddHours(-1))
+                .ToList();
+
+            // امروز
+            var todayAccepted = _newsStorage.GetRecentProcessed(5000)
+                .Count(x => x.IsAccepted && x.ProcessedAt.Date == now.Date);
+
+            var result = new
+            {
+                summary.TotalProcessed,
+                summary.AcceptedCount,
+                summary.RejectedCount,
+                summary.PublishedCount,
+                summary.InQueueCount,
+                summary.AcceptanceRate,
+                summary.SystemStatus,
+                summary.StatusColor,
+                summary.QueueDetails,
+
+                // آمار آخرین ساعت
+                LastHour = new
+                {
+                    Total = lastHourItems.Count,
+                    Accepted = lastHourItems.Count(x => x.IsAccepted),
+                    Rejected = lastHourItems.Count(x => !x.IsAccepted),
+                    AcceptanceRate = lastHourItems.Count > 0
+                        ? Math.Round((double)lastHourItems.Count(x => x.IsAccepted) * 100 / lastHourItems.Count, 1)
+                        : 0.0
+                },
+
+                // آمار امروز
+                Today = new
+                {
+                    Accepted = todayAccepted
+                },
+
+                // رنگ داشبورد
+                DashboardStatusColor = summary.StatusColor
+            };
+
+            return Ok(result);
+        }
     }
 }

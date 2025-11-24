@@ -25,8 +25,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
         private readonly LineupFilter _lineupFilter;
-        private readonly DebugStorage _debugStorage;
-        private readonly Random _random = new();
+        private readonly Random _rnd = Random.Shared;
 
         public FootballforiService(
             ITelegramBotClient bot,
@@ -36,8 +35,7 @@ namespace TelegramAggregator.WebAPI.Services
             NewsStorage newsStorage,
             IOptions<AppSettings> appSettings,
             IHtmlExtractor htmlExtractor,
-            LineupFilter lineupFilter,
-            DebugStorage debugStorage)
+            LineupFilter lineupFilter)
         {
             _bot = bot;
             _logger = logger;
@@ -49,49 +47,52 @@ namespace TelegramAggregator.WebAPI.Services
             _htmlExtractor = htmlExtractor;
             footbalForiChannel = _appSettings.Channels[0];
             _lineupFilter = lineupFilter;
-            _debugStorage = debugStorage;
+
         }
 
         // این متد فقط یک بار توسط BackgroundService کال میشه
         public async Task StartAsync(CancellationToken ct)
         {
-            _logger.LogInformation("FootballforiService استارت شد");
+            _logger.LogInformation("FootballforiService استارت شد — پادشاه بیدار شد");
 
-            // فقط یک بار! Publish تا ابد زنده می‌مونه
-            var publishTask = PublishContinuouslyAsync(ct);
+            // فقط دو تسک همزمان و مستقل
+            var publishTask = Task.Run(() => PublishContinuouslyAsync(ct), ct);
+            var fetchTask = Task.Run(() => StartFetchingLoopAsync(ct), ct);
 
-            // Fetch هر 3 دقیقه (با حالت شبانه)
-            var fetchTask = StartFetchingLoopAsync(ct);
-
+            // منتظر می‌مونیم تا هر دو تموم بشن (وقتی سرویس خاموش شد)
             await Task.WhenAll(publishTask, fetchTask);
         }
 
         private async Task StartFetchingLoopAsync(CancellationToken ct)
         {
+            _logger.LogInformation("شروع حلقه واکشی RSS — هر ۳ دقیقه یکبار (شب‌ها ۳۰ دقیقه)");
+
             while (!ct.IsCancellationRequested)
             {
-                var now = DateTime.Now;
+                var now = DateTimeOffset.Now;
+
+                // حالت شبانه: ۱ تا ۸ صبح → هر ۳۰ دقیقه
                 if (now.Hour >= 1 && now.Hour < 8)
                 {
-                    _logger.LogInformation("حالت شبانه فعال — تاخیر 30 دقیقه");
+                    _logger.LogInformation("حالت شبانه فعال — تاخیر ۳۰ دقیقه");
                     await Task.Delay(TimeSpan.FromMinutes(30), ct);
                     continue;
                 }
 
                 try
                 {
-
                     await FetchAndFilterNewsAndAddToQueueAsync(footbalForiChannel.Sources, ct);
-                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
-
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "خطا در چرخه Fetch");
+                    _logger.LogError(ex, "خطا در FetchAndFilterNewsAndAddToQueueAsync");
                 }
 
+                // حالت عادی: هر ۳ دقیقه
                 await Task.Delay(TimeSpan.FromMinutes(3), ct);
             }
+
+            _logger.LogWarning("حلقه واکشی RSS خاتمه یافت");
         }
         private async Task FetchAndFilterNewsAndAddToQueueAsync(List<SourceConfig> sources, CancellationToken ct)
         {
@@ -149,24 +150,16 @@ namespace TelegramAggregator.WebAPI.Services
                 // فقط خبرهای رد شده رو اینجا ثبت کن
                 if (reasons.Any())
                 {
-                    _debugStorage.Add(new DebugFeedItem
-                    {
-                        SourceName = item.SourceName!,
-                        Title = item.Title,
-                        Link = item.Link,
-                        PubDate = item.PubDate,
-                        IsAccepted = false,
-                        RejectReason = finalReason,
-                        PublishStatus = "رد شده (فیلتر)",
-                        ProcessedAt = DateTimeOffset.Now
-                    });
+                    _newsStorage.LogRejected(item, finalReason);
+
 
                     _logger.LogWarning("رد شد ← [{Source}] {Title} | دلایل: {Reasons}",
                         item.SourceName, item.Title.Truncate(80), string.Join(" + ", reasons));
                     continue;
                 }
 
-                // خبر قبول شد → فقط لاگ بزن، هنوز تو دیباگ ثبت نمی‌کنیم
+                // خبر قبول شد !
+                _newsStorage.LogAccepted(item);
                 _logger.LogInformation("قبول شد ← [{Source}] {Title}", item.SourceName, item.Title.Truncate(80));
                 acceptedItems.Add(item);
             }
@@ -177,65 +170,16 @@ namespace TelegramAggregator.WebAPI.Services
                 return;
             }
 
- 
-            // مرحله ۳: بالانس هوشمند
-            var finalItems = NewsBalancer.BalanceNews(
-                items: acceptedItems,
-                totalNeeded: 10,
-                minPerSource: 1,
-                maxPerSource: 5,
-                logger: _logger
-            );
 
-            var finalKeys = finalItems
-                .Select(i => $"{i.SourceName}:{i.Link}")
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            // مرحله ۴: فقط خبرهای نهایی رو به صف و دیباگ اضافه کن (یک بار و برای همیشه!)
             foreach (var item in acceptedItems)
             {
-                var key = $"{item.SourceName}:{item.Link}";
+                await _newsStorage.AddAsync(item, ct);
 
-                if (finalKeys.Contains(key))
-                {
-                    // خبر نهایی — وارد صف انتشار میشه
-                    await _newsStorage.AddAsync(item, ct);
+                _logger.LogInformation("نهایی و در صف → [{Source}] {Title}", item.SourceName, item.Title.Truncate(80));
 
-                    // فقط یک بار — با وضعیت "در صف انتشار" (بعداً تو Publish به "ارسال شد" آپدیت میشه)
-                    _debugStorage.Add(new DebugFeedItem
-                    {
-                        SourceName = item.SourceName!,
-                        Title = item.Title,
-                        Link = item.Link,
-                        PubDate = item.PubDate,
-                        IsAccepted = true,
-                        RejectReason = null,
-                        PublishStatus = "در صف انتشار",
-                        ProcessedAt = DateTimeOffset.Now
-                    });
-
-                    _logger.LogInformation("نهایی و در صف → [{Source}] {Title}", item.SourceName, item.Title.Truncate(80));
-                }
-                else
-                {
-                    // بالانس حذف کرد
-                    _debugStorage.Add(new DebugFeedItem
-                    {
-                        SourceName = item.SourceName!,
-                        Title = item.Title,
-                        Link = item.Link,
-                        PubDate = item.PubDate,
-                        IsAccepted = true,
-                        RejectReason = "حداکثر تعداد از این منبع پر شده (بالانس)",
-                        PublishStatus = "رد شده (بالانس)",
-                        ProcessedAt = DateTimeOffset.Now
-                    });
-
-                    _logger.LogInformation("حذف توسط بالانس → [{Source}] {Title}", item.SourceName, item.Title.Truncate(80));
-                }
             }
 
-            _logger.LogInformation("تعداد خبرهای نهایی اضافه شده به صف: {Count}", finalItems.Count);
+
         }
         private async Task PublishContinuouslyAsync(CancellationToken ct)
         {
@@ -243,75 +187,41 @@ namespace TelegramAggregator.WebAPI.Services
 
             while (!ct.IsCancellationRequested)
             {
+                var availableChannels = _newsStorage._sourceChannels
+                        .Values
+                        .Where(ch => ch.Reader.Count > 0)
+                        .ToList();
+                if (!_newsStorage.TryDequeueAny(out var item))
+                {
+                    await Task.Delay(30_000, ct);
+                    continue;
+                }
+
                 try
                 {
-                    // خواندن خبر از صف
-                    var item = await _newsStorage.PublishReader.ReadAsync(ct);
-                    if (item?.Link == null || item?.SourceName == null) continue;
+                    // وقتی آماده شدی اینو فعال کن:
+                    // await SendToTelegramAsync(item, footbalForiChannel, ct);
 
-                    var itemKey = $"{item.SourceName}:{item.Link}";
-                    if (_newsStorage.IsAlreadyProcessed(itemKey)) continue;
+                    // تست: فرض می‌کنیم ارسال موفق بود
+                    _logger.LogInformation("ارسال شد → [{Source}] {Title}", item.SourceName, item.Title.Truncate(60));
 
-                    // اگر آخرین خبر ارسال‌شده از همین منبع بود و منبع دیگه تو صف هست → برگردون به بافر
-                    if (_newsStorage.LastSourcePublished == item.SourceName &&
-                       _newsStorage.HasOtherSourceSafe(item.SourceName))
-                    {
-                        await _newsStorage.RepublishAsync(item, ct);
-                        await Task.Delay(TimeSpan.FromSeconds(2), ct);
-                        continue;
-                    }
+                    _newsStorage.LogPublished(item);
+                    // فقط این یه خط اضافه شد — وضعیت "ارسال شد" ثبت میشه!                      
 
-                    // ارسال به کانال
-                    try
-                    {
-                        // وقتی آماده شدی اینو فعال کن:
-                         await SendToTelegramAsync(item, footbalForiChannel, ct);
+                    // تأخیر هوشمند: موج کوتاه داخل بچ، فاصله بلند بین بچ‌ها
+                    int delayMs = _rnd.Next(120_000, 900_000);
 
-                        // تست: فرض می‌کنیم ارسال موفق بود
-                        _newsStorage.UpdateLastPublished(item.SourceName, DateTimeOffset.Now);
-                        _newsStorage.MarkAsProcessed(itemKey);
-
-                        _debugStorage.Add(new DebugFeedItem
-                        {
-                            SourceName = item.SourceName,
-                            Title = item.Title,
-                            Link = item.Link,
-                            PubDate = item.PubDate,
-                            IsAccepted = true,
-                            RejectReason = null,
-                            PublishStatus = "ارسال شد",
-                            PublishedAt = DateTimeOffset.Now,
-                            ProcessedAt = DateTimeOffset.Now
-                        });
-
-                       
-
-                        // تاخیر بین ارسال خبرها
-                        await Task.Delay(TimeSpan.FromSeconds(60), ct);
-                        // یا وقتی واقعی شد:
-                        // await Task.Delay(TimeSpan.FromMinutes(_random.Next(2, 17)), ct);
-
-                        // هیچ break اینجا نباشه! فقط ادامه بده به خبر بعدی
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "خطا در ارسال خبر به کانال");
-                     
-                        await Task.Delay(3000, ct);
-                    }
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    break;
+                    await Task.Delay(3000, ct);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "خطای غیرمنتظره در حلقه انتشار");
-                    await Task.Delay(10000, ct);
+                    _logger.LogError(ex, "خطا در ارسال خبر به تلگرام: {Title}", item?.Title);
+                    await Task.Delay(5000, ct);
                 }
-            }
 
-            _logger.LogWarning("PublishContinuouslyAsync خاتمه یافت");
+                _logger.LogWarning("PublishContinuouslyAsync خاتمه یافت");
+
+            }
         }
         private async Task SendToTelegramAsync(NewsItem item, ChannelConfig channelConfig, CancellationToken ct)
         {

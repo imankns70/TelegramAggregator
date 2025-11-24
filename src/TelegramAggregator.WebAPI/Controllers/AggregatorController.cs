@@ -45,19 +45,7 @@ namespace TelegramAggregator.WebAPI.Controllers
                 channels = channels.Select(c => new { c.Name, c.ChannelId, c.AdminUsername })
             });
         }
-        [HttpGet]
-        [Route("queue")]
-        public ActionResult Queue()
-        {
-            var queue = _newsStorage.GetCurrentPublishQueue();
-            var items = queue.GroupBy(a => a.SourceName).Select(x => new
-            {
-                SourceName = x.Key,
-                Count = x.Count()
-            }).ToList();
-
-            return Ok(items);
-        }
+      
 
         /// <summary>
         /// لیست کانال‌ها
