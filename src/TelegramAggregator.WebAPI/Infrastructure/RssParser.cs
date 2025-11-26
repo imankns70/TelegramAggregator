@@ -32,22 +32,24 @@ public class RssParser : IRssParser
             if (feed == null) return result;
             var cutoff = DateTimeOffset.Now.AddHours(-6);
 
-            result = feed.Items
-            .Where(a => !a.Title.Text.Contains("ویدیو", StringComparison.OrdinalIgnoreCase))
-            .Where(item => item.PublishDate >= cutoff)
-            .OrderBy(i => i.PublishDate.DateTime)
-            .Take(10)
-            .Select(entry => new NewsItem
-            {
-                Title = entry.Title?.Text ?? "",
-                ShortDescription = entry.Summary?.Text ?? "",
-                Link = entry.Links.FirstOrDefault()?.Uri?.ToString() ?? "",
-                PubDate = entry.PublishDate.DateTime,
-                SourceName = feed.Title?.Text ?? "RSS"
-            })
-            .ToList();
+         
 
-          
+            result = feed.Items
+                .Where(a => !a.Title.Text.Contains("ویدیو", StringComparison.OrdinalIgnoreCase))
+                .Where(item => item.PublishDate >= cutoff)
+                .OrderByDescending(i => i.PublishDate.DateTime)
+                .Take(10)
+                .Reverse()
+                .Select(entry => new NewsItem
+                {
+                    Title = entry.Title?.Text ?? "",
+                    ShortDescription = entry.Summary?.Text ?? "",
+                    Link = entry.Links.FirstOrDefault()?.Uri?.ToString() ?? "",
+                    PubDate = entry.PublishDate.DateTime,
+                    SourceName = feed.Title?.Text ?? "RSS"
+                }).ToList();
+
+
         }
         catch (Exception ex)
         {

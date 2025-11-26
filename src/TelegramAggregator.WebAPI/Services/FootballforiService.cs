@@ -72,12 +72,12 @@ namespace TelegramAggregator.WebAPI.Services
                 var now = DateTimeOffset.Now;
 
                 // حالت شبانه: ۱ تا ۸ صبح → هر ۳۰ دقیقه
-                if (now.Hour >= 1 && now.Hour < 8)
-                {
-                    _logger.LogInformation("حالت شبانه فعال — تاخیر ۳۰ دقیقه");
-                    await Task.Delay(TimeSpan.FromMinutes(30), ct);
-                    continue;
-                }
+                //if (now.Hour >= 1 && now.Hour < 8)
+                //{
+                //    _logger.LogInformation("حالت شبانه فعال — تاخیر ۳۰ دقیقه");
+                //    await Task.Delay(TimeSpan.FromMinutes(30), ct);
+                //    continue;
+                //}
 
                 try
                 {
@@ -127,36 +127,52 @@ namespace TelegramAggregator.WebAPI.Services
             }
 
             var footballKeywords = _appSettings.FootballKeywords;
-            var trashRegexes = _appSettings.FilterSettings.TrashPatterns
-                .Select(p => new Regex(p, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
-                .ToList();
+            var videoKeywords = _appSettings.VideoKeywords;
+
 
             var acceptedItems = new List<NewsItem>();
 
+
+            //var darad = await _htmlExtractor.HasVideoAsync("https://www.tarafdari.com/node/2687956");
+
+            //var nadarad = await _htmlExtractor.HasVideoAsync("https://www.tarafdari.com/node/2687946");
             // مرحله ۲: فیلتر اولیه + ثبت در دیباگ (فقط رد شده‌ها و قبول اولیه)
             foreach (var item in allItems)
             {
                 var text = $"{item.Title} {item.ShortDescription}".ToLowerInvariant();
-                var reasons = new List<string>();
 
-                if (item.PubDate < cutoff) reasons.Add("قدیمی‌تر از ۶ ساعت");
-                if (trashRegexes.Any(r => r.IsMatch(text))) reasons.Add("گل لحظه‌ای / پیش‌بینی / هشتگ / تیم ملی");
-                if (item.Title.Length < 15) reasons.Add("عنوان خیلی کوتاه");
-                if (_lineupFilter.IsLineupOrPreMatchNews(item)) reasons.Add("ترکیب احتمالی یا پیش‌بازی");
-                if (!footballKeywords.Any(k => text.Contains(k.ToLowerInvariant()))) reasons.Add("کلمه کلیدی فوتبال ندارد");
-
-                var finalReason = reasons.Any() ? string.Join(" | ", reasons) : null;
-
-                // فقط خبرهای رد شده رو اینجا ثبت کن
-                if (reasons.Any())
+                if (videoKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
                 {
-                    _newsStorage.LogRejected(item, finalReason);
+                    _newsStorage.LogRejected(item, "حاوی ویدئو/پخش زنده (رد شده)");
+                    continue;
 
-
-                    _logger.LogWarning("رد شد ← [{Source}] {Title} | دلایل: {Reasons}",
-                        item.SourceName, item.Title.Truncate(80), string.Join(" + ", reasons));
+                }
+                else if (item.PubDate < cutoff)
+                {
+                    _newsStorage.LogRejected(item, "قدیمی‌تر از ۶ ساعت");
                     continue;
                 }
+
+                else if (item.Title.Length < 15)
+                {
+                    _newsStorage.LogRejected(item, "عنوان خیلی کوتاه");
+                    continue;
+                }
+                //else if (nonSportKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
+                //{
+                //    _newsStorage.LogRejected(item, "خبر غیرفوتبالی (سیاسی/اقتصادی/سرگرمی)");
+                //    continue;
+                //}
+
+                else if (!footballKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
+                {
+                    _newsStorage.LogRejected(item, "کلمه کلیدی فوتبال ندارد");
+                    continue;
+                }
+
+
+
+
 
                 // خبر قبول شد !
                 _newsStorage.LogAccepted(item);
@@ -193,25 +209,25 @@ namespace TelegramAggregator.WebAPI.Services
                         .ToList();
                 if (!_newsStorage.TryDequeueAny(out var item))
                 {
-                    await Task.Delay(30_000, ct);
+                    await Task.Delay(3000, ct);
                     continue;
                 }
 
                 try
                 {
                     // وقتی آماده شدی اینو فعال کن:
-                    // await SendToTelegramAsync(item, footbalForiChannel, ct);
+                    await SendToTelegramAsync(item, footbalForiChannel, ct);
 
                     // تست: فرض می‌کنیم ارسال موفق بود
                     _logger.LogInformation("ارسال شد → [{Source}] {Title}", item.SourceName, item.Title.Truncate(60));
 
-                    _newsStorage.LogPublished(item);
+
                     // فقط این یه خط اضافه شد — وضعیت "ارسال شد" ثبت میشه!                      
 
                     // تأخیر هوشمند: موج کوتاه داخل بچ، فاصله بلند بین بچ‌ها
                     int delayMs = _rnd.Next(120_000, 900_000);
 
-                    await Task.Delay(3000, ct);
+                    await Task.Delay(10000, ct);
                 }
                 catch (Exception ex)
                 {
@@ -227,32 +243,44 @@ namespace TelegramAggregator.WebAPI.Services
         {
             var imageTask = _htmlExtractor.ExtractMainImageAsync(item.Link, ct);
             var fullDescTask = _htmlExtractor.GetFullDescriptionAsync(item.Link, ct);
-            await Task.WhenAll(imageTask, fullDescTask);
+            var hasVideoask = _htmlExtractor.HasVideoAsync(item.Link, ct);
+            await Task.WhenAll(imageTask, fullDescTask, hasVideoask);
 
             item.ImageUrl = await imageTask;
             item.FullDescription = await fullDescTask;
-
-            var photo = new InputFileUrl(item.ImageUrl);
-            // ساخت کپشن نهایی با فوتر
-            // var caption = MessageTemplateFormatter.GetFullCaption(item, addFooter: true);
-
-            // کوتاه کردن هوشمند فقط اگر خیلی طولانی شد (تلگرام حداکثر 1024 کاراکتر اجازه می‌ده)
-            //var finalCaption = MessageTemplateFormatter.SmartTruncate(caption, 1015); // یا 1020
-            // دکمه «مشاهده خبر کامل»
-            //var replyMarkup = MessageTemplateFormatter.g(item.Link);
-            var (caption, keyboard) = MessageTemplateFormatter.GetFinalMessage(item, photo); // photo رو حتماً بده!
-
-            Telegram.Bot.Types.Message sentMessage;
-
-            if (!string.IsNullOrEmpty(item.VideoUrl))
-                sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl, caption: caption, parseMode: ParseMode.Html, replyMarkup: keyboard);
-            else if (!string.IsNullOrEmpty(item.ImageUrl))
-                sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl, caption: caption, parseMode: ParseMode.Html, replyMarkup: keyboard);
+            bool hasVideo = await hasVideoask;
+            if (hasVideo)
+            {
+                _newsStorage.LogRejected(item, "حاوی تگ ویدئو");
+                await Task.Delay(3000, ct);
+            }
             else
-                sentMessage = await _bot.SendMessage(_hiddenGroupId, caption, parseMode: ParseMode.Html, replyMarkup: caption);
+            {
+                _newsStorage.LogPublished(item);
+                //var photo = new InputFileUrl(item.ImageUrl);
+                // ساخت کپشن نهایی با فوتر
+                // var caption = MessageTemplateFormatter.GetFullCaption(item, addFooter: true);
 
-            await _bot.CopyMessage(channelConfig.ChannelId, _hiddenGroupId, sentMessage.MessageId);
-            await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
+                // کوتاه کردن هوشمند فقط اگر خیلی طولانی شد (تلگرام حداکثر 1024 کاراکتر اجازه می‌ده)
+                //var finalCaption = MessageTemplateFormatter.SmartTruncate(caption, 1015); // یا 1020
+                // دکمه «مشاهده خبر کامل»
+                //var replyMarkup = MessageTemplateFormatter.g(item.Link);
+
+                //var (caption, keyboard) = MessageTemplateFormatter.GetFinalMessage(item, photo); // photo رو حتماً بده!
+
+                //Telegram.Bot.Types.Message sentMessage;
+
+                //if (!string.IsNullOrEmpty(item.VideoUrl))
+                //    sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl, caption: caption, parseMode: ParseMode.Html, replyMarkup: keyboard);
+                //else if (!string.IsNullOrEmpty(item.ImageUrl))
+                //    sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl, caption: caption, parseMode: ParseMode.Html, replyMarkup: keyboard);
+                //else
+                //    sentMessage = await _bot.SendMessage(_hiddenGroupId, caption, parseMode: ParseMode.Html, replyMarkup: caption);
+
+                //await _bot.CopyMessage(channelConfig.ChannelId, _hiddenGroupId, sentMessage.MessageId);
+                //await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
+            }
+
         }
     }
 }

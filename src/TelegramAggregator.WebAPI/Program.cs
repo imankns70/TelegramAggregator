@@ -72,16 +72,22 @@ builder.Services.AddHttpClient("RssHttpClient", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 
-    // فقط این یه خط کافیه — بقیه رو می‌تونی کامنت کنی
+    // وانمود می‌کنیم یک مرورگر واقعی هستیم:
     client.DefaultRequestHeaders.UserAgent.ParseAdd(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
-})
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-{
-    AutomaticDecompression = DecompressionMethods.All,
-    AllowAutoRedirect = true,
-    UseCookies = false
+
+    // جلوگیری از کش سمت CDN یا سرور
+    client.DefaultRequestHeaders.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue
+    {
+        NoCache = true,
+        NoStore = true,
+        MustRevalidate = true
+    };
+
+    client.DefaultRequestHeaders.Pragma.TryParseAdd("no-cache");
+    client.DefaultRequestHeaders.IfNoneMatch.Clear(); // حذف ETag
 });
+
 
 // سرویس‌های Scoped
 builder.Services.AddScoped<IHttpHelper, HttpHelper>();

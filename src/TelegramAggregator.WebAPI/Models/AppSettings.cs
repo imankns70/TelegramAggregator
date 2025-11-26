@@ -8,8 +8,7 @@
         public long HiddenGroupId { get; set; }
         public List<ChannelConfig> Channels { get; set; } = new();
         public List<string> FootballKeywords { get; set; } = new();
-        public List<string> NonSportKeywords { get; set; } = new();
-        public FilterSettings FilterSettings { get; set; } = new();
+        public List<string> VideoKeywords { get; set; } = new(); 
         public string[]? LineupKeywords { get; set; }
         public int QueueCapacityPerSource { get; set; } 
         public int MaxSeenKeys { get; set; } 

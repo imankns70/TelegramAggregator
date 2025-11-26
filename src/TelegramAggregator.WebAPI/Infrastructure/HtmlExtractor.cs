@@ -13,15 +13,6 @@ namespace TelegramAggregator.Infrastructure
             _httpClient.Timeout = TimeSpan.FromSeconds(20);
         }
 
-        public async Task<bool> HasVideoAsync(string url, CancellationToken ct = default)
-        {
-            try
-            {
-                var html = await _httpClient.GetStringAsync(url, ct);
-                return html.Contains("video") || html.Contains("mp4") || html.Contains("aparat.com");
-            }
-            catch { return false; }
-        }
 
         public async Task<string> GetFullDescriptionAsync(string url, CancellationToken ct = default)
         {
@@ -253,7 +244,6 @@ namespace TelegramAggregator.Infrastructure
 
             return text.Trim();
         }
-
         private bool IsValidMainImage(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return false;
@@ -270,5 +260,83 @@ namespace TelegramAggregator.Infrastructure
             if (src.StartsWith("//")) return "https:" + src;
             return new Uri(new Uri(baseUrl), src).ToString();
         }
+        public async Task<bool> HasVideoAsync(string url, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return false;
+
+            // مرحله ۰: تشخیص فوری از روی URL
+            if (VideoExtensions.Any(ext => url.Contains(ext, StringComparison.OrdinalIgnoreCase)) ||
+                EmbedPlatforms.Any(p => url.Contains(p, StringComparison.OrdinalIgnoreCase)))
+                return true;
+
+            try
+            {
+                var separator = url.Contains('?') ? "&" : "?";
+                var requestUrl = $"{url}{separator}nocache={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+
+                var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+                request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 60_000); // فقط 60KB اول
+
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+
+                if (!response.IsSuccessStatusCode) return false;
+
+                // اگر خودش فایل ویدئوست → ۱۰۰٪
+                if (response.Content.Headers.ContentType?.MediaType?.StartsWith("video/", StringComparison.OrdinalIgnoreCase) == true)
+                    return true;
+
+                var stream = await response.Content.ReadAsStreamAsync(ct);
+                using var reader = new StreamReader(stream);
+                var html = await reader.ReadToEndAsync();
+
+                if (string.IsNullOrWhiteSpace(html)) return false;
+
+                var doc = new HtmlAgilityPack.HtmlDocument();
+                doc.LoadHtml(html);
+                var root = doc.DocumentNode;
+
+                // ۱. تگ <video> واقعی
+                if (root.SelectSingleNode("//video[source] | //video[@src]") != null)
+                    return true;
+
+                // ۲. لینک مستقیم به فایل ویدئویی
+                var videoLinks = root.SelectNodes("//source[@src] | //a[contains(@href, '.mp4') or contains(@href, '.m3u8')]");
+                if (videoLinks?.Any(n =>
+                {
+                    var src = n.GetAttributeValue("src", "") + n.GetAttributeValue("href", "");
+                    return VideoExtensions.Any(ext => src.Contains(ext, StringComparison.OrdinalIgnoreCase));
+                }) == true)
+                    return true;
+
+                // ۳. iframe واقعی از پلتفرم‌های ویدیویی
+                var iframes = root.SelectNodes("//iframe[contains(@src,'embed') or contains(@src,'watch') or contains(@src,'/v/')]");
+                if (iframes?.Any(iframe =>
+                {
+                    var src = iframe.GetAttributeValue("src", "");
+                    return EmbedPlatforms.Any(p => src.Contains(p, StringComparison.OrdinalIgnoreCase));
+                }) == true)
+                    return true;
+
+                return false;
+            }
+            catch
+            {
+                return false; // هر خطایی → فرض بر نبود ویدئو (امن‌ترین حالت)
+            }
+        }
+
+
+
+        private static readonly string[] VideoExtensions =
+{
+    ".mp4", ".webm", ".m3u8", ".mov", ".avi", ".flv", ".mkv", ".ts"
+};
+
+        private static readonly string[] EmbedPlatforms =
+        {
+    "youtube.com", "youtu.be", "aparat.com", "instagram.com", "tiktok.com",
+    "vimeo.com", "dailymotion.com", "twitch.tv",
+    "footballi.net/video", "varzesh3.com/video", "tamasha.com", "mp4upload.com"
+};
     }
 }

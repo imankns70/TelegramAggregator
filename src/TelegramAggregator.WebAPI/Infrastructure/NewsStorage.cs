@@ -73,10 +73,9 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             var globalKey = $"{item.Link}-{pubDate:yyyyMMddHHmm}";
             if (!_seenKeys.TryAdd(globalKey, 1))
             {
-                LogRejected(item, "تکراری (کلید جهانی)");
+                LogRejected(item, "تکراری فیلتر لایه اول)");
                 return;
             }
-
 
             _seenKeysOrder.Enqueue(globalKey);
             if (_seenKeys.Count > _maxItem)
@@ -88,7 +87,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             {
                 if (item.PubDate <= lastFromSource.PubDate)
                 {
-                    LogRejected(item, "قدیمی‌تر از آخرین ارسال‌شده");
+                    LogRejected(item, "قدیمی، فیلتر لایه دوم");
                     //"تکراری (قدیمی‌تر یا هم‌زمان
                     return;
                 }
@@ -104,7 +103,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 if (!string.IsNullOrWhiteSpace(a) && !string.IsNullOrWhiteSpace(b))
                     if (TextSimilarity.GetSimilarity(a, b) >= 0.90)
                     {
-                        LogRejected(item, $"شبیه به خبر اخیر {other.UniqueKey}");
+                        LogRejected(item, $"شبیه به خبر اخیر لایه سوم {other.UniqueKey}");
                         return;
                     }
             }
