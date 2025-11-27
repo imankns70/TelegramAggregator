@@ -149,25 +149,60 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
         private void LogOrUpdate(DebugFeedItem item)
         {
+            //var duplicates = _debugItems.Values
+            //  .Where(x => !string.IsNullOrEmpty(x.Link) || !string.IsNullOrEmpty(x.Title))
+            //  .GroupBy(x => x.Link ?? $"{x.Title?.Trim()}-{x.SourceName}")
+            //  .Where(g => g.Count() > 1)
+            //  .Select(g => new
+            //  {
+            //      Key = g.Key,
+            //      Count = g.Count(),
+            //      Items = g.OrderByDescending(x => x.ProcessedAt)
+            //               .Select(x => new
+            //               {
+            //                   x.Title,
+            //                   x.SourceName,
+            //                   x.Link,
+            //                   Status = x.PublishStatus,
+            //                   //Reason = x.RejectReason ?? x.QueueReason ?? "—",
+            //                   Time = x.ProcessedAt.ToString("HH:mm:ss")
+            //               })
+            //               .ToList()
+            //  })
+            //  .OrderByDescending(x => x.Count)
+            //  .ToList();
+
+
             var key = item.UniqueKey;
+
             _debugItems.AddOrUpdate(
                 key,
-                item,
+                item, // اولین ثبت
                 (k, existing) =>
                 {
-                    // فقط وضعیت جدیدتر رو نگه دار (بر اساس زمان)
+                    // اگر آیتم جدیدتر است، اطلاعات تازه را اعمال کن
                     if (item.ProcessedAt > existing.ProcessedAt)
-                        return item;
+                    {
+                        existing.IsAccepted = item.IsAccepted;
+                        existing.RejectReason = item.RejectReason;
+                        existing.PublishStatus = item.PublishStatus;
+                        existing.PublishedAt = item.PublishedAt;
+                        existing.ProcessedAt = item.ProcessedAt;
+                        existing.Title = item.Title ?? existing.Title; // در صورت تغییر
+                    }
+
                     return existing;
                 });
 
-            // محدودیت تعداد
+            // پاک‌سازی قدیمی‌ها
             while (_debugItems.Count > MaxDebugItems)
             {
-                var oldest = _debugItems.OrderBy(x => x.Value.ProcessedAt).FirstOrDefault();
-                if (oldest.Key != null)
-                    _debugItems.TryRemove(oldest.Key, out _);
+                var oldest = _debugItems.OrderBy(x => x.Value.ProcessedAt).First();
+                _debugItems.TryRemove(oldest.Key, out _);
             }
+
+
+
         }
 
         // همه متدهای دیباگ — الان اینجا هستن

@@ -12,8 +12,10 @@
         // جدید: وضعیت انتشار
         public string? PublishStatus { get; set; } // "در صف انتشار" | "ارسال شد" | null
         public DateTimeOffset? PublishedAt { get; set; } // زمان دقیق ارسال به تلگرام
-        public DateTimeOffset ProcessedAt { get; set; }
-        // این فیلد جدید — کلید منحصر به فرد خبر
-        public string UniqueKey => $"{Link}-{PubDate:yyyyMMddHHmm}";
+        public DateTimeOffset ProcessedAt { get; set; }        // این فیلد جدید — کلید منحصر به فرد خبر 
+ 
+    
+        public string UniqueKey => $"{SourceName}:{Link?.Trim().ToLowerInvariant()}:{PubDate.UtcDateTime:yyyyMMddHHmmss}";
+
     }
 }
