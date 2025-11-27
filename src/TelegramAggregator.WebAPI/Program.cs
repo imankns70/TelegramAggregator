@@ -95,7 +95,7 @@ builder.Services.AddSingleton<ITelegramBotClient>(sp =>
     return new TelegramBotClient(token);
 });
 
-//builder.Services.AddHostedService<TelegramUpdateService>(); // این خط طلاییه!
+builder.Services.AddHostedService<TelegramUpdateService>(); // این خط طلاییه!
 
 
 

@@ -260,6 +260,7 @@ namespace TelegramAggregator.Infrastructure
             if (src.StartsWith("//")) return "https:" + src;
             return new Uri(new Uri(baseUrl), src).ToString();
         }
+     
         public async Task<bool> HasVideoAsync(string url, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(url)) return false;

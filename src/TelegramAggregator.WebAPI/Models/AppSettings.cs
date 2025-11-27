@@ -3,6 +3,8 @@
     public class AppSettings
     {
         public string BotToken { get; set; } = "";
+        public string BotUserName { get; set; } = "";
+        public string BotNameDev { get; set; } = "";
         public string ApiKey { get; set; } = "";
         public int PollIntervalMinutes { get; set; }
         public long HiddenGroupId { get; set; }

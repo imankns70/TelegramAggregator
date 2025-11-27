@@ -1,4 +1,4 @@
-﻿using Telegram.Bot.Types;
+﻿using System.Text.RegularExpressions;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramAggregator.WebAPI.Models;
 
@@ -7,99 +7,79 @@ namespace TelegramAggregator.Services
     public static class MessageTemplateFormatter
     {
         private const string ChannelHandle = "@FOOTBALFORI";
-        private const string Hashtag = "#iman";
-        private const int PreviewLength = 130;
+        private const string Admin = "#iman";
 
-        public static string GetCleanText(NewsItem item)
+        private static string CleanText(string input)
         {
-            string title = item.Title?.Trim() ?? "بدون عنوان";
-            string desc = item.FullDescription?.Trim();
-            if (string.IsNullOrWhiteSpace(desc))
-                desc = "[متن خبر در دسترس نیست]";
-            return $"{title}\n\n{desc}";
+            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+
+            // حذف تگ‌های HTML
+            var clean = Regex.Replace(input, "<.*?>", " ");
+
+            // حذف HTML entities
+            clean = Regex.Replace(clean, "&[a-zA-Z]+;", " ");
+
+            // حذف لینک‌ها
+            clean = Regex.Replace(clean, @"http[s]?://\S+", " ");
+
+            // پاکسازی فاصله‌های اضافی
+            clean = Regex.Replace(clean, @"\s{2,}", " ").Trim();
+
+            return clean;
         }
 
-        public static InlineKeyboardMarkup GetFullNewsButton(string url)
+        /// <summary>
+        /// پیش‌نمایش خبر در کانال + لینک "ادامه خبر" که کاربر رو میاره تو ربات
+        /// </summary>
+        public static (string Caption, InlineKeyboardMarkup Keyboard) GetPreviewMessageWithInlineButton(NewsItem item, string botUsername)
         {
-            return new InlineKeyboardMarkup(
-                InlineKeyboardButton.WithUrl("مشاهده خبر کامل", url)
-            );
-        }
+            var title = string.IsNullOrWhiteSpace(item.Title) ? "خبر فوری" : CleanText(item.Title);
+            var shortDesc = string.IsNullOrWhiteSpace(item.ShortDescription) ? "" : CleanText(item.ShortDescription);
+            var fullDesc = string.IsNullOrWhiteSpace(item.FullDescription) ? "متن خبر در دسترس نیست." : CleanText(item.FullDescription);
 
-        public static string GetFooter() => $"\n\n{ChannelHandle} {Hashtag}";
-
-        public static string GetFullCaption(NewsItem item, bool addFooter = true)
-        {
-            var title = item.Title?.Trim() ?? "بدون عنوان";
-            var desc = item.FullDescription?.Trim() ?? "[متن کامل خبر در دسترس نیست]";
-            var fullText = $"{title}\n\n{desc}";
-            if (addFooter) fullText += GetFooter();
-            return SmartTruncate(fullText, 4000);
-        }
-
-        // نسخه اصلی که با photo کار می‌کنه
-        public static (string Caption, InlineKeyboardMarkup Keyboard) GetCollapsibleCaption(NewsItem item, InputFileUrl photo)
-        {
-            string fullText = GetCleanText(item);
-
-            // اگر متن کوتاه بود → بدون دکمه
-            if (fullText.Length <= PreviewLength + 50)
+            // ساخت خلاصه هوشمند (برای پیش‌نمایش)
+            string preview = fullDesc;
+            const int limit = 200;
+            if (preview.Length > limit)
             {
-                return (fullText + GetFooter(), GetFullNewsButton(item.Link));
+                int cut = preview.IndexOfAny(new[] { '.', '!', '?', '\n' }, 120);
+                if (cut < 0 || cut > limit) cut = limit;
+                preview = preview[..cut].Trim() + "…";
             }
 
-            // کوتاه‌سازی هوشمند
-            string previewText = fullText;
-            if (previewText.Length > PreviewLength)
-            {
-                int cut = previewText.LastIndexOfAny(new[] { '۔', '.', '!', '?', '\n', ' ' }, PreviewLength);
-                cut = cut > 50 ? cut : PreviewLength;
-                previewText = previewText.Substring(0, cut + 1).TrimEnd();
-                if (!"۔.!?\n".Contains(previewText[^1]))
-                    previewText += "…";
-            }
+            // ذخیره برای callback
+            var callbackId = TelegramUpdateService.StoreForExpand(item);
 
-            string shortCaption = $"{previewText}\n\n[نمایش ادامه خبر]\n{GetFooter()}";
+            // کپشن نهایی با فرمت دلخواه
+            var caption = $"<b>{title}</b>\n\n" +
+                          $"{shortDesc}\n\n" +
+                          $"{preview}\n\n" +
+                          $"{ChannelHandle}\n\n" +
+                          $"{Admin}\n";
 
-            // ذخیره در ExpandStorage و دریافت callbackId
-            string callbackData = TelegramUpdateService.StoreForExpand(item, photo);
-
+            // دکمه InlineKeyboard برای نمایش متن کامل
             var keyboard = new InlineKeyboardMarkup(new[]
             {
-                new[] { InlineKeyboardButton.WithCallbackData("نمایش ادامه خبر", callbackData) },
-                new[] { InlineKeyboardButton.WithUrl("مشاهده خبر کامل", item.Link) }
+                InlineKeyboardButton.WithCallbackData("متن کامل خبر", $"exp_{callbackId}")
             });
 
-            return (shortCaption, keyboard);
+            return (caption, keyboard);
         }
 
-        // نسخه نهایی که در SendToTelegramAsync استفاده می‌شه
-        public static (string Caption, InlineKeyboardMarkup Keyboard) GetFinalMessage(NewsItem item, InputFileUrl photo)
+        /// <summary>
+        /// متن کامل — وقتی کاربر روی دکمه کلیک کرد
+        /// </summary>
+        public static string GetFullCaption(NewsItem item)
         {
-            return GetCollapsibleCaption(item, photo);
-        }
+            var title = string.IsNullOrWhiteSpace(item.Title) ? "خبر فوری" : CleanText(item.Title);
+            var shortDesc = string.IsNullOrWhiteSpace(item.ShortDescription) ? "" : CleanText(item.ShortDescription);
+            var fullDesc = string.IsNullOrWhiteSpace(item.FullDescription) ? "متن کامل در دسترس نیست." : CleanText(item.FullDescription);
 
-        // وقتی کاربر کلیک کرد → متن کامل
-        public static string GetExpandedCaption(NewsItem item)
-        {
-            return GetFullCaption(item) + "\n\n[متن کامل نمایش داده شد]";
-        }
-
-        public static string SmartTruncate(string text, int maxLength = 1015)
-        {
-            if (string.IsNullOrWhiteSpace(text) || text.Length <= maxLength)
-                return text;
-
-            string footer = GetFooter();
-            int available = maxLength - footer.Length - 10;
-            if (available < 50) return text.Substring(0, maxLength - footer.Length) + footer;
-
-            int cut = text.LastIndexOfAny(new[] { '۔', '.', '!', '?', '\n' }, available);
-            if (cut < 0) cut = available;
-
-            string result = text.Substring(0, cut + 1).TrimEnd();
-            if (!"۔.!?".Contains(result[^1])) result += "…";
-            return result + footer;
+            return $"<b>{title}</b>" +
+                   (string.IsNullOrWhiteSpace(shortDesc) ? "" : $"\n\n{shortDesc}") +
+                   $"\n\n\n{fullDesc}\n\n" +
+                   $"{ChannelHandle}" +
+                   $"{Admin}\n";
         }
     }
 }

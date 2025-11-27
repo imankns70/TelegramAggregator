@@ -23,7 +23,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly NewsStorage _newsStorage;
         private readonly IHtmlExtractor _htmlExtractor;
         private readonly AppSettings _appSettings;
-        private readonly long _hiddenGroupId; 
+        private readonly long _hiddenGroupId;
         private readonly Random _rnd = Random.Shared;
 
         public FootballforiService(
@@ -44,7 +44,7 @@ namespace TelegramAggregator.WebAPI.Services
             _hiddenGroupId = _appSettings.HiddenGroupId;
             _htmlExtractor = htmlExtractor;
             footbalForiChannel = _appSettings.Channels[0];
-       
+
 
         }
 
@@ -96,7 +96,7 @@ namespace TelegramAggregator.WebAPI.Services
         {
             var allItems = new List<NewsItem>();
             var cutoff = DateTimeOffset.Now.AddHours(-6);
-           
+
             // مرحله ۱: واکشی همه RSSها
             foreach (var source in sources)
             {
@@ -117,14 +117,14 @@ namespace TelegramAggregator.WebAPI.Services
                     _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name, source.Url);
                 }
             }
- 
+
             if (!allItems.Any())
             {
                 _logger.LogInformation("هیچ خبری از هیچ منبعی دریافت نشد.");
                 return;
             }
 
-           
+
             var videoKeywords = _appSettings.VideoKeywords;
 
 
@@ -132,8 +132,8 @@ namespace TelegramAggregator.WebAPI.Services
 
 
             //var darad = await _htmlExtractor.HasVideoAsync("https://www.tarafdari.com/node/2687956");
-
             //var nadarad = await _htmlExtractor.HasVideoAsync("https://www.tarafdari.com/node/2687946");
+
             // مرحله ۲: فیلتر اولیه + ثبت در دیباگ (فقط رد شده‌ها و قبول اولیه)
             foreach (var item in allItems)
             {
@@ -156,10 +156,6 @@ namespace TelegramAggregator.WebAPI.Services
                     _newsStorage.LogRejected(item, "عنوان خیلی کوتاه");
                     continue;
                 }
-              
-
-
-
 
 
                 // خبر قبول شد !
@@ -215,7 +211,7 @@ namespace TelegramAggregator.WebAPI.Services
                     // تأخیر هوشمند: موج کوتاه داخل بچ، فاصله بلند بین بچ‌ها
                     int delayMs = _rnd.Next(120_000, 900_000);
 
-                    await Task.Delay(10000, ct);
+                    await Task.Delay(TimeSpan.FromMinutes(1), ct);
                 }
                 catch (Exception ex)
                 {
@@ -241,33 +237,36 @@ namespace TelegramAggregator.WebAPI.Services
             {
                 _newsStorage.LogRejected(item, "حاوی تگ ویدئو");
                 await Task.Delay(3000, ct);
+                return;
+            }
+
+            _newsStorage.LogPublished(item);
+ 
+            var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, _appSettings.BotUserName);
+
+
+
+            Message sentMessage;
+            if (!string.IsNullOrEmpty(item.ImageUrl))
+            {
+                sentMessage = await _bot.SendPhoto(
+                    chatId: channelConfig.ChannelId, // 👈 مستقیماً کانال
+                    photo: new InputFileUrl(item.ImageUrl),
+                    caption: caption,
+                    parseMode: ParseMode.Html,
+                    replyMarkup: keyboard,
+                    cancellationToken: ct);
             }
             else
             {
-                _newsStorage.LogPublished(item);
-                //var photo = new InputFileUrl(item.ImageUrl);
-                // ساخت کپشن نهایی با فوتر
-                // var caption = MessageTemplateFormatter.GetFullCaption(item, addFooter: true);
+                sentMessage = await _bot.SendMessage(
+                    chatId: channelConfig.ChannelId, // 👈 مستقیماً کانال
+                    text: caption,
+                    parseMode: ParseMode.Html,
+                    replyMarkup: keyboard,
+                    cancellationToken: ct);
+            }        
 
-                // کوتاه کردن هوشمند فقط اگر خیلی طولانی شد (تلگرام حداکثر 1024 کاراکتر اجازه می‌ده)
-                //var finalCaption = MessageTemplateFormatter.SmartTruncate(caption, 1015); // یا 1020
-                // دکمه «مشاهده خبر کامل»
-                //var replyMarkup = MessageTemplateFormatter.g(item.Link);
-
-                //var (caption, keyboard) = MessageTemplateFormatter.GetFinalMessage(item, photo); // photo رو حتماً بده!
-
-                //Telegram.Bot.Types.Message sentMessage;
-
-                //if (!string.IsNullOrEmpty(item.VideoUrl))
-                //    sentMessage = await _bot.SendVideo(_hiddenGroupId, item.VideoUrl, caption: caption, parseMode: ParseMode.Html, replyMarkup: keyboard);
-                //else if (!string.IsNullOrEmpty(item.ImageUrl))
-                //    sentMessage = await _bot.SendPhoto(_hiddenGroupId, item.ImageUrl, caption: caption, parseMode: ParseMode.Html, replyMarkup: keyboard);
-                //else
-                //    sentMessage = await _bot.SendMessage(_hiddenGroupId, caption, parseMode: ParseMode.Html, replyMarkup: caption);
-
-                //await _bot.CopyMessage(channelConfig.ChannelId, _hiddenGroupId, sentMessage.MessageId);
-                //await _bot.DeleteMessage(_hiddenGroupId, sentMessage.MessageId);
-            }
 
         }
     }
