@@ -20,7 +20,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         internal readonly ConcurrentDictionary<string, Channel<NewsItem>> _sourceChannels = new();
         private readonly BoundedChannelOptions _channelOptions;
         // اینا اضافه شدن — قلب جدید دیباگ!
-        private readonly ConcurrentDictionary<string, DebugFeedItem> _debugItems = new();
+        internal readonly ConcurrentDictionary<string, DebugFeedItem> _debugItems = new();
         private const int MaxDebugItems = 600;
 
         // آینه برای دیباگ
@@ -175,7 +175,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
         public IReadOnlyList<DebugFeedItem> GetPublishedItems() =>
             _debugItems.Where(x => x.Value.PublishStatus == "ارسال شد")
-                       .Reverse()
+                       .OrderByDescending(x => x.Value.ProcessedAt)
                        .Take(60)
                        .Select(a => a.Value)
                        .ToList();
@@ -211,26 +211,56 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             return result;
         }
 
+        private string CleanSourceName(string source)
+        {
+            if (string.IsNullOrWhiteSpace(source))
+                return "نامشخص";
+
+            return source
+                .Replace("؛ آخرین اخبار ورزشی ایران و جهان", "")
+                .Replace("؛ آخرین اخبار ورزشی", "")
+                .Replace("| آخرین اخبار ورزشی", "")
+                .Replace(" - آخرین اخبار ورزشی", "")
+                .Replace(" | Varzesh 3", "")
+                .Replace(" - Varzesh3", "")
+                .Replace(" - Khabarvarzeshi", "")
+                .Replace("ورزش سه | آخرین اخبار ورزشی", "ورزش سه")
+                .Replace("خبرورزشی؛ آخرین اخبار ورزشی ایران و جهان", "خبرورزشی")
+                .Split(new[] { '|', '؛', '-' }, 2)[0]
+                .Trim()
+                .Replace("  ", " ");
+        }
+
         public DebugSummary GetSummary()
         {
             var all = _debugItems.ToArray();
             var queueCounts = GetQueueCounts();
 
-            var accepted = all.Count(x => x.Value.IsAccepted);
+            bool IsActuallyAccepted(KeyValuePair<string, DebugFeedItem> kv)
+            {
+                var x = kv.Value;
+                return x.PublishStatus is "جدید_واکشی_شده" or "در صف انتشار" || x.IsAccepted;
+            }
+
+            var accepted = all.Count(IsActuallyAccepted);
             var rejected = all.Length - accepted;
             var published = all.Count(x => x.Value.PublishStatus == "ارسال شد");
             var inQueue = queueCounts.Values.Sum();
 
-            var acceptanceRate = accepted + rejected > 0
-                ? Math.Round((double)accepted / (accepted + rejected) * 100, 1)
+            var acceptanceRate = all.Length > 0
+                ? Math.Round((double)accepted / all.Length * 100, 1)
                 : 0;
 
-            var statusColor = inQueue > 50 ? "red" : inQueue > 20 ? "yellow" : "green";
+            var statusColor = inQueue > 50 ? "red" :
+                              inQueue > 20 ? "yellow" :
+                              acceptanceRate < 80 ? "yellow" : "green";
+
             var queueDetails = queueCounts.Any(x => x.Value > 0)
-                ? string.Join(" | ", queueCounts.Where(x => x.Value > 0)
+                ? string.Join(" | ", queueCounts
+                    .Where(x => x.Value > 0)
                     .OrderByDescending(x => x.Value)
-                    .Select(x => $"{x.Key}: {x.Value}"))
-                : "همه صف‌ها خالی";
+                    .Select(x => $"{CleanSourceName(x.Key)}: {x.Value}"))
+                : "همه صف‌ها خالی!";
 
             return new DebugSummary
             {
@@ -240,11 +270,11 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 PublishedCount = published,
                 InQueueCount = inQueue,
                 AcceptanceRate = acceptanceRate,
+                SystemStatus = acceptanceRate >= 90 ? "عالی" : "خوب",
                 StatusColor = statusColor,
                 QueueDetails = queueDetails
             };
         }
-
         // وقتی خبر رد شد
         public void LogRejected(NewsItem item, string reason)
         {

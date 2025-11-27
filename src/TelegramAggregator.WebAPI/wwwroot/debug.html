@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8" />
-    <title>دیباگ زنده ربات فوتبال فوری — کنترل مطلق</title>
+    <title>دیباگ زنده ربات فوتبال فوری</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
         :root {
@@ -237,7 +237,7 @@
     </style>
 </head>
 <body>
-    <h1>دیباگ زنده ربات فوتبال فوری — کنترل مطلق</h1>
+    <h1>دیباگ زنده ربات فوتبال فوری</h1>
     <div class="grid">
         <div class="box"><div id="main">در حال بارگذاری...</div></div>
         <div class="box">
@@ -250,7 +250,6 @@
     <script>
         const e = t => t ? String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : '';
         const nf = (num, fallback = "۰") => (num ?? 0).toLocaleString('fa-IR');
-
         const mainEl = document.getElementById('main');
         const statsEl = document.getElementById('stats');
         const countdownEl = document.getElementById('countdown');
@@ -265,34 +264,21 @@
                 if (countdown <= 0) { clearInterval(id); load(); }
             }, 1000);
         }
-        // تابع پاک‌سازی و کوتاه کردن نام منبع — مثل یه جراح زیبایی!
+
         function cleanSourceName(name) {
             if (!name) return "نامشخص";
-
             return name
-                // اینا رو کامل حذف کن
-                .replace(/؛ آخرین اخبار ورزشی ایران و جهان/g, '')
-                .replace(/؛ آخرین اخبار ورزشی/g, '')
+                .replace(/؛ آخرین اخبار ورزشی.*/g, '')
                 .replace(/\| آخرین اخبار ورزشی/g, '')
                 .replace(/ - آخرین اخبار ورزشی/g, '')
                 .replace(/ - Varzesh3/g, '')
                 .replace(/ - Khabarvarzeshi/g, '')
                 .replace(/ \| Varzesh 3/g, '')
-
-                // اینا رو کوتاه کن
-                .replace('خبرورزشی', 'خبرورزشی')
-                .replace('ورزش سه', 'ورزش سه')
-                .replace('طرفداری', 'طرفداری')
-                .replace('فوتبالی', 'فوتبالی')
-                .replace('فوتبال ۳۶۰', 'فوتبال ۳۶۰')
-
-                // هر چیزی بعد از | یا - یا ؛ رو حذف کن
                 .replace(/[\|؛-].*$/, '')
-
-                // فاصله‌های اضافی رو تمیز کن
                 .trim()
                 .replace(/\s+/g, ' ');
         }
+
         async function load() {
             try {
                 const [feedRes, statsRes] = await Promise.all([
@@ -300,12 +286,11 @@
                     fetch('/api/debug/stats')
                 ]);
                 if (!feedRes.ok || !statsRes.ok) throw new Error("API Error");
-
                 const data = await feedRes.json();
                 const s = await statsRes.json();
 
-                // === صف‌های انتشار ===
-                let queuesHtml = !data.queues || Object.keys(data.queues).length === 0
+                // صف‌های انتشار
+                const queuesHtml = !data.queues || Object.keys(data.queues).length === 0
                     ? '<div class="empty">همه صف‌ها خالی — عالی!</div>'
                     : '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;">' +
                     Object.entries(data.queues).map(([source, items]) => {
@@ -313,79 +298,76 @@
                         const color = count > 15 ? '#f66' : count > 8 ? '#ff0' : '#0f9';
                         return `
                                       <div class="box" style="border-color:${color};">
-                                        <h2 class="queues-title">
-                                     ${e(cleanSourceName(source))} <span style="color:#0f9;font-weight:bold;">${count} خبر</span>
-                                       </h2>
+                                          <h2 class="queues-title">${e(cleanSourceName(source))} <span style="color:#0f9;font-weight:bold;">${count} خبر</span></h2>
                                           <div class="scroll-box scroll-queues">
-                                              ${count === 0
-                                ? '<div class="empty">صف خالی — آماده</div>'
-                                : `<table><tr><th>#</th><th>عنوان</th><th>زمان</th></tr>
+                                              ${count === 0 ? '<div class="empty">صف خالی</div>' :
+                                `<table><tr><th>#</th><th>عنوان</th><th>زمان</th></tr>
                                                       ${items.map((item, i) => `
                                                           <tr>
                                                               <td class="num">${i + 1}</td>
-                                                              <td title="${e(item.title || '')}">${e((item.title || "بدون عنوان").substring(0, 65))}...</td>
+                                                              <td title="${e(item.title)}">${e((item.title || "بدون عنوان").substring(0, 65))}...</td>
                                                               <td>${item.pubDate || ''}</td>
                                                           </tr>`).join('')}
-                                                    </table>`
+                                                  </table>`
                             }
                                           </div>
                                       </div>`;
                     }).join('') + '</div>';
 
-                // === آخرین ارسال‌شده‌ها ===
-                const publishedHtml = data.publishedItems && data.publishedItems.length
+                // آخرین ارسال‌شده‌ها
+                const publishedHtml = data.publishedItems?.length
                     ? `<div class="scroll-box scroll-published">
-                                <table><tr><th>#</th><th>منبع</th><th>عنوان</th><th>زمان ارسال</th></tr>
+                                <table>
+                                <tr>
+                                <th>#</th>
+                                <th>منبع</th>
+                                <th>عنوان</th>
+                                <th>زمان ارسال</th>
+                                </tr>
                                     ${data.publishedItems.map((i, idx) => `
                                         <tr>
                                             <td class="num">${idx + 1}</td>
-                                            <td><span class="status-sent">${e(i.source || 'نامشخص')}</span></td>
-                                            <td title="${e(i.title || '')}">${e((i.title || "بدون عنوان").substring(0, 70))}...</td>
+                                            <td><span class="status-sent">${e(cleanSourceName(i.source))}</span></td>
+                                            <td title="${e(i.title)}">${e((i.title || "بدون عنوان").substring(0, 70))}...</td>
                                             <td>${i.sentAt || ''}</td>
                                         </tr>`).join('')}
                                 </table>
                                </div>`
                     : '<div class="empty">هنوز خبری ارسال نشده</div>';
 
-                // === آخرین پردازش‌شده‌ها + لینک خبر ===
-                const recentHtml = data.recentProcessed && data.recentProcessed.length
+                // آخرین پردازش‌شده‌ها
+                const recentHtml = data.recentProcessed?.length
                     ? `<div class="scroll-box scroll-logs">
-                                <table>
-                                    <tr><th>#</th><th>منبع</th><th>عنوان</th><th>وضعیت</th><th>دلیل</th><th>زمان</th><th>لینک خبر</th></tr>
-                                    ${data.recentProcessed.map((i, idx) => {
-                        const source = i.source || 'نامشخص';
+            <table>
+                <tr><th>#</th><th>منبع</th><th>عنوان</th><th>وضعیت</th><th>دلیل</th><th>زمان</th><th>لینک خبر</th></tr>
+                ${data.recentProcessed.map((i, idx) => {
+                        const source = cleanSourceName(i.source) || 'نامشخص';
                         const title = i.title || 'بدون عنوان';
                         const link = i.link || null;
-
-                        const statusText = i.publishStatus === 'ارسال شد' ? 'ارسال شد' :
-                            i.publishStatus === 'در صف انتشار' ? 'در صف' :
-                                i.status === 'قبول' ? 'قبول شد' : 'رد شد';
-                        const reasonText = i.publishStatus === 'ارسال شد' ? 'ارسال موفق' :
-                            i.publishStatus === 'در صف انتشار' ? 'منتظر ارسال' :
-                                i.reason || 'فیلتر';
-                        const statusColor = i.publishStatus === 'ارسال شد' ? 'status-sent' :
-                            i.publishStatus === 'در صف انتشار' ? 'status-queued' :
-                                i.status === 'قبول' ? 'status-accepted' : 'status-rejected';
-
+                        const statusText = i.status || 'نامشخص';
+                        const reasonText = i.reason || 'در حال بررسی';
+                        let statusColor = 'status-rejected';
+                        if (statusText === 'ارسال شد') statusColor = 'status-sent';
+                        else if (statusText.includes('در صف')) statusColor = 'status-queued';
+                        else if (statusText === 'قبول شده') statusColor = 'status-accepted';
                         const linkHtml = link
                             ? `<a href="${e(link)}" target="_blank" title="باز کردن خبر">Link</a>`
-                            : '<span style="color:#666;">—</span>';
-
+                            : '—';
                         return `
-                                            <tr>
-                                                <td class="num">${idx + 1}</td>
-                                                <td>${e(source)}</td>
-                                                <td title="${e(title)}">${e(title.substring(0, 50))}...</td>
-                                                <td class="${statusColor}">${statusText}</td>
-                                                <td style="font-size:11px;color:#ff9;" title="${e(reasonText)}">
-                                                    ${e(reasonText.substring(0, 45))}${reasonText.length > 45 ? '...' : ''}
-                                                </td>
-                                                <td>${i.time || ''}</td>
-                                                <td class="link-cell">${linkHtml}</td>
-                                            </tr>`;
+                        <tr>
+                            <td class="num">${idx + 1}</td>
+                            <td>${e(source)}</td>
+                            <td title="${e(title)}">${e(title.substring(0, 55))}...</td>
+                            <td class="${statusColor}">${statusText}</td>
+                            <td style="font-size:11px;color:#ff9;" title="${e(reasonText)}">
+                                ${e(reasonText.substring(0, 45))}${reasonText.length > 45 ? '...' : ''}
+                            </td>
+                            <td>${i.time || ''}</td>
+                            <td class="link-cell">${linkHtml}</td>
+                        </tr>`;
                     }).join('')}
-                                </table>
-                               </div>`
+            </table>
+           </div>`
                     : '<div class="empty">هنوز خبری پردازش نشده</div>';
 
                 mainEl.innerHTML = `
@@ -405,7 +387,6 @@
                             <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(s.inQueueCount)}</span>در صف</div>
                             <div class="stat-box"><span class="stat-num" style="color:#aaa;">${nf(s.totalProcessed)}</span>کل پردازش</div>
                             <div class="stat-box"><span class="stat-num" style="color:${color};">${nf(s.acceptanceRate)}%</span>درصد قبولی</div>
-                            <div class="queue-details">${s.queueDetails || "همه صف‌ها خالی"}</div>
                         `;
 
                 startCountdown();

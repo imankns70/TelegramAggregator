@@ -53,14 +53,7 @@ builder.Services.AddSingleton<NewsStorage>(sp =>
         maxSeenKeys: settings.MaxSeenKeys
     );
 });
-
  
-// LineupFilter
-builder.Services.AddSingleton<LineupFilter>(sp =>
-{
-    var keywords = sp.GetRequiredService<IOptions<AppSettings>>().Value.LineupKeywords;
-    return new LineupFilter(keywords);
-});
 
 builder.Services.AddHttpClient("HtmlExtractor", client =>
 {

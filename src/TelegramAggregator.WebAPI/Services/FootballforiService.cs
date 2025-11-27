@@ -23,8 +23,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly NewsStorage _newsStorage;
         private readonly IHtmlExtractor _htmlExtractor;
         private readonly AppSettings _appSettings;
-        private readonly long _hiddenGroupId;
-        private readonly LineupFilter _lineupFilter;
+        private readonly long _hiddenGroupId; 
         private readonly Random _rnd = Random.Shared;
 
         public FootballforiService(
@@ -34,8 +33,7 @@ namespace TelegramAggregator.WebAPI.Services
             IRssParser rssParser,
             NewsStorage newsStorage,
             IOptions<AppSettings> appSettings,
-            IHtmlExtractor htmlExtractor,
-            LineupFilter lineupFilter)
+            IHtmlExtractor htmlExtractor)
         {
             _bot = bot;
             _logger = logger;
@@ -46,7 +44,7 @@ namespace TelegramAggregator.WebAPI.Services
             _hiddenGroupId = _appSettings.HiddenGroupId;
             _htmlExtractor = htmlExtractor;
             footbalForiChannel = _appSettings.Channels[0];
-            _lineupFilter = lineupFilter;
+       
 
         }
 
@@ -72,12 +70,12 @@ namespace TelegramAggregator.WebAPI.Services
                 var now = DateTimeOffset.Now;
 
                 // حالت شبانه: ۱ تا ۸ صبح → هر ۳۰ دقیقه
-                //if (now.Hour >= 1 && now.Hour < 8)
-                //{
-                //    _logger.LogInformation("حالت شبانه فعال — تاخیر ۳۰ دقیقه");
-                //    await Task.Delay(TimeSpan.FromMinutes(30), ct);
-                //    continue;
-                //}
+                if (now.Hour >= 1 && now.Hour < 8)
+                {
+                    _logger.LogInformation("حالت شبانه فعال — تاخیر ۳۰ دقیقه");
+                    await Task.Delay(TimeSpan.FromMinutes(30), ct);
+                    continue;
+                }
 
                 try
                 {
@@ -89,7 +87,7 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
                 // حالت عادی: هر ۳ دقیقه
-                await Task.Delay(TimeSpan.FromMinutes(3), ct);
+                await Task.Delay(TimeSpan.FromMinutes(5), ct);
             }
 
             _logger.LogWarning("حلقه واکشی RSS خاتمه یافت");
@@ -98,7 +96,7 @@ namespace TelegramAggregator.WebAPI.Services
         {
             var allItems = new List<NewsItem>();
             var cutoff = DateTimeOffset.Now.AddHours(-6);
-
+           
             // مرحله ۱: واکشی همه RSSها
             foreach (var source in sources)
             {
@@ -119,14 +117,14 @@ namespace TelegramAggregator.WebAPI.Services
                     _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name, source.Url);
                 }
             }
-
+ 
             if (!allItems.Any())
             {
                 _logger.LogInformation("هیچ خبری از هیچ منبعی دریافت نشد.");
                 return;
             }
 
-            var footballKeywords = _appSettings.FootballKeywords;
+           
             var videoKeywords = _appSettings.VideoKeywords;
 
 
@@ -158,17 +156,7 @@ namespace TelegramAggregator.WebAPI.Services
                     _newsStorage.LogRejected(item, "عنوان خیلی کوتاه");
                     continue;
                 }
-                //else if (nonSportKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
-                //{
-                //    _newsStorage.LogRejected(item, "خبر غیرفوتبالی (سیاسی/اقتصادی/سرگرمی)");
-                //    continue;
-                //}
-
-                else if (!footballKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
-                {
-                    _newsStorage.LogRejected(item, "کلمه کلیدی فوتبال ندارد");
-                    continue;
-                }
+              
 
 
 
