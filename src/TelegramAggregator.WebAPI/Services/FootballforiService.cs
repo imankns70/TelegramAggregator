@@ -87,7 +87,7 @@ namespace TelegramAggregator.WebAPI.Services
                     _logger.LogError(ex, "خطا در FetchAndFilterNewsAndAddToQueueAsync");
                 }
 
-                // حالت عادی: هر ۳ دقیقه
+                // حالت عادی: هر 5 دقیقه
                 await Task.Delay(TimeSpan.FromMinutes(5), ct);
             }
 
@@ -131,9 +131,6 @@ namespace TelegramAggregator.WebAPI.Services
 
             var acceptedItems = new List<NewsItem>();
 
-
-            //var darad = await _htmlExtractor.HasVideoAsync("https://www.tarafdari.com/node/2687956");
-            //var nadarad = await _htmlExtractor.HasVideoAsync("https://www.tarafdari.com/node/2687946");
 
             // مرحله ۲: فیلتر اولیه + ثبت در دیباگ (فقط رد شده‌ها و قبول اولیه)
             foreach (var item in allItems)
@@ -265,9 +262,7 @@ namespace TelegramAggregator.WebAPI.Services
                         cancellationToken: ct);
                 }
 
-                int delayMs = _rnd.Next(120_000, 900_000);
-
-                await Task.Delay(TimeSpan.FromMinutes(1), ct);
+                await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }
 
