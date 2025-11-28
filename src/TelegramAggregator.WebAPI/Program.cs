@@ -55,7 +55,13 @@ builder.Services.AddSingleton<NewsStorage>(sp =>
 });
  
 
-builder.Services.AddHttpClient("HtmlExtractor", client =>
+builder.Services.AddHttpClient(nameof(ImageExtractor), client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; FootballforiBot/1.0)");
+});
+
+builder.Services.AddHttpClient(nameof(FullDecriptionExtractor), client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; FootballforiBot/1.0)");
@@ -85,7 +91,8 @@ builder.Services.AddHttpClient("RssHttpClient", client =>
 // سرویس‌های Scoped
 builder.Services.AddScoped<IHttpHelper, HttpHelper>();
 builder.Services.AddScoped<IRssParser, RssParser>();
-builder.Services.AddScoped<IHtmlExtractor, HtmlExtractor>();
+builder.Services.AddScoped<IImageExtractor, ImageExtractor>();
+builder.Services.AddScoped<IFullDecriptionExtractor, FullDecriptionExtractor>();
 
 // Telegram Bot
 builder.Services.AddSingleton<ITelegramBotClient>(sp =>

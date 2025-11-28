@@ -21,7 +21,8 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly IHttpHelper _httpHelper;
         private readonly IRssParser _rssParser;
         private readonly NewsStorage _newsStorage;
-        private readonly IHtmlExtractor _htmlExtractor;
+        private readonly IImageExtractor _imageExtractor;
+        private readonly IFullDecriptionExtractor _fullDecriptionExtractor;
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
         private readonly Random _rnd = Random.Shared;
@@ -33,7 +34,8 @@ namespace TelegramAggregator.WebAPI.Services
             IRssParser rssParser,
             NewsStorage newsStorage,
             IOptions<AppSettings> appSettings,
-            IHtmlExtractor htmlExtractor)
+            IImageExtractor imageExtractor,
+            IFullDecriptionExtractor fullDecriptionExtractor)
         {
             _bot = bot;
             _logger = logger;
@@ -42,10 +44,9 @@ namespace TelegramAggregator.WebAPI.Services
             _rssParser = rssParser;
             _newsStorage = newsStorage;
             _hiddenGroupId = _appSettings.HiddenGroupId;
-            _htmlExtractor = htmlExtractor;
+            _imageExtractor = imageExtractor;
             footbalForiChannel = _appSettings.Channels[0];
-
-
+            _fullDecriptionExtractor = fullDecriptionExtractor;
         }
 
         // این متد فقط یک بار توسط BackgroundService کال میشه
@@ -206,12 +207,7 @@ namespace TelegramAggregator.WebAPI.Services
                     _logger.LogInformation("ارسال شد → [{Source}] {Title}", item.SourceName, item.Title.Truncate(60));
 
 
-                    // فقط این یه خط اضافه شد — وضعیت "ارسال شد" ثبت میشه!                      
 
-                    // تأخیر هوشمند: موج کوتاه داخل بچ، فاصله بلند بین بچ‌ها
-                    int delayMs = _rnd.Next(120_000, 900_000);
-
-                    await Task.Delay(TimeSpan.FromMinutes(1), ct);
                 }
                 catch (Exception ex)
                 {
@@ -225,48 +221,55 @@ namespace TelegramAggregator.WebAPI.Services
         }
         private async Task SendToTelegramAsync(NewsItem item, ChannelConfig channelConfig, CancellationToken ct)
         {
-            var imageTask = _htmlExtractor.ExtractMainImageAsync(item.Link, ct);
-            var fullDescTask = _htmlExtractor.GetFullDescriptionAsync(item.Link, ct);
-            var hasVideoask = _htmlExtractor.HasVideoAsync(item.Link, ct);
-            await Task.WhenAll(imageTask, fullDescTask, hasVideoask);
+            var fullDescTask = _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link);
+            var imageTask = _imageExtractor.ExtractMainImageAsync(item.Link, ct);
+            var hasVideoTask = _imageExtractor.HasVideoAsync(item.Link, ct);
+            await Task.WhenAll(imageTask, fullDescTask, hasVideoTask);
 
             item.ImageUrl = await imageTask;
             item.FullDescription = await fullDescTask;
-            bool hasVideo = await hasVideoask;
+            bool hasVideo = await hasVideoTask;
             if (hasVideo)
             {
                 _newsStorage.LogRejected(item, "حاوی تگ ویدئو");
                 await Task.Delay(3000, ct);
-                return;
+
             }
 
-            _newsStorage.LogPublished(item);
- 
-            var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, _appSettings.BotUserName);
-
-
-
-            Message sentMessage;
-            if (!string.IsNullOrEmpty(item.ImageUrl))
-            {
-                sentMessage = await _bot.SendPhoto(
-                    chatId: channelConfig.ChannelId, // 👈 مستقیماً کانال
-                    photo: new InputFileUrl(item.ImageUrl),
-                    caption: caption,
-                    parseMode: ParseMode.Html,
-                    replyMarkup: keyboard,
-                    cancellationToken: ct);
-            }
             else
             {
-                sentMessage = await _bot.SendMessage(
-                    chatId: channelConfig.ChannelId, // 👈 مستقیماً کانال
-                    text: caption,
-                    parseMode: ParseMode.Html,
-                    replyMarkup: keyboard,
-                    cancellationToken: ct);
-            }        
 
+                _newsStorage.LogPublished(item);
+
+                var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, _appSettings.BotUserName);
+
+
+                Message sentMessage;
+                if (!string.IsNullOrEmpty(item.ImageUrl))
+                {
+                    sentMessage = await _bot.SendPhoto(
+                        chatId: channelConfig.ChannelId, // 👈 مستقیماً کانال
+                        photo: new InputFileUrl(item.ImageUrl),
+                        caption: caption,
+                        parseMode: ParseMode.Html,
+                        replyMarkup: keyboard,
+                        cancellationToken: ct);
+                }
+                else
+                {
+                    sentMessage = await _bot.SendMessage(
+                        chatId: channelConfig.ChannelId, // 👈 مستقیماً کانال
+                        text: caption,
+                        parseMode: ParseMode.Html,
+                        replyMarkup: keyboard,
+                        cancellationToken: ct);
+                }
+
+                int delayMs = _rnd.Next(120_000, 900_000);
+
+                await Task.Delay(TimeSpan.FromMinutes(1), ct);
+
+            }
 
         }
     }
