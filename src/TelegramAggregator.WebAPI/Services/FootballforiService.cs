@@ -88,7 +88,7 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
                 // حالت عادی: هر 5 دقیقه
-                await Task.Delay(TimeSpan.FromMinutes(5), ct);
+                await Task.Delay(TimeSpan.FromMinutes(10), ct);
             }
 
             _logger.LogWarning("حلقه واکشی RSS خاتمه یافت");
@@ -238,9 +238,19 @@ namespace TelegramAggregator.WebAPI.Services
 
                 _newsStorage.LogPublished(item);
 
-                var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, _appSettings.BotUserName);
+                var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item);
 
+                //var fullCaption = MessageTemplateFormatter.GetFullCaption(item);
 
+                //try
+                //{
+
+                //}
+                //catch (Exception)
+                //{
+
+                //    throw;
+                //}
                 Message sentMessage;
                 if (!string.IsNullOrEmpty(item.ImageUrl))
                 {

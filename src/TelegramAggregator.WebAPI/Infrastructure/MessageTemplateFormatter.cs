@@ -32,7 +32,7 @@ namespace TelegramAggregator.Services
         /// <summary>
         /// پیش‌نمایش خبر در کانال + لینک "ادامه خبر" که کاربر رو میاره تو ربات
         /// </summary>
-        public static (string Caption, InlineKeyboardMarkup Keyboard) GetPreviewMessageWithInlineButton(NewsItem item, string botUsername)
+        public static (string Caption, InlineKeyboardMarkup Keyboard) GetPreviewMessageWithInlineButton(NewsItem item)
         {
             var title = string.IsNullOrWhiteSpace(item.Title) ? "خبر فوری" : CleanText(item.Title);
             var shortDesc = string.IsNullOrWhiteSpace(item.ShortDescription) ? "" : CleanText(item.ShortDescription);
@@ -128,7 +128,7 @@ namespace TelegramAggregator.Services
             text = Regex.Replace(text,
                 @"\b(به\s*گزارش|طبق\s*گزارش|بر\s*اساس\s*گزارش|از\s*گزارش|گزارش)\s+[\""'«»]?\s*[\u0600-\u06FFa-zA-Z0-9\s‌\-–_]*[\""'«»]?\s*[,:،]?",
                 "", RegexOptions.IgnoreCase);
-  
+
             // فقط کافیه این یه خط رو اول CleanFullDescription بذاری
             text = Regex.Replace(text, @"^\s*[-–—―−]\s*", "", RegexOptions.Multiline);
             // حذف عبارت‌های تبلیغاتی یا بی‌ربط
@@ -180,11 +180,30 @@ namespace TelegramAggregator.Services
         {
             var title = string.IsNullOrWhiteSpace(item.Title) ? "خبر فوری" : CleanText(item.Title);
             var shortDesc = string.IsNullOrWhiteSpace(item.ShortDescription) ? "" : CleanText(item.ShortDescription);
-            var fullDesc = string.IsNullOrWhiteSpace(item.FullDescription) ? "متن کامل در دسترس نیست." : CleanText(item.FullDescription);
-            string fullCaption = FormatedMessage(title, shortDesc, fullDesc);
+            var fullDesc = string.IsNullOrWhiteSpace(item.FullDescription)
+                ? "متن کامل در دسترس نیست."
+                : CleanText(item.FullDescription);
 
-            return fullCaption;
+            fullDesc = SmartTruncate(fullDesc);
+            var caption = FormatedMessage(title, shortDesc, fullDesc);
 
+            return caption;
+        }
+
+
+        private static string SmartTruncate(string text, int maxLength = 1024)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+            if (text.Length <= maxLength) return text;
+
+            var cutoff = text.LastIndexOfAny(new[] { '.', '!', '؟', '?', '!' }, maxLength - 1);
+            if (cutoff <= 0)
+                cutoff = text.LastIndexOf(' ', maxLength - 1);
+
+            if (cutoff <= 0)
+                cutoff = maxLength - 1;
+
+            return text.Substring(0, cutoff + 1).Trim();
         }
     }
 }

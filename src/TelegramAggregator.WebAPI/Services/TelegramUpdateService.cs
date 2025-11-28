@@ -12,7 +12,6 @@ namespace TelegramAggregator.Services
     {
         private readonly ITelegramBotClient _botClient;
         private readonly ILogger<TelegramUpdateService> _logger;
-
         private static readonly ConcurrentDictionary<string, ExpandData> ExpandStorage = new();
         private record ExpandData(NewsItem Item, InputFileUrl? Photo, DateTime ExpireAt);
 
@@ -20,6 +19,27 @@ namespace TelegramAggregator.Services
         {
             _botClient = botClient;
             _logger = logger;
+
+            // Move the cleanup task here to avoid duplicate constructors
+            _ = Task.Run(async () =>
+            {
+                while (true)
+                {
+                    try
+                    {
+                        var now = DateTime.UtcNow;
+                        foreach (var kvp in ExpandStorage.ToArray())
+                            if (kvp.Value.ExpireAt < now)
+                                ExpandStorage.TryRemove(kvp.Key, out _);
+                        await Task.Delay(TimeSpan.FromHours(6));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "خطا در پاک‌سازی ExpandStorage — ادامه می‌دم...");
+                        await Task.Delay(TimeSpan.FromMinutes(10));
+                    }
+                }
+            });
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -32,12 +52,12 @@ namespace TelegramAggregator.Services
                     _botClient.StartReceiving(
                         HandleUpdateAsync,
                         HandleErrorAsync,
-                        new Telegram.Bot.Polling.ReceiverOptions {
-                            AllowedUpdates = [UpdateType.CallbackQuery],                             
+                        new Telegram.Bot.Polling.ReceiverOptions
+                        {
+                            AllowedUpdates = [UpdateType.CallbackQuery], // Remove UpdateType.Message, not needed
                             DropPendingUpdates = true
                         },
                         stoppingToken);
-
                     _logger.LogInformation("TelegramUpdateService فعال شد — در انتظار کلیک روی 'ادامه خبر'");
                     await Task.Delay(Timeout.Infinite, stoppingToken);
                 }
@@ -49,37 +69,9 @@ namespace TelegramAggregator.Services
             }
         }
 
-        // پاک‌سازی خودکار — حتی اگه خطا بده، سرویس می‌مونه
-        public TelegramUpdateService()
-        {
-            _ = Task.Run(async () =>
-            {
-                while (true)
-                {
-                    try
-                    {
-                        var now = DateTime.UtcNow;
-                        foreach (var kvp in ExpandStorage.ToArray())
-                        {
-                            if (kvp.Value.ExpireAt < now)
-                                ExpandStorage.TryRemove(kvp.Key, out _);
-                        }
-                        await Task.Delay(TimeSpan.FromHours(6));
-                    }
-                    catch (Exception ex)
-                    {
-                        // حتی اگه این حلقه کرش کنه، سرویس نمیمیره
-                        _logger.LogError(ex, "خطا در پاک‌سازی ExpandStorage — ادامه می‌دم...");
-                        await Task.Delay(TimeSpan.FromMinutes(10));
-                    }
-                }
-            });
-        }
-
         private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
         {
             if (update.CallbackQuery?.Data?.StartsWith("exp_") != true) return;
-
             _ = Task.Run(async () => await SafeHandleExpand(bot, update.CallbackQuery!, ct), ct);
         }
 
@@ -117,26 +109,25 @@ namespace TelegramAggregator.Services
                 var photoUrl = item.ImageUrl;
                 var fullCaption = MessageTemplateFormatter.GetFullCaption(item);
 
-                if (!string.IsNullOrEmpty(photoUrl))
-                {
-                    await bot.EditMessageCaption(
-                        chatId: message.Chat.Id,
-                        messageId: message.MessageId,
-                        caption: fullCaption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
-                }
-                else
-                {
-                    await bot.EditMessageText(
-                        chatId: message.Chat.Id,
-                        messageId: message.MessageId,
-                        text: fullCaption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
-                }
+                
+                await bot.SendMessage(
+                               chatId: cb.Message!.Chat.Id,
+                               text: fullCaption,
+                               parseMode: ParseMode.Html,
+                               replyParameters: new ReplyParameters { MessageId = cb.Message.MessageId },
+                               linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+                               cancellationToken: ct);
+                await bot.EditMessageCaption(
+                                    chatId: message.Chat.Id,
+                                    messageId: message.MessageId,
+                                    caption: "☑️ متن کامل در پیام بعدی",
+                                    replyMarkup: null,            // حذف دکمه
+                                    parseMode: ParseMode.Html,
+                                    cancellationToken: ct
+                                   );
 
-                await SafeAnswerCallback(bot, cb.Id, "متن کامل نمایش داده شد");
+
+                await SafeAnswerCallback(bot, cb.Id, "متن کامل ارسال شد");
             }
             catch (ApiRequestException ex) when (
                 ex.Message.Contains("message is not modified") ||
@@ -166,12 +157,7 @@ namespace TelegramAggregator.Services
 
         private Task HandleErrorAsync(ITelegramBotClient bot, Exception ex, CancellationToken ct)
         {
-            // حتی اینم کرش نکنه
-            try
-            {
-                _logger.LogError(ex, "خطا در دریافت آپدیت تلگرام");
-            }
-            catch { /* عمداً خالی — برنامه هرگز نمی‌میره */ }
+            _logger.LogError(ex, "خطا در دریافت آپدیت تلگرام");
             return Task.CompletedTask;
         }
 
