@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Telegram.Bot.Types;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
+using TelegramAggregator.WebAPI.Services;
 
 namespace TelegramAggregator.WebAPI.Controllers
 {
@@ -10,18 +12,35 @@ namespace TelegramAggregator.WebAPI.Controllers
     {
 
 
-        private readonly NewsStorage _newsStorage;
+        private readonly HandleExpandCore _handleExpandCore;
         private readonly IConfiguration _config;
         private readonly ILogger<AggregatorController> _logger;
         public AggregatorController(IConfiguration config, ILogger<AggregatorController> logger,
-        NewsStorage newsStorage)
+        HandleExpandCore handleExpandCore)
         {
 
             _config = config;
             _logger = logger;
-            _newsStorage = newsStorage;
+            _handleExpandCore = handleExpandCore;
         }
 
+        [HttpPost("update")]
+        public async Task<IActionResult> OnUpdate([FromBody] Update update, CancellationToken ct)
+        {
+            try
+            {
+                if (update.CallbackQuery?.Data?.StartsWith("exp_") == true)
+                {
+                    await _handleExpandCore.HandleExpand(update.CallbackQuery, ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unhandled update error");
+            }
+
+            return Ok();
+        }
 
         /// <summary>
         /// وضعیت سیستم

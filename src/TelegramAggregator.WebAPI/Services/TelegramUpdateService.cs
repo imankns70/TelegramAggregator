@@ -111,7 +111,8 @@ namespace TelegramAggregator.Services
 
                 
                 await bot.SendMessage(
-                               chatId: cb.Message!.Chat.Id,
+                               chatId: cb.From.Id,
+                               //chatId: cb.Message!.Chat.Id,
                                text: fullCaption,
                                parseMode: ParseMode.Html,
                                replyParameters: new ReplyParameters { MessageId = cb.Message.MessageId },

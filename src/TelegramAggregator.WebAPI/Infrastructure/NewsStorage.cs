@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Linq;
 using System.Threading.Channels;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
@@ -23,8 +24,8 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         internal readonly ConcurrentDictionary<string, DebugFeedItem> _debugItems = new();
         private const int MaxDebugItems = 600;
 
-        // آینه برای دیباگ
-        private readonly ConcurrentDictionary<string, ConcurrentQueue<NewsItem>> _mirrorQueues = new();
+        private readonly ConcurrentDictionary<string, ConcurrentQueue<NewsItem>> _debugMirror = new();
+
 
         public NewsStorage(int queueCapacityPerSource, int maxSeenKeys)
         {
@@ -41,20 +42,25 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         public bool TryDequeueAny(out NewsItem? item)
         {
             item = null;
-            var channels = _sourceChannels.Values.Where(ch => ch.Reader.Count > 0).ToList();
-            if (!channels.Any()) return false;
+
+            var channels = _sourceChannels.Values
+                .Where(ch => ch.Reader.Count > 0)
+                .ToList();
+
+            if (!channels.Any())
+                return false;
 
             var selected = channels[Random.Shared.Next(channels.Count)];
 
-            // dequeue از کانال اصلی
-            if (!selected.Reader.TryRead(out item))
+            if (!selected.Reader.TryRead(out var readItem))
                 return false;
 
-            // حذف از آینه
-            if (item != null &&
-                _mirrorQueues.TryGetValue(item.SourceName, out var mirror))
+            item = readItem;
+
+
+            if (item != null && _debugMirror.TryGetValue(item.SourceName, out var mirrorQueue))
             {
-                mirror.TryDequeue(out _);
+                mirrorQueue.TryDequeue(out _);
             }
 
             return true;
@@ -117,10 +123,8 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             if (!channel.Writer.TryWrite(item))
                 await channel.Writer.WriteAsync(item, ct);
 
-
-            // آینه
-            var mirror = _mirrorQueues.GetOrAdd(source, _ => new ConcurrentQueue<NewsItem>());
-            mirror.Enqueue(item);
+            var mirrorQueue = _debugMirror.GetOrAdd(source, _ => new ConcurrentQueue<NewsItem>());
+            mirrorQueue.Enqueue(item);
 
 
             // فقط الان! آخرین خبر این منبع رو آپدیت کن + مدیریت حافظه
@@ -216,35 +220,61 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                        .ToList();
 
         public IReadOnlyList<DebugFeedItem> GetRecentProcessed(int take = 40) =>
-            _debugItems.Values.Reverse().Take(take).ToList();
+            _debugItems.Values.OrderByDescending(a => a.ProcessedAt).Take(take).ToList();
 
         public IReadOnlyDictionary<string, int> GetQueueCounts() =>
             _sourceChannels.ToDictionary(x => x.Key, x => x.Value.Reader.Count);
 
-        // صف‌ها — همه خبرها رو نشون بده (ایمن با TryPeek)
+
         public IReadOnlyDictionary<string, List<DebugFeedItem>> GetQueueBySource()
         {
-            var result = new Dictionary<string, List<DebugFeedItem>>();
+            return _debugMirror
+                .ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => kvp.Value
+                        .Select(item => new DebugFeedItem {
+                            SourceName = kvp.Key,
+                            Title = item.Title ?? "بدون عنوان",
+                            Link = item.Link,
+                            PubDate = item.PubDate,
+                            PublishStatus = "در صف انتشار",
+                            ProcessedAt = DateTimeOffset.Now
 
-            foreach (var kvp in _mirrorQueues)
-            {
-                var source = kvp.Key;
-                var snapshot = kvp.Value.ToList(); // امن + بدون قفل
-
-                var items = snapshot.Select(item => new DebugFeedItem
-                {
-                    SourceName = source,
-                    Title = item.Title,
-                    Link = item.Link,
-                    PubDate = item.PubDate,
-                    PublishStatus = "در صف"
-                }).ToList();
-
-                result[source] = items;
-            }
-
-            return result;
+                        })
+                        .OrderByDescending(x => x.PubDate)
+                        .ToList())
+                .Where(x => x.Value.Any())
+                .ToDictionary(x => x.Key, x => x.Value);
         }
+        //public IReadOnlyDictionary<string, List<DebugFeedItem>> GetQueueBySource()
+        //{
+        //    var result = new Dictionary<string, List<DebugFeedItem>>();
+
+        //    foreach (var kvp in _debugMirror)
+        //    {
+        //        var sourceName = kvp.Key;
+        //        var queue = kvp.Value; // این ConcurrentQueue<NewsItem> هست
+
+        //        var items = queue.Select(item => new DebugFeedItem
+        //        {
+        //            SourceName = sourceName,
+        //            Title = item.Title ?? "بدون عنوان",
+        //            Link = item.Link,
+        //            PubDate = item.PubDate,
+        //            PublishStatus = "در صف انتشار",
+        //            ProcessedAt = DateTimeOffset.Now
+        //        })
+        //        .OrderByDescending(x => x.PubDate)
+        //        .ToList();
+
+        //        if (items.Any())
+        //        {
+        //            result[sourceName] = items;
+        //        }
+        //    }
+
+        //    return result;
+        //}
 
         private string CleanSourceName(string source)
         {

@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using AngleSharp.Dom;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text;
@@ -13,13 +14,7 @@ Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding = Encoding.UTF8;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// ------------------- تنظیمات و کانفیگ -------------------
-builder.Configuration
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-    .AddJsonFile("footballKeywords.json", optional: true, reloadOnChange: true)
-    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
-    .AddEnvironmentVariables();
+ 
 
 // Bind تنظیمات
 builder.Services.Configure<AppSettings>(builder.Configuration);
@@ -53,7 +48,7 @@ builder.Services.AddSingleton<NewsStorage>(sp =>
         maxSeenKeys: settings.MaxSeenKeys
     );
 });
- 
+
 
 builder.Services.AddHttpClient(nameof(ImageExtractor), client =>
 {
@@ -100,9 +95,21 @@ builder.Services.AddSingleton<ITelegramBotClient>(sp =>
     var token = sp.GetRequiredService<IOptions<AppSettings>>().Value.BotToken
                  ?? throw new InvalidOperationException("BotToken تنظیم نشده است!");
     return new TelegramBotClient(token);
+
 });
 
-builder.Services.AddHostedService<TelegramUpdateService>(); // این خط طلاییه!
+
+builder.Services.AddSingleton<HandleExpandCore>();
+
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddHostedService<TelegramUpdateService>();
+}
+else
+{
+    builder.Services.AddHostedService<ExpandStorageCleanupService>();
+}
+
 
 
 
@@ -112,6 +119,16 @@ builder.Services.AddHostedService<FootballforiBackgroundService>(); // این خ
 
 // ------------------- اپلیکیشن -------------------
 var app = builder.Build();
+
+if (app.Environment.IsProduction())
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var bot = scope.ServiceProvider.GetRequiredService<ITelegramBotClient>();
+        await bot.SetWebhook("https://telegramaggregator.liara.run/api/Aggregator/update");
+    }
+}
+
 
 // Middleware ها
 app.UseHttpsRedirection();

@@ -49,16 +49,15 @@ namespace TelegramAggregator.WebAPI.Services
             _fullDecriptionExtractor = fullDecriptionExtractor;
         }
 
-        // این متد فقط یک بار توسط BackgroundService کال میشه
+
         public async Task StartAsync(CancellationToken ct)
         {
             _logger.LogInformation("FootballforiService استارت شد — پادشاه بیدار شد");
 
-            // فقط دو تسک همزمان و مستقل
+
             var publishTask = Task.Run(() => PublishContinuouslyAsync(ct), ct);
             var fetchTask = Task.Run(() => StartFetchingLoopAsync(ct), ct);
 
-            // منتظر می‌مونیم تا هر دو تموم بشن (وقتی سرویس خاموش شد)
             await Task.WhenAll(publishTask, fetchTask);
         }
 
@@ -88,7 +87,7 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
                 // حالت عادی: هر 5 دقیقه
-                await Task.Delay(TimeSpan.FromMinutes(10), ct);
+                await Task.Delay(TimeSpan.FromMinutes(15), ct);
             }
 
             _logger.LogWarning("حلقه واکشی RSS خاتمه یافت");
@@ -185,10 +184,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             while (!ct.IsCancellationRequested)
             {
-                var availableChannels = _newsStorage._sourceChannels
-                        .Values
-                        .Where(ch => ch.Reader.Count > 0)
-                        .ToList();
+
                 if (!_newsStorage.TryDequeueAny(out var item))
                 {
                     await Task.Delay(3000, ct);
@@ -240,17 +236,6 @@ namespace TelegramAggregator.WebAPI.Services
 
                 var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item);
 
-                //var fullCaption = MessageTemplateFormatter.GetFullCaption(item);
-
-                //try
-                //{
-
-                //}
-                //catch (Exception)
-                //{
-
-                //    throw;
-                //}
                 Message sentMessage;
                 if (!string.IsNullOrEmpty(item.ImageUrl))
                 {
@@ -271,6 +256,9 @@ namespace TelegramAggregator.WebAPI.Services
                         replyMarkup: keyboard,
                         cancellationToken: ct);
                 }
+
+                //await Task.Delay(TimeSpan.FromMinutes(1), ct);
+
 
                 await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 

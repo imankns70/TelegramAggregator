@@ -2,6 +2,7 @@
 using System.Text.RegularExpressions;
 using Telegram.Bot.Types.ReplyMarkups;
 using TelegramAggregator.WebAPI.Models;
+using TelegramAggregator.WebAPI.Services;
 
 namespace TelegramAggregator.Services
 {
@@ -9,7 +10,7 @@ namespace TelegramAggregator.Services
     {
         private const string ChannelName = "@FOOTBALFORI";
         private const string Admin = "#iman";
-
+        
         private static string CleanText(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return string.Empty;
@@ -44,8 +45,8 @@ namespace TelegramAggregator.Services
 
 
             // ذخیره برای callback
-            var callbackId = TelegramUpdateService.StoreForExpand(item);
-
+            var callbackId = HandleExpandCore.StoreForExpand(item);
+            //var callbackId = TelegramUpdateService.StoreForExpand(item);
 
             // کپشن نهایی با فرمت دلخواه
             var caption = FormatedMessage(title, shortDesc, preview);
