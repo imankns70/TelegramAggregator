@@ -10,7 +10,8 @@ namespace TelegramAggregator.Services
     {
         private const string ChannelName = "@FOOTBALFORI";
         private const string Admin = "#iman";
-        
+
+
         private static string CleanText(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return string.Empty;
@@ -33,7 +34,7 @@ namespace TelegramAggregator.Services
         /// <summary>
         /// پیش‌نمایش خبر در کانال + لینک "ادامه خبر" که کاربر رو میاره تو ربات
         /// </summary>
-        public static (string Caption, InlineKeyboardMarkup Keyboard) GetPreviewMessageWithInlineButton(NewsItem item)
+        public static (string Caption, InlineKeyboardMarkup Keyboard) GetPreviewMessageWithInlineButton(NewsItem item, string botUsername, bool isProduction)
         {
             var title = string.IsNullOrWhiteSpace(item.Title) ? "خبر فوری" : CleanText(item.Title);
             var shortDesc = string.IsNullOrWhiteSpace(item.ShortDescription) ? "" : CleanText(item.ShortDescription);
@@ -42,20 +43,27 @@ namespace TelegramAggregator.Services
 
             // ساخت خلاصه هوشمند (برای پیش‌نمایش)
             string preview = SmartPreview(fullDesc);
-
-
-            // ذخیره برای callback
-            var callbackId = HandleExpandCore.StoreForExpand(item);
-            //var callbackId = TelegramUpdateService.StoreForExpand(item);
-
+            string callbackId = string.Empty;
+            if (isProduction)
+            {
+                // ذخیره برای callback
+                callbackId = HandleExpandCore.StoreForExpand(item);
+                //var callbackId = TelegramUpdateService.StoreForExpand(item);
+            }
+            else
+            {
+                callbackId = TelegramUpdateService.StoreForExpand(item);
+            }
             // کپشن نهایی با فرمت دلخواه
             var caption = FormatedMessage(title, shortDesc, preview);
 
             // دکمه InlineKeyboard برای نمایش متن کامل
-            var keyboard = new InlineKeyboardMarkup(new[]
-            {
-                InlineKeyboardButton.WithCallbackData("متن کامل خبر", $"{callbackId}")
-            });
+            var keyboard = new InlineKeyboardMarkup(
+                       InlineKeyboardButton.WithUrl(
+                               "متن کامل خبر",
+                               $"https://t.me/{botUsername}?start=expand_{callbackId.Replace("exp_", "")}"
+                           )
+                               );
 
             return (caption, keyboard);
         }

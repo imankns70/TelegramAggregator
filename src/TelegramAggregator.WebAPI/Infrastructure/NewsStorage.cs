@@ -120,10 +120,22 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             // خبر قبول شد — برو تو صف منبع خودت
             var channel = _sourceChannels.GetOrAdd(source, _ => Channel.CreateBounded<NewsItem>(_channelOptions));
-            if (!channel.Writer.TryWrite(item))
+            var mirrorQueue = _debugMirror.GetOrAdd(source, _ => new ConcurrentQueue<NewsItem>());
+
+            bool written = channel.Writer.TryWrite(item);
+            if (!written)
+            {
+                // صف پره → WriteAsync باعث دراپ oldest می‌شه
                 await channel.Writer.WriteAsync(item, ct);
 
-            var mirrorQueue = _debugMirror.GetOrAdd(source, _ => new ConcurrentQueue<NewsItem>());
+                // آینه رو هماهنگ کن: قدیمی‌ترین‌ها رو حذف کن تا با ظرفیت واقعی برابر بشه
+                while (mirrorQueue.Count > _channelOptions.Capacity)
+                {
+                    mirrorQueue.TryDequeue(out _);
+                }
+            }
+
+            // در هر صورت، خبر جدید رو اضافه کن
             mirrorQueue.Enqueue(item);
 
 
@@ -153,28 +165,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
         private void LogOrUpdate(DebugFeedItem item)
         {
-            //var duplicates = _debugItems.Values
-            //  .Where(x => !string.IsNullOrEmpty(x.Link) || !string.IsNullOrEmpty(x.Title))
-            //  .GroupBy(x => x.Link ?? $"{x.Title?.Trim()}-{x.SourceName}")
-            //  .Where(g => g.Count() > 1)
-            //  .Select(g => new
-            //  {
-            //      Key = g.Key,
-            //      Count = g.Count(),
-            //      Items = g.OrderByDescending(x => x.ProcessedAt)
-            //               .Select(x => new
-            //               {
-            //                   x.Title,
-            //                   x.SourceName,
-            //                   x.Link,
-            //                   Status = x.PublishStatus,
-            //                   //Reason = x.RejectReason ?? x.QueueReason ?? "—",
-            //                   Time = x.ProcessedAt.ToString("HH:mm:ss")
-            //               })
-            //               .ToList()
-            //  })
-            //  .OrderByDescending(x => x.Count)
-            //  .ToList();
+           
 
 
             var key = item.UniqueKey;
@@ -220,7 +211,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                        .ToList();
 
         public IReadOnlyList<DebugFeedItem> GetRecentProcessed(int take = 40) =>
-            _debugItems.Values.OrderByDescending(a => a.ProcessedAt).Take(take).ToList();
+            _debugItems.Values.Take(take).ToList();
 
         public IReadOnlyDictionary<string, int> GetQueueCounts() =>
             _sourceChannels.ToDictionary(x => x.Key, x => x.Value.Reader.Count);
@@ -241,7 +232,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                             ProcessedAt = DateTimeOffset.Now
 
                         })
-                        .OrderByDescending(x => x.PubDate)
+                        //.OrderByDescending(x => x.PubDate)
                         .ToList())
                 .Where(x => x.Value.Any())
                 .ToDictionary(x => x.Key, x => x.Value);

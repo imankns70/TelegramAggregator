@@ -159,16 +159,22 @@ namespace TelegramAggregator.Infrastructure
         {
             if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
-            text = Regex.Replace(text, @"خبر[:：]\s*\d+", "");
-            text = Regex.Replace(text, @"زمان مطالعه[:：]\s*\d+\s*دقیقه", "");
-            text = Regex.Replace(text, @"صفحه اصلی.*?-\s*", "");
-            text = Regex.Replace(text, @"\|\s*", " ");
-            text = Regex.Replace(text, @"\s{2,}", " ");
-            text = text.Trim();
+            // هر چیزی که قبل از اولین فعل مهم باشه → نویسنده‌ست!
+            var patterns = new[]
+            {
+        @"^[\w\s\.\-–—|/:،]+?(?=\b(استقلال|پرسپولیس|دربی|طارمی|ساپینتو|محروم|اخراج|گل|پنالتی|داور|جنجال|قهرمان|صدر|لیگ|رسمی|فوری|اعلام|شکست|برد|تساوی|قهرمانی)\b)",
+        @"^[\w\s\.\-–—|/:،]+?[:\-–—]\s*",
+        @"^توسط\s+[\w\s\.]+",
+        @"^نویسنده\s*[:\-]\s*[\w\s\.]+",
+        @"^گزارش از\s+[\w\s\.]+"
+    };
 
-            var lastDot = text.LastIndexOf('.');
-            if (lastDot > 0)
-                text = text[..(lastDot + 1)];
+            foreach (var pattern in patterns)
+                text = Regex.Replace(text, pattern, "", RegexOptions.IgnoreCase);
+
+            // بقیه تمیزکاری‌ها
+            text = Regex.Replace(text, @"خبر[:：]\s*\d+|زمان مطالعه[:：]\s*\d+\s*دقیقه|\|\s*", " ", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"\s{2,}", " ").Trim();
 
             return text;
         }

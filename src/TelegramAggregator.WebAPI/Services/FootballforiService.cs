@@ -26,6 +26,8 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly AppSettings _appSettings;
         private readonly long _hiddenGroupId;
         private readonly Random _rnd = Random.Shared;
+        private readonly bool _isProduction;
+        private readonly string _botUserName;
 
         public FootballforiService(
             ITelegramBotClient bot,
@@ -35,7 +37,8 @@ namespace TelegramAggregator.WebAPI.Services
             NewsStorage newsStorage,
             IOptions<AppSettings> appSettings,
             IImageExtractor imageExtractor,
-            IFullDecriptionExtractor fullDecriptionExtractor)
+            IFullDecriptionExtractor fullDecriptionExtractor,
+            IHostEnvironment environment)
         {
             _bot = bot;
             _logger = logger;
@@ -47,6 +50,8 @@ namespace TelegramAggregator.WebAPI.Services
             _imageExtractor = imageExtractor;
             footbalForiChannel = _appSettings.Channels[0];
             _fullDecriptionExtractor = fullDecriptionExtractor;
+            _isProduction = environment.IsProduction();
+            _botUserName = _appSettings.BotUserName;
         }
 
 
@@ -87,7 +92,7 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
                 // حالت عادی: هر 5 دقیقه
-                await Task.Delay(TimeSpan.FromMinutes(15), ct);
+                await Task.Delay(TimeSpan.FromMinutes(10), ct);
             }
 
             _logger.LogWarning("حلقه واکشی RSS خاتمه یافت");
@@ -234,7 +239,7 @@ namespace TelegramAggregator.WebAPI.Services
 
                 _newsStorage.LogPublished(item);
 
-                var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item);
+                var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, _botUserName, _isProduction);
 
                 Message sentMessage;
                 if (!string.IsNullOrEmpty(item.ImageUrl))
@@ -257,10 +262,9 @@ namespace TelegramAggregator.WebAPI.Services
                         cancellationToken: ct);
                 }
 
-                //await Task.Delay(TimeSpan.FromMinutes(1), ct);
+                await Task.Delay(TimeSpan.FromMinutes(1), ct);
 
-
-                await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
+                //await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }
 

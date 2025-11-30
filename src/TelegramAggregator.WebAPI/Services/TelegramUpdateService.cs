@@ -20,7 +20,7 @@ namespace TelegramAggregator.Services
             _botClient = botClient;
             _logger = logger;
 
-            // Move the cleanup task here to avoid duplicate constructors
+            // پاک‌سازی دوره‌ای آیتم‌های منقضی شده
             _ = Task.Run(async () =>
             {
                 while (true)
@@ -31,11 +31,12 @@ namespace TelegramAggregator.Services
                         foreach (var kvp in ExpandStorage.ToArray())
                             if (kvp.Value.ExpireAt < now)
                                 ExpandStorage.TryRemove(kvp.Key, out _);
+
                         await Task.Delay(TimeSpan.FromHours(6));
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "خطا در پاک‌سازی ExpandStorage — ادامه می‌دم...");
+                        _logger.LogError(ex, "خطا در پاک‌سازی ExpandStorage");
                         await Task.Delay(TimeSpan.FromMinutes(10));
                     }
                 }
@@ -44,7 +45,6 @@ namespace TelegramAggregator.Services
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            // حتی اگه StartReceiving کرش کرد، دوباره شروع بشه
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
@@ -54,11 +54,12 @@ namespace TelegramAggregator.Services
                         HandleErrorAsync,
                         new Telegram.Bot.Polling.ReceiverOptions
                         {
-                            AllowedUpdates = [UpdateType.CallbackQuery], // Remove UpdateType.Message, not needed
+                            AllowedUpdates = [UpdateType.CallbackQuery, UpdateType.Message],
                             DropPendingUpdates = true
                         },
                         stoppingToken);
-                    _logger.LogInformation("TelegramUpdateService فعال شد — در انتظار کلیک روی 'ادامه خبر'");
+
+                    _logger.LogInformation("TelegramUpdateService فعال شد — در انتظار کلیک یا /start");
                     await Task.Delay(Timeout.Infinite, stoppingToken);
                 }
                 catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
@@ -71,8 +72,37 @@ namespace TelegramAggregator.Services
 
         private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
         {
-            if (update.CallbackQuery?.Data?.StartsWith("exp_") != true) return;
-            _ = Task.Run(async () => await SafeHandleExpand(bot, update.CallbackQuery!, ct), ct);
+            // 1. هندل کردن کلیک روی دکمه "متن کامل خبر"
+            if (update.CallbackQuery?.Data?.StartsWith("exp_") == true)
+            {
+                _ = Task.Run(async () => await SafeHandleExpand(bot, update.CallbackQuery!, ct), ct);
+                return;
+            }
+
+            // 2. هندل کردن دستور /start expand_... (وقتی کاربر از دکمه زیر پست میاد)
+            if (update.Message?.Text?.StartsWith("/start expand_") == true)
+            {
+                var payload = update.Message.Text["/start expand_".Length..].Trim();
+                var key = $"exp_{payload}";
+
+                if (ExpandStorage.TryRemove(key, out var data))
+                {
+                    var fullCaption = MessageTemplateFormatter.GetFullCaption(data.Item);
+                    await bot.SendMessage(
+                        chatId: update.Message.Chat.Id,
+                        text: fullCaption,
+                        parseMode: ParseMode.Html,
+                        linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+                        cancellationToken: ct);
+                }
+                else
+                {
+                    await bot.SendMessage(
+                        chatId: update.Message.Chat.Id,
+                        text: "این خبر منقضی شده یا قبلاً باز شده است.",
+                        cancellationToken: ct);
+                }
+            }
         }
 
         private async Task SafeHandleExpand(ITelegramBotClient bot, CallbackQuery cb, CancellationToken ct)
@@ -83,8 +113,7 @@ namespace TelegramAggregator.Services
             }
             catch (Exception ex)
             {
-                // هیچ استثنایی نباید از اینجا بیرون بیاد — برنامه هرگز کرش نمی‌کنه
-                _logger.LogError(ex, "خطای غیرمنتظره در HandleExpand — User: {UserId}, Callback: {Data}",
+                _logger.LogError(ex, "خطای غیرمنتظره در HandleExpand — User: {UserId}, Data: {Data}",
                     cb.From.Id, cb.Data);
             }
         }
@@ -93,57 +122,81 @@ namespace TelegramAggregator.Services
         {
             var callbackId = cb.Data!;
             var message = cb.Message!;
+            var userId = cb.From.Id;
+            var userName = string.IsNullOrEmpty(cb.From.FirstName) ? "کاربر" : cb.From.FirstName;
 
-            // لودینگ فوراً تموم بشه — حتی اگه بقیه کارها خطا بده
             await SafeAnswerCallback(bot, cb.Id);
 
+            if (!ExpandStorage.TryGetValue(callbackId, out var data))
+            {
+                await SafeAnswerCallback(bot, cb.Id, "این خبر منقضی شده یا قبلاً باز شده است", true, ct);
+                return;
+            }
+
+            var item = data.Item;
+            var fullCaption = MessageTemplateFormatter.GetFullCaption(item);
+            var botInfo = await bot.GetMe(ct);
+            var botUsername = botInfo.Username!;
+
+            bool sentPrivately = false;
+
+            // مرحله ۱: تلاش برای ارسال به چت خصوصی
             try
             {
-                if (!ExpandStorage.TryRemove(callbackId, out var data))
-                {
-                    await SafeAnswerCallback(bot, cb.Id, "این خبر منقضی شده یا قبلاً باز شده است", true, ct);
-                    return;
-                }
-
-                var item = data.Item;
-                var photoUrl = item.ImageUrl;
-                var fullCaption = MessageTemplateFormatter.GetFullCaption(item);
-
-                
                 await bot.SendMessage(
-                               chatId: cb.From.Id,
-                               //chatId: cb.Message!.Chat.Id,
-                               text: fullCaption,
-                               parseMode: ParseMode.Html,
-                               replyParameters: new ReplyParameters { MessageId = cb.Message.MessageId },
-                               linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
-                               cancellationToken: ct);
-                await bot.EditMessageCaption(
-                                    chatId: message.Chat.Id,
-                                    messageId: message.MessageId,
-                                    caption: "☑️ متن کامل در پیام بعدی",
-                                    replyMarkup: null,            // حذف دکمه
-                                    parseMode: ParseMode.Html,
-                                    cancellationToken: ct
-                                   );
+                    chatId: userId,
+                    text: fullCaption,
+                    parseMode: ParseMode.Html,
+                    linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+                    replyMarkup: new InlineKeyboardMarkup(
+                        InlineKeyboardButton.WithUrl("بازگشت به پست",
+                            $"https://t.me/{message.Chat.Username}/{message.MessageId}")),
+                    cancellationToken: ct);
 
+                sentPrivately = true;
+            }
+            catch (ApiRequestException ex) when (ex.ErrorCode == 403 || ex.Message.Contains("bot can't send messages"))
+            {
+                sentPrivately = false;
+            }
 
-                await SafeAnswerCallback(bot, cb.Id, "متن کامل ارسال شد");
-            }
-            catch (ApiRequestException ex) when (
-                ex.Message.Contains("message is not modified") ||
-                ex.Message.Contains("query is too old") ||
-                ex.Message.Contains("response timeout expired") ||
-                ex.Message.Contains("query ID is invalid") ||
-                ex.Message.Contains("message to edit not found"))
+            // مرحله ۲: اگر نشد خصوصی بفرستیم → کاربر رو راهنمایی کنیم
+            if (!sentPrivately)
             {
-                await SafeAnswerCallback(bot, cb.Id, "متن کامل قبلاً نمایش داده شده یا منقضی شده است");
+                var payload = callbackId["exp_".Length..];
+                var startLink = $"https://t.me/{botUsername}?start=expand_{payload}";
+
+                await bot.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: $"<a href=\"tg://user?id={userId}\">{Escape(userName)}</a> درخواست متن کامل کرد\n\n" +
+                          "برای دریافت متن کامل در چت خصوصی، روی دکمه زیر کلیک کنید:",
+                    parseMode: ParseMode.Html,
+                    replyParameters: new ReplyParameters { MessageId = message.MessageId },
+                    replyMarkup: new InlineKeyboardMarkup(
+                        InlineKeyboardButton.WithUrl("دریافت متن کامل در چت خصوصی", startLink)),
+                    linkPreviewOptions: new LinkPreviewOptions { IsDisabled = true },
+                    cancellationToken: ct);
+
+                // داده رو حذف نکنیم تا وقتی کاربر با /start expand_ بیاد
+                await SafeAnswerCallback(bot, cb.Id, "لطفاً روی دکمه زیر کلیک کنید تا متن کامل در چت خصوصی بیاید");
             }
-            catch (Exception ex)
+            else
             {
-                _logger.LogError(ex, "خطا در نمایش متن کامل — User: {UserId}, Callback: {Data}", cb.From.Id, callbackId);
-                await SafeAnswerCallback(bot, cb.Id, "خطایی رخ داد", true, ct);
+                // اگر موفق شدیم خصوصی بفرستیم → داده رو حذف کنیم
+                ExpandStorage.TryRemove(callbackId, out _);
+                await SafeAnswerCallback(bot, cb.Id, "متن کامل به چت خصوصی شما ارسال شد");
             }
+
+            // مرحله ۳: فقط دکمه این کاربر حذف بشه (بقیه هنوز داشته باشن)
+            try
+            {
+                await bot.EditMessageReplyMarkup(
+                    chatId: message.Chat.Id,
+                    messageId: message.MessageId,
+                    replyMarkup: null,
+                    cancellationToken: ct);
+            }
+            catch { /* مهم نیست */ }
         }
 
         private static async Task SafeAnswerCallback(ITelegramBotClient bot, string callbackId,
@@ -153,7 +206,7 @@ namespace TelegramAggregator.Services
             {
                 await bot.AnswerCallbackQuery(callbackId, text, showAlert, cancellationToken: ct);
             }
-            catch { /* هیچوقت کرش نکن — حتی اگه Answer هم خطا بده */ }
+            catch { }
         }
 
         private Task HandleErrorAsync(ITelegramBotClient bot, Exception ex, CancellationToken ct)
@@ -168,5 +221,8 @@ namespace TelegramAggregator.Services
             ExpandStorage[callbackId] = new ExpandData(item, photo, DateTime.UtcNow.AddHours(24));
             return callbackId;
         }
+
+        private static string Escape(string text) =>
+            text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
     }
 }
