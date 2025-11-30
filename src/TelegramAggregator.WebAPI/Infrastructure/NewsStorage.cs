@@ -122,22 +122,16 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             var channel = _sourceChannels.GetOrAdd(source, _ => Channel.CreateBounded<NewsItem>(_channelOptions));
             var mirrorQueue = _debugMirror.GetOrAdd(source, _ => new ConcurrentQueue<NewsItem>());
 
-            bool written = channel.Writer.TryWrite(item);
-            if (!written)
-            {
-                // صف پره → WriteAsync باعث دراپ oldest می‌شه
+            if (!channel.Writer.TryWrite(item))
                 await channel.Writer.WriteAsync(item, ct);
 
-                // آینه رو هماهنگ کن: قدیمی‌ترین‌ها رو حذف کن تا با ظرفیت واقعی برابر بشه
-                while (mirrorQueue.Count > _channelOptions.Capacity)
-                {
-                    mirrorQueue.TryDequeue(out _);
-                }
-            }
+            int realCount = channel.Reader.Count;
 
-            // در هر صورت، خبر جدید رو اضافه کن
+            // فقط این یک خط کافیه — همیشه!
+            while (mirrorQueue.Count > realCount)
+                mirrorQueue.TryDequeue(out _);
+
             mirrorQueue.Enqueue(item);
-
 
             // فقط الان! آخرین خبر این منبع رو آپدیت کن + مدیریت حافظه
             lock (_lastSentLock)
@@ -164,9 +158,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         }
 
         private void LogOrUpdate(DebugFeedItem item)
-        {
-           
-
+        {          
 
             var key = item.UniqueKey;
 

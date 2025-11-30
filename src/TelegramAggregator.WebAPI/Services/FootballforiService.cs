@@ -23,11 +23,10 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly NewsStorage _newsStorage;
         private readonly IImageExtractor _imageExtractor;
         private readonly IFullDecriptionExtractor _fullDecriptionExtractor;
-        private readonly AppSettings _appSettings;
-        private readonly long _hiddenGroupId;
+        private readonly AppSettings _appSettings; 
         private readonly Random _rnd = Random.Shared;
         private readonly bool _isProduction;
-        private readonly string _botUserName;
+   
 
         public FootballforiService(
             ITelegramBotClient bot,
@@ -45,13 +44,12 @@ namespace TelegramAggregator.WebAPI.Services
             _appSettings = appSettings.Value;
             _httpHelper = httpHelper;
             _rssParser = rssParser;
-            _newsStorage = newsStorage;
-            _hiddenGroupId = _appSettings.HiddenGroupId;
+            _newsStorage = newsStorage; 
             _imageExtractor = imageExtractor;
             footbalForiChannel = _appSettings.Channels[0];
             _fullDecriptionExtractor = fullDecriptionExtractor;
             _isProduction = environment.IsProduction();
-            _botUserName = _appSettings.BotUserName;
+           
         }
 
 
@@ -131,7 +129,6 @@ namespace TelegramAggregator.WebAPI.Services
 
 
             var videoKeywords = _appSettings.VideoKeywords;
-
 
             var acceptedItems = new List<NewsItem>();
 
@@ -239,7 +236,9 @@ namespace TelegramAggregator.WebAPI.Services
 
                 _newsStorage.LogPublished(item);
 
-                var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, _botUserName, _isProduction);
+                var me = await _bot.GetMe();
+                string botUsername = me.Username ?? "bot_username";             
+                var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, botUsername, _isProduction);
 
                 Message sentMessage;
                 if (!string.IsNullOrEmpty(item.ImageUrl))
@@ -262,9 +261,9 @@ namespace TelegramAggregator.WebAPI.Services
                         cancellationToken: ct);
                 }
 
-                await Task.Delay(TimeSpan.FromMinutes(1), ct);
 
-                //await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
+
+                await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }
 
