@@ -125,13 +125,18 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             if (!channel.Writer.TryWrite(item))
                 await channel.Writer.WriteAsync(item, ct);
 
+         
+
+            mirrorQueue.Enqueue(item);
+
             int realCount = channel.Reader.Count;
 
-            // فقط این یک خط کافیه — همیشه!
             while (mirrorQueue.Count > realCount)
                 mirrorQueue.TryDequeue(out _);
 
-            mirrorQueue.Enqueue(item);
+            // بیمه اضافی (تقریباً هیچ‌وقت اجرا نمی‌شه)
+            while (mirrorQueue.Count < realCount)
+                mirrorQueue.Enqueue(item);
 
             // فقط الان! آخرین خبر این منبع رو آپدیت کن + مدیریت حافظه
             lock (_lastSentLock)
@@ -158,7 +163,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         }
 
         private void LogOrUpdate(DebugFeedItem item)
-        {          
+        {
 
             var key = item.UniqueKey;
 
@@ -215,7 +220,8 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 .ToDictionary(
                     kvp => kvp.Key,
                     kvp => kvp.Value
-                        .Select(item => new DebugFeedItem {
+                        .Select(item => new DebugFeedItem
+                        {
                             SourceName = kvp.Key,
                             Title = item.Title ?? "بدون عنوان",
                             Link = item.Link,
