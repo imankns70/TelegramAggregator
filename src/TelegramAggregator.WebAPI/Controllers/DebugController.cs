@@ -51,8 +51,7 @@ namespace TelegramAggregator.WebAPI.Controllers
                     }).ToList(),
 
                 // آخرین پردازش‌شده‌ها (قبول + رد + در صف)
-                recentProcessed = _newsStorage.GetRecentProcessed(80)
-                .OrderByDescending(x => x.ProcessedAt)
+                recentProcessed = _newsStorage.GetRecentProcessed(80)              
     .Select(x => new
     {
         source = x.SourceName ?? "نامشخص",

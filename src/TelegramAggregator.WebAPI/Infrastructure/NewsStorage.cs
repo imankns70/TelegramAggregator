@@ -122,23 +122,23 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             var channel = _sourceChannels.GetOrAdd(source, _ => Channel.CreateBounded<NewsItem>(_channelOptions));
             var mirrorQueue = _debugMirror.GetOrAdd(source, _ => new ConcurrentQueue<NewsItem>());
 
-            if (!channel.Writer.TryWrite(item))
+            bool wasFull = !channel.Writer.TryWrite(item);
+
+            if (wasFull)
                 await channel.Writer.WriteAsync(item, ct);
-
-         
-
-            mirrorQueue.Enqueue(item);
 
             int realCount = channel.Reader.Count;
 
+            // اگر صف پر بود و WriteAsync اجرا شد → حتماً یه خبر قدیمی دراپ شده
+            if (wasFull)
+                mirrorQueue.TryDequeue(out _);
+
+            // بیمه اضافی برای حالات نادر
             while (mirrorQueue.Count > realCount)
                 mirrorQueue.TryDequeue(out _);
 
-            // بیمه اضافی (تقریباً هیچ‌وقت اجرا نمی‌شه)
-            while (mirrorQueue.Count < realCount)
-                mirrorQueue.Enqueue(item);
+            mirrorQueue.Enqueue(item);
 
-            // فقط الان! آخرین خبر این منبع رو آپدیت کن + مدیریت حافظه
             lock (_lastSentLock)
             {
                 // اگه اولین باره، به ترتیب اضافه کن
@@ -208,7 +208,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                        .ToList();
 
         public IReadOnlyList<DebugFeedItem> GetRecentProcessed(int take = 40) =>
-            _debugItems.Values.Take(take).ToList();
+            _debugItems.Values.OrderByDescending(a=> a.ProcessedAt).Take(take).ToList();
 
         public IReadOnlyDictionary<string, int> GetQueueCounts() =>
             _sourceChannels.ToDictionary(x => x.Key, x => x.Value.Reader.Count);

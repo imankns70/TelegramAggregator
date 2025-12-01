@@ -23,10 +23,10 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly NewsStorage _newsStorage;
         private readonly IImageExtractor _imageExtractor;
         private readonly IFullDecriptionExtractor _fullDecriptionExtractor;
-        private readonly AppSettings _appSettings; 
+        private readonly AppSettings _appSettings;
         private readonly Random _rnd = Random.Shared;
         private readonly bool _isProduction;
-   
+
 
         public FootballforiService(
             ITelegramBotClient bot,
@@ -44,12 +44,12 @@ namespace TelegramAggregator.WebAPI.Services
             _appSettings = appSettings.Value;
             _httpHelper = httpHelper;
             _rssParser = rssParser;
-            _newsStorage = newsStorage; 
+            _newsStorage = newsStorage;
             _imageExtractor = imageExtractor;
             footbalForiChannel = _appSettings.Channels[0];
             _fullDecriptionExtractor = fullDecriptionExtractor;
             _isProduction = environment.IsProduction();
-           
+
         }
 
 
@@ -236,8 +236,9 @@ namespace TelegramAggregator.WebAPI.Services
 
                 _newsStorage.LogPublished(item);
 
+                
                 var me = await _bot.GetMe();
-                string botUsername = me.Username ?? "bot_username";             
+                string botUsername = me.Username ?? "bot_username";
                 var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, botUsername, _isProduction);
 
                 Message sentMessage;
@@ -262,7 +263,7 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
 
-
+              
                 await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }
