@@ -54,6 +54,7 @@ namespace TelegramAggregator.Services
                         HandleErrorAsync,
                         new Telegram.Bot.Polling.ReceiverOptions
                         {
+                            //AllowedUpdates = Array.Empty<UpdateType>(),
                             AllowedUpdates = [UpdateType.CallbackQuery, UpdateType.Message],
                             DropPendingUpdates = true
                         },

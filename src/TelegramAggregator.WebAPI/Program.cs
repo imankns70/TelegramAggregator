@@ -100,7 +100,7 @@ builder.Services.AddSingleton<ITelegramBotClient>(sp =>
 
 
 builder.Services.AddSingleton<HandleExpandCore>();
- builder.Services.AddHostedService<TelegramUpdateService>();
+ //builder.Services.AddHostedService<TelegramUpdateService>();
 //if (builder.Environment.IsDevelopment())
 //{
    
@@ -122,11 +122,11 @@ var app = builder.Build();
 
 //if (app.Environment.IsProduction())
 //{
-//    using (var scope = app.Services.CreateScope())
-//    {
-//        var bot = scope.ServiceProvider.GetRequiredService<ITelegramBotClient>();
-//        await bot.SetWebhook("https://telegramaggregator.liara.run/api/Aggregator/update");
-//    }
+//using (var scope = app.Services.CreateScope())
+//{
+//    var bot = scope.ServiceProvider.GetRequiredService<ITelegramBotClient>();
+//    await bot.SetWebhook("https://telegramaggregator.liara.run/api/Aggregator/update");
+//}
 //}
 
 

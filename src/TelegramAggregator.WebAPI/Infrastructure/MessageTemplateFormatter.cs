@@ -47,12 +47,12 @@ namespace TelegramAggregator.Services
             if (isProduction)
             {
                 // ذخیره برای callback
-                callbackId = HandleExpandCore.StoreForExpand(item);
                 //var callbackId = TelegramUpdateService.StoreForExpand(item);
             }
             else
             {
-                callbackId = TelegramUpdateService.StoreForExpand(item);
+                callbackId = HandleExpandCore.StoreForExpand(item);
+                //callbackId = TelegramUpdateService.StoreForExpand(item);
             }
             // کپشن نهایی با فرمت دلخواه
             var caption = FormatedMessage(title, shortDesc, preview);
