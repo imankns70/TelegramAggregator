@@ -242,6 +242,7 @@ namespace TelegramAggregator.WebAPI.Services
                 var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, botUsername, _isProduction);
 
                 Message sentMessage;
+             
                 if (!string.IsNullOrEmpty(item.ImageUrl))
                 {
                     sentMessage = await _bot.SendPhoto(
