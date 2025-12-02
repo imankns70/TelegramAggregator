@@ -43,27 +43,32 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         {
             item = null;
 
-            var channels = _sourceChannels.Values
-                .Where(ch => ch.Reader.Count > 0)
-                .ToList();
-
-            if (!channels.Any())
+            // Shuffle channels to avoid bias
+            var channels = _sourceChannels.Values.ToList();
+            if (channels.Count == 0)
                 return false;
 
-            var selected = channels[Random.Shared.Next(channels.Count)];
-
-            if (!selected.Reader.TryRead(out var readItem))
-                return false;
-
-            item = readItem;
-
-
-            if (item != null && _debugMirror.TryGetValue(item.SourceName, out var mirrorQueue))
+            // انتخاب تصادفی یک کانال تا زمانی که آیتم داشته باشد
+            for (int i = 0; i < channels.Count; i++)
             {
-                mirrorQueue.TryDequeue(out _);
+                var idx = Random.Shared.Next(channels.Count);
+                var channel = channels[idx];
+
+                if (!channel.Reader.TryRead(out var readItem))
+                    continue;
+
+                item = readItem;
+
+                // MIRROR SYNCHRONIZATION
+                if (_debugMirror.TryGetValue(item.SourceName, out var mirrorQueue))
+                {
+                    mirrorQueue.TryDequeue(out _); // drop oldest to reflect real read
+                }
+
+                return true;
             }
 
-            return true;
+            return false;
         }
 
         public async ValueTask AddAsync(NewsItem item, CancellationToken ct = default)
@@ -118,26 +123,28 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             // قبول شد!
             LogAccepted(item);
 
-            // خبر قبول شد — برو تو صف منبع خودت
             var channel = _sourceChannels.GetOrAdd(source, _ => Channel.CreateBounded<NewsItem>(_channelOptions));
             var mirrorQueue = _debugMirror.GetOrAdd(source, _ => new ConcurrentQueue<NewsItem>());
 
+            // تلاش برای نوشتن در کانال
             bool wasFull = !channel.Writer.TryWrite(item);
 
+            // اگر پر بود → کانال DropOldest انجام می‌دهد
+            // و WriteAsync جایگزین می‌کند
             if (wasFull)
+            {
                 await channel.Writer.WriteAsync(item, ct);
-
-            int realCount = channel.Reader.Count;
-
-            // اگر صف پر بود و WriteAsync اجرا شد → حتماً یه خبر قدیمی دراپ شده
-            if (wasFull)
+                // آینه هم باید DropOldest انجام دهد
                 mirrorQueue.TryDequeue(out _);
+            }
 
-            // بیمه اضافی برای حالات نادر
-            while (mirrorQueue.Count > realCount)
-                mirrorQueue.TryDequeue(out _);
-
+            // حالا آیتم جدید را در آینه اضافه می‌کنیم
             mirrorQueue.Enqueue(item);
+
+            // بیمهٔ ظرفیت — هرگز بیشتر از Capacity نشود
+            while (mirrorQueue.Count > _channelOptions.Capacity)
+                mirrorQueue.TryDequeue(out _);
+
 
             lock (_lastSentLock)
             {
