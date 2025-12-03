@@ -239,6 +239,7 @@ namespace TelegramAggregator.WebAPI.Services
                 
                 var me = await _bot.GetMe();
                 string botUsername = me.Username ?? "bot_username";
+                
                 var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, botUsername, _isProduction);
 
                 Message sentMessage;

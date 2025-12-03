@@ -44,26 +44,26 @@ namespace TelegramAggregator.Services
             // ساخت خلاصه هوشمند (برای پیش‌نمایش)
             string preview = SmartPreview(fullDesc);
             string callbackId = string.Empty;
-            if (isProduction)
-            {
-                // ذخیره برای callback
-                //var callbackId = TelegramUpdateService.StoreForExpand(item);
-            }
-            else
-            {
-                callbackId = HandleExpandCore.StoreForExpand(item);
-                //callbackId = TelegramUpdateService.StoreForExpand(item);
-            }
+
+            // ذخیره برای callback
+            //callbackId = TelegramUpdateService.StoreForExpand(item);
+
+
+            callbackId = HandleExpandCore.StoreForExpand(item);
+
+            //callbackId = TelegramUpdateService.StoreForExpand(item);
+
             // کپشن نهایی با فرمت دلخواه
             var caption = FormatedMessage(title, shortDesc, preview);
 
             // دکمه InlineKeyboard برای نمایش متن کامل
+            //var keyboard = new InlineKeyboardMarkup(
+            //           InlineKeyboardButton.WithUrl(
+            //                   "متن کامل خبر",
+            //                   $"https://t.me/{botUsername}?start=expand_{callbackId.Replace("exp_", "")}"));
+
             var keyboard = new InlineKeyboardMarkup(
-                       InlineKeyboardButton.WithUrl(
-                               "متن کامل خبر",
-                               $"https://t.me/{botUsername}?start=expand_{callbackId.Replace("exp_", "")}"
-                           )
-                               );
+                       InlineKeyboardButton.WithCallbackData("متن کامل خبر", callbackId));
 
             return (caption, keyboard);
         }

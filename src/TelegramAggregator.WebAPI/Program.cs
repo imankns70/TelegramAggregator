@@ -100,15 +100,12 @@ builder.Services.AddSingleton<ITelegramBotClient>(sp =>
 
 
 builder.Services.AddSingleton<HandleExpandCore>();
- //builder.Services.AddHostedService<TelegramUpdateService>();
-//if (builder.Environment.IsDevelopment())
-//{
-   
-//}
-//else
-//{
-//    builder.Services.AddHostedService<ExpandStorageCleanupService>();
-//}
+//builder.Services.AddHostedService<TelegramUpdateService>();
+if (builder.Environment.IsProduction())
+{
+    builder.Services.AddHostedService<ExpandStorageCleanupService>();
+}
+ 
 
 
 
@@ -120,14 +117,15 @@ builder.Services.AddHostedService<FootballforiBackgroundService>(); // این خ
 // ------------------- اپلیکیشن -------------------
 var app = builder.Build();
 
-//if (app.Environment.IsProduction())
-//{
-//using (var scope = app.Services.CreateScope())
-//{
-//    var bot = scope.ServiceProvider.GetRequiredService<ITelegramBotClient>();
-//    await bot.SetWebhook("https://telegramaggregator.liara.run/api/Aggregator/update");
-//}
-//}
+if (app.Environment.IsProduction())
+{
+    using (var scope = app.Services.CreateScope())
+    {
+        var bot = scope.ServiceProvider.GetRequiredService<ITelegramBotClient>();
+        string webhookUrl = "https://telegramaggregator.liara.run/api/Aggregator/update";
+        await bot.SetWebhook(webhookUrl);
+    }
+}
 
 
 // Middleware ها
