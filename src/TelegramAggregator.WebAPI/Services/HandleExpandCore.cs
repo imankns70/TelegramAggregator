@@ -15,38 +15,54 @@ namespace TelegramAggregator.WebAPI.Services
         private record ExpandData(NewsItem Item, InputFileUrl? Photo, DateTime ExpireAt);
 
         private readonly ITelegramBotClient _bot;
-        private string _botUsername = "bot_username"; 
+        private string _botUsername = "bot_username";
+
         public HandleExpandCore(ITelegramBotClient botClient)
         {
             _bot = botClient;
 
-            // یکبار یوزرنیم ربات رو می‌گیریم (برای لینک ?start=expand_)
             _ = Task.Run(async () =>
             {
                 try
                 {
                     var me = await botClient.GetMe();
-                    _botUsername = me.Username ?? "ot_username"; // اگر یوزرنیم نداره، دستی وارد کن
+                    _botUsername = me.Username ?? "bot_username";
                 }
                 catch
                 {
-                    _botUsername = "bot_username"; // در صورت خطا، دستی تنظیم کن
+                    _botUsername = "bot_username";
                 }
             });
         }
 
+        // ساخت callbackId اختصاصی برای هر کاربر
+        public static string StoreForExpand(NewsItem item, InputFileUrl? photo = null, long? userId = null)
+        {
+            var callbackId = $"exp_{Guid.NewGuid():N}";
+            if (userId.HasValue)
+                callbackId += $"_{userId.Value}";
+
+            ExpandStorage[callbackId] = new ExpandData(item, photo, DateTime.UtcNow.AddHours(24));
+            return callbackId;
+        }
+
         public async Task HandleExpand(CallbackQuery cb, CancellationToken ct)
         {
-            var callbackId = cb.Data!;
+            var callbackData = cb.Data!;
             var message = cb.Message!;
             var userId = cb.From.Id;
             var userName = string.IsNullOrEmpty(cb.From.FirstName) ? "کاربر" : cb.From.FirstName;
 
-            // فوراً لودینگ رو ببند
             await SafeAnswer(cb.Id, ct);
 
-            // اگر داده وجود نداشت یا قبلاً استفاده شده
-            if (!ExpandStorage.TryGetValue(callbackId, out var data))
+            // بررسی اینکه callback متعلق به همان کاربر است
+            if (!callbackData.EndsWith($"_{userId}"))
+            {
+                await SafeAnswer(cb.Id, ct, "این دکمه برای شما نیست.", true);
+                return;
+            }
+
+            if (!ExpandStorage.TryGetValue(callbackData, out var data))
             {
                 await SafeAnswer(cb.Id, ct, "این خبر منقضی شده یا قبلاً باز شده است", true);
                 return;
@@ -57,7 +73,6 @@ namespace TelegramAggregator.WebAPI.Services
 
             bool sentPrivately = false;
 
-            // مرحله ۱: تلاش برای ارسال به چت خصوصی
             try
             {
                 await _bot.SendMessage(
@@ -71,7 +86,7 @@ namespace TelegramAggregator.WebAPI.Services
                     cancellationToken: ct);
 
                 sentPrivately = true;
-                ExpandStorage.TryRemove(callbackId, out _); // فقط اگر موفق بود حذف کن
+                ExpandStorage.TryRemove(callbackData, out _);
             }
             catch (ApiRequestException ex) when (ex.ErrorCode == 403 ||
                 ex.Message.Contains("bot can't send messages") ||
@@ -80,11 +95,9 @@ namespace TelegramAggregator.WebAPI.Services
                 sentPrivately = false;
             }
 
-            // مرحله ۲: اگر نشد خصوصی بفرستیم → راهنمایی عمومی با دکمه مستقیم
             if (!sentPrivately)
             {
-                var payload = callbackId["exp_".Length..];
-                var startLink = $"https://t.me/{_botUsername}?start=expand_{payload}";
+                var startLink = $"https://t.me/{_botUsername}?start={callbackData}";
 
                 await _bot.SendMessage(
                     chatId: message.Chat.Id,
@@ -104,16 +117,26 @@ namespace TelegramAggregator.WebAPI.Services
                 await SafeAnswer(cb.Id, ct, "متن کامل به چت خصوصی شما ارسال شد");
             }
 
-            // مرحله ۳: فقط دکمه این کاربر حذف بشه (بقیه هنوز داشته باشن!)
+            // حذف دکمه فقط برای این کاربر
             try
             {
-                await _bot.EditMessageReplyMarkup(
-                    chatId: message.Chat.Id,
-                    messageId: message.MessageId,
-                    replyMarkup: null,
-                    cancellationToken: ct);
+                if (message.ReplyMarkup is InlineKeyboardMarkup markup)
+                {
+                    var newButtons = markup.InlineKeyboard
+                        .Select(row => row.Where(btn => btn.CallbackData != callbackData).ToArray())
+                        .Where(r => r.Length > 0)
+                        .ToArray();
+
+                    InlineKeyboardMarkup? updatedMarkup = newButtons.Length > 0 ? new InlineKeyboardMarkup(newButtons) : null;
+
+                    await _bot.EditMessageReplyMarkup(
+                        chatId: message.Chat.Id,
+                        messageId: message.MessageId,
+                        replyMarkup: updatedMarkup,
+                        cancellationToken: ct);
+                }
             }
-            catch { /* مهم نیست — تلگرام خودش مدیریت می‌کنه */ }
+            catch { }
         }
 
         private async Task SafeAnswer(string callbackId, CancellationToken ct, string text = "", bool alert = false)
@@ -133,14 +156,6 @@ namespace TelegramAggregator.WebAPI.Services
                     ExpandStorage.TryRemove(kvp.Key, out _);
         }
 
-        public static string StoreForExpand(NewsItem item, InputFileUrl? photo = null)
-        {
-            var callbackId = $"exp_{Guid.NewGuid():N}";
-            ExpandStorage[callbackId] = new ExpandData(item, photo, DateTime.UtcNow.AddHours(24));
-            return callbackId;
-        }
-
-        // برای جلوگیری از خطای HTML در تگ کردن کاربر
         private static string Escape(string text) =>
             text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
     }
