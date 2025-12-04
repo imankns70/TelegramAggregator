@@ -36,9 +36,7 @@ public class RssParser : IRssParser
             var feedTitle = feed.Title?.Text ?? "RSS";
 
 
-            result = feed.Items
-                .Where(a => !a.Title.Text.Contains("ویدیو", StringComparison.OrdinalIgnoreCase))
-                .Where(item => item.PublishDate >= cutoff)
+            result = feed.Items             
               .Where(item =>
               {
                   var rawLink = item.Links.FirstOrDefault()?.Uri?.ToString()?.Trim();

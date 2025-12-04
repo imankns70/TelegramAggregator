@@ -17,15 +17,13 @@ namespace TelegramAggregator.WebAPI.Services
     {
         private readonly ITelegramBotClient _bot;
         private readonly ILogger<FootballforiService> _logger;
-        private readonly ChannelConfig footbalForiChannel;
         private readonly IHttpHelper _httpHelper;
         private readonly IRssParser _rssParser;
         private readonly NewsStorage _newsStorage;
         private readonly IImageExtractor _imageExtractor;
         private readonly IFullDecriptionExtractor _fullDecriptionExtractor;
-        private readonly AppSettings _appSettings;
+        private readonly FootbalForiSettings _footbalForiSettings;
         private readonly Random _rnd = Random.Shared;
-        private readonly bool _isProduction;
 
 
         public FootballforiService(
@@ -41,14 +39,13 @@ namespace TelegramAggregator.WebAPI.Services
         {
             _bot = bot;
             _logger = logger;
-            _appSettings = appSettings.Value;
+            _footbalForiSettings = appSettings.Value.FootbalForiSettings;
             _httpHelper = httpHelper;
             _rssParser = rssParser;
             _newsStorage = newsStorage;
             _imageExtractor = imageExtractor;
-            footbalForiChannel = _appSettings.Channels[0];
             _fullDecriptionExtractor = fullDecriptionExtractor;
-            _isProduction = environment.IsProduction();
+
 
         }
 
@@ -82,7 +79,7 @@ namespace TelegramAggregator.WebAPI.Services
 
                 try
                 {
-                    await FetchAndFilterNewsAndAddToQueueAsync(footbalForiChannel.Sources, ct);
+                    await FetchAndFilterNewsAndAddToQueueAsync(_footbalForiSettings.Sources, ct);
                 }
                 catch (Exception ex)
                 {
@@ -128,7 +125,8 @@ namespace TelegramAggregator.WebAPI.Services
             }
 
 
-            var videoKeywords = _appSettings.VideoKeywords;
+            var videoKeywords = _footbalForiSettings.VideoKeywords;
+            var otherSportsKeywords = _footbalForiSettings.OtherSportsKeywords;
 
             var acceptedItems = new List<NewsItem>();
 
@@ -138,9 +136,21 @@ namespace TelegramAggregator.WebAPI.Services
             {
                 var text = $"{item.Title} {item.ShortDescription}".ToLowerInvariant();
 
-                if (videoKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
+                if (otherSportsKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
                 {
-                    _newsStorage.LogRejected(item, "حاوی ویدئو/پخش زنده (رد شده)");
+                    _newsStorage.LogRejected(item, "غیر فوتبالی");
+                    continue;
+
+                }
+                else if (videoKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
+                {
+                    _newsStorage.LogRejected(item, "عنوان ویدئو");
+                    continue;
+
+                }
+                else if (text.Contains("ترکیب رسمی"))
+                {
+                    _newsStorage.LogRejected(item, "ترکیب رسمی");
                     continue;
 
                 }
@@ -150,11 +160,6 @@ namespace TelegramAggregator.WebAPI.Services
                     continue;
                 }
 
-                else if (item.Title.Length < 15)
-                {
-                    _newsStorage.LogRejected(item, "عنوان خیلی کوتاه");
-                    continue;
-                }
 
 
                 // خبر قبول شد !
@@ -196,7 +201,7 @@ namespace TelegramAggregator.WebAPI.Services
                 try
                 {
                     // وقتی آماده شدی اینو فعال کن:
-                    await SendToTelegramAsync(item, footbalForiChannel, ct);
+                    await SendToTelegramAsync(item, _footbalForiSettings.ChannelId, ct);
 
                     // تست: فرض می‌کنیم ارسال موفق بود
                     _logger.LogInformation("ارسال شد → [{Source}] {Title}", item.SourceName, item.Title.Truncate(60));
@@ -214,7 +219,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             }
         }
-        private async Task SendToTelegramAsync(NewsItem item, ChannelConfig channelConfig, CancellationToken ct)
+        private async Task SendToTelegramAsync(NewsItem item, long channelId, CancellationToken ct)
         {
             var fullDescTask = _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link);
             var imageTask = _imageExtractor.ExtractMainImageAsync(item.Link, ct);
@@ -223,7 +228,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             item.ImageUrl = await imageTask;
             item.FullDescription = await fullDescTask;
-           bool hasVideo = await hasVideoTask;
+            bool hasVideo = await hasVideoTask;
             if (hasVideo)
             {
                 _newsStorage.LogRejected(item, "حاوی تگ ویدئو");
@@ -236,8 +241,6 @@ namespace TelegramAggregator.WebAPI.Services
 
                 _newsStorage.LogPublished(item);
 
-
-              
                 var caption = MessageTemplateFormatter.GetCaption(item);
 
                 Message sentMessage;
@@ -245,25 +248,23 @@ namespace TelegramAggregator.WebAPI.Services
                 if (!string.IsNullOrEmpty(item.ImageUrl))
                 {
                     sentMessage = await _bot.SendPhoto(
-                        chatId: channelConfig.ChannelId, // 👈 مستقیماً کانال
+                        chatId: channelId, // 👈 مستقیماً کانال
                         photo: new InputFileUrl(item.ImageUrl),
                         caption: caption,
-                        parseMode: ParseMode.Html, 
+                        parseMode: ParseMode.Html,
                         cancellationToken: ct);
                 }
                 else
                 {
                     sentMessage = await _bot.SendMessage(
-                        chatId: channelConfig.ChannelId, // 👈 مستقیماً کانال
+                        chatId: channelId, // 👈 مستقیماً کانال
                         text: caption,
-                        parseMode: ParseMode.Html, 
+                        parseMode: ParseMode.Html,
                         cancellationToken: ct);
                 }
-
-
-
-                await Task.Delay(TimeSpan.FromSeconds(60), ct);
-                //await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
+                 
+                
+                await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }
 

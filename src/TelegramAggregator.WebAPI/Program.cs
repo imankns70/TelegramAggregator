@@ -44,8 +44,8 @@ builder.Logging.AddConsole();
 builder.Services.AddSingleton<NewsStorage>(sp =>
 {
     var settings = sp.GetRequiredService<IOptions<AppSettings>>().Value;
-    return new NewsStorage(queueCapacityPerSource: settings.QueueCapacityPerSource,
-        maxSeenKeys: settings.MaxSeenKeys
+    return new NewsStorage(queueCapacityPerSource: settings.FootbalForiSettings.QueueCapacityPerSource,
+        maxSeenKeys: settings.FootbalForiSettings.MaxSeenKeys
     );
 });
 
@@ -92,7 +92,7 @@ builder.Services.AddScoped<IFullDecriptionExtractor, FullDecriptionExtractor>();
 // Telegram Bot
 builder.Services.AddSingleton<ITelegramBotClient>(sp =>
 {
-    var token = sp.GetRequiredService<IOptions<AppSettings>>().Value.BotToken
+    var token = sp.GetRequiredService<IOptions<AppSettings>>().Value.FootbalForiSettings.BotToken
                  ?? throw new InvalidOperationException("BotToken تنظیم نشده است!");
     return new TelegramBotClient(token);
 
