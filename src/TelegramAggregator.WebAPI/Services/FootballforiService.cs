@@ -223,7 +223,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             item.ImageUrl = await imageTask;
             item.FullDescription = await fullDescTask;
-            bool hasVideo = await hasVideoTask;
+           bool hasVideo = await hasVideoTask;
             if (hasVideo)
             {
                 _newsStorage.LogRejected(item, "حاوی تگ ویدئو");
@@ -236,22 +236,19 @@ namespace TelegramAggregator.WebAPI.Services
 
                 _newsStorage.LogPublished(item);
 
-                
-                var me = await _bot.GetMe();
-                string botUsername = me.Username ?? "bot_username";
-                
-                var (caption, keyboard) = MessageTemplateFormatter.GetPreviewMessageWithInlineButton(item, botUsername, _isProduction);
+
+              
+                var caption = MessageTemplateFormatter.GetCaption(item);
 
                 Message sentMessage;
-             
+
                 if (!string.IsNullOrEmpty(item.ImageUrl))
                 {
                     sentMessage = await _bot.SendPhoto(
                         chatId: channelConfig.ChannelId, // 👈 مستقیماً کانال
                         photo: new InputFileUrl(item.ImageUrl),
                         caption: caption,
-                        parseMode: ParseMode.Html,
-                        replyMarkup: keyboard,
+                        parseMode: ParseMode.Html, 
                         cancellationToken: ct);
                 }
                 else
@@ -259,14 +256,14 @@ namespace TelegramAggregator.WebAPI.Services
                     sentMessage = await _bot.SendMessage(
                         chatId: channelConfig.ChannelId, // 👈 مستقیماً کانال
                         text: caption,
-                        parseMode: ParseMode.Html,
-                        replyMarkup: keyboard,
+                        parseMode: ParseMode.Html, 
                         cancellationToken: ct);
                 }
 
 
-              
-                await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
+
+                await Task.Delay(TimeSpan.FromSeconds(60), ct);
+                //await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }
 

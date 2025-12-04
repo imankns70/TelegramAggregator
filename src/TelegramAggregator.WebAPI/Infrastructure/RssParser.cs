@@ -16,7 +16,7 @@ public class RssParser : IRssParser
     public RssParser(ILogger<RssParser> logger, NewsStorage newsStorage)
     {
         _logger = logger;
-        _debugItems= newsStorage._debugItems;
+        _debugItems = newsStorage._debugItems;
     }
 
     public IEnumerable<NewsItem> Parse(string xml)
@@ -61,13 +61,19 @@ public class RssParser : IRssParser
                 .OrderByDescending(i => i.PublishDate.DateTime)
                 .Take(10)
                 .Reverse()
-                .Select(entry => new NewsItem
+                .Select(entry =>
                 {
-                    Title = entry.Title?.Text ?? "",
-                    ShortDescription = entry.Summary?.Text ?? "",
-                    Link = entry.Links.FirstOrDefault()?.Uri?.ToString() ?? "",
-                    PubDate = entry.PublishDate.DateTime,
-                    SourceName = feed.Title?.Text ?? "RSS"
+                    var rawTitle = entry.Title?.Text ?? "";
+                    var rawSummary = entry.Summary?.Text ?? rawTitle;
+              
+                    return new NewsItem
+                    {
+                        Title = TextCleaner.CleanTitle(rawTitle),
+                        ShortDescription = TextCleaner.CleanShortDescription(rawSummary),
+                        Link = entry.Links.FirstOrDefault()?.Uri?.ToString() ?? "",
+                        PubDate = entry.PublishDate.DateTime,
+                        SourceName = feed.Title?.Text ?? "RSS"
+                    };
                 }).ToList();
 
 

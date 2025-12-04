@@ -12,36 +12,17 @@ namespace TelegramAggregator.WebAPI.Controllers
     {
 
 
-        private readonly HandleExpandCore _handleExpandCore;
+    
         private readonly IConfiguration _config;
         private readonly ILogger<AggregatorController> _logger;
-        public AggregatorController(IConfiguration config, ILogger<AggregatorController> logger,
-        HandleExpandCore handleExpandCore)
+        public AggregatorController(IConfiguration config, ILogger<AggregatorController> logger)
         {
 
             _config = config;
-            _logger = logger;
-            _handleExpandCore = handleExpandCore;
+            _logger = logger; 
         }
 
-        [HttpPost("update")]
-        public async Task<IActionResult> OnUpdate([FromBody] Update update, CancellationToken ct)
-        {
-            try
-            {
-                if (update.CallbackQuery?.Data?.StartsWith("exp_") == true)
-                {
-                    await _handleExpandCore.HandleExpand(update.CallbackQuery, ct);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Unhandled update error");
-            }
-
-            return Ok();
-        }
-
+      
         /// <summary>
         /// وضعیت سیستم
         /// </summary>

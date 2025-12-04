@@ -1,6 +1,4 @@
 ﻿using HtmlAgilityPack;
-using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace TelegramAggregator.Infrastructure
@@ -8,12 +6,12 @@ namespace TelegramAggregator.Infrastructure
     public class FullDecriptionExtractor : IFullDecriptionExtractor
     {
         private readonly HttpClient _httpClient;
-        private readonly ILogger<ImageExtractor> _logger;
+        private readonly ILogger<FullDecriptionExtractor> _logger; // بهتره از همین کلاس لاگ بگیریم
 
-        public FullDecriptionExtractor(IHttpClientFactory httpClientFactory, ILogger<ImageExtractor> logger)
+        public FullDecriptionExtractor(IHttpClientFactory httpClientFactory, ILogger<FullDecriptionExtractor> logger)
         {
             _httpClient = httpClientFactory.CreateClient(nameof(FullDecriptionExtractor));
-            _httpClient.Timeout = TimeSpan.FromSeconds(25);
+            _httpClient.Timeout = TimeSpan.FromSeconds(30);
             _logger = logger;
         }
 
@@ -25,52 +23,20 @@ namespace TelegramAggregator.Infrastructure
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
-                string host = new Uri(url).Host.ToLower();
-                var contentNode = host switch
-                {
-                    var h when h.Contains("varzesh3.com") =>
-                        doc.DocumentNode.SelectSingleNode("//div[contains(@class,'news-body') or contains(@class,'news-text') or contains(@class,'newsPage')]")
-                        ?? doc.DocumentNode,
-
-                    var h when h.Contains("tarafdari.com") =>
-                        doc.DocumentNode.SelectSingleNode("//div[contains(@class,'node-content') or contains(@class,'field--name-body') or contains(@class,'field-name-body')]")
-                        ?? doc.DocumentNode,
-
-                    var h when h.Contains("khabarvarzeshi.com") =>
-                        doc.DocumentNode.SelectSingleNode("//div[contains(@class,'story-body')]//div[contains(@class,'story')]")
-                        ?? doc.DocumentNode.SelectSingleNode("//div[contains(@class,'story-body')]")
-                        ?? doc.DocumentNode.SelectSingleNode("//div[contains(@class,'story')]")
-                        ?? doc.DocumentNode,
-
-                    _ => doc.DocumentNode.SelectSingleNode(
-                        "//article" +
-                        " | //div[contains(@class,'content')]" +
-                        " | //div[contains(@class,'article-body')]" +
-                        " | //div[contains(@class,'post-body')]" +
-                        " | //div[contains(@class,'entry-content')]" +
-                        " | //div[contains(@class,'news-body')]" +
-                        " | //div[contains(@id,'main-content')]" +
-                        " | //section[contains(@class,'main-content')]"
-                    ) ?? doc.DocumentNode
-                };
+                var host = new Uri(url).Host.ToLowerInvariant();
+                var contentNode = SelectMainContentNode(doc, host) ?? doc.DocumentNode;
 
                 CleanNode(contentNode, host);
 
-                // بررسی وجود ویدیو در محتوا
-                var videoNode = contentNode.SelectSingleNode(".//video | .//div[contains(@class,'video-container')]");
-                string text;
-                if (videoNode != null)
-                {
-                    // اگر ویدیو هست، فقط پاراگراف اول را بگیریم
-                    var firstPara = contentNode.SelectSingleNode(".//p");
-                    text = firstPara != null ? NormalizeText(firstPara.InnerText) : string.Empty;
-                }
-                else
-                {
-                    text = NormalizeText(contentNode.InnerText);
-                }
+                // اگر ویدیو باشه فقط پاراگراف اول رو برگردون
+                var hasVideo = contentNode.SelectSingleNode(".//video | .//iframe[contains(@src,'youtube')] | .//div[contains(@class,'video')]") != null;
+                string rawText = hasVideo
+                    ? contentNode.SelectSingleNode(".//p")?.InnerText ?? string.Empty
+                    : contentNode.InnerText;
 
-                // حذف تبلیغات و اضافات سایت خاص
+                var text = NormalizeText(rawText);
+
+                // تمیزکاری اختصاصی هر سایت
                 text = host switch
                 {
                     var h when h.Contains("tarafdari.com") => CleanTarafdariText(text),
@@ -83,45 +49,97 @@ namespace TelegramAggregator.Infrastructure
             }
             catch (Exception ex)
             {
-                return $"[Error extracting content] {ex.Message}";
+                _logger.LogWarning(ex, "Failed to extract description from {Url}", url);
+                return $"[خطا در دریافت محتوا]";
             }
         }
 
-
-        private string NormalizeText(string text)
+        private HtmlNode? SelectMainContentNode(HtmlDocument doc, string host)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return string.Empty;
+            return host switch
+            {
+                // ورزش سه - خیلی پایدار
+                var h when h.Contains("varzesh3.com") => doc.DocumentNode.SelectSingleNode(
+                    "//div[contains(@class,'news-body') or contains(@class,'news-text') or contains(@class,'newsPage')] | //article"),
 
-            text = HtmlEntity.DeEntitize(text)
-                             .Replace("\t", " ")
-                             .Replace("\u200C", "")
-                             .Replace("\u200B", "");
+                // طرفداری - پایدار
+                var h when h.Contains("tarafdari.com") => doc.DocumentNode.SelectSingleNode(
+                    "//div[contains(@class,'node-content') or contains(@class,'field--name-body')] | //article"),
 
-            text = Regex.Replace(text, @"^\|+\s*", ""); // حذف | اول متن
-            text = Regex.Replace(text, @"\s{2,}", " ");
+                // خبرورزشی - ساختار جدید ۱۴۰۴
+                var h when h.Contains("khabarvarzeshi.com") => SelectKhabarVarzeshiNode(doc),
 
-            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                            .Select(l => l.Trim())
-                            .Where(l => !string.IsNullOrEmpty(l) && l.Length > 2);
+                // بقیه سایت‌ها - عمومی اما هوشمند
+                _ => doc.DocumentNode.SelectSingleNode(
+                    "//article | " +
+                    "//div[@itemprop='articleBody'] | " +
+                    "//div[contains(@class,'news-content')] | " +
+                    "//div[contains(@class,'body-content')] | " +
+                    "//div[contains(@class,'content-body')] | " +
+                    "//div[contains(@class,'post-body')] | " +
+                    "//div[contains(@class,'entry-content')] | " +
+                    "//div[contains(@class,'article-body')]"
+                )
+            };
+        }
 
-            return string.Join(Environment.NewLine + Environment.NewLine, lines).Trim();
+        private HtmlNode? SelectKhabarVarzeshiNode(HtmlDocument doc)
+        {
+            var candidates = new[]
+            {
+                "//div[contains(@class,'news-content')]",
+                "//div[contains(@class,'body-content')]",
+                "//div[contains(@class,'content-body')]",
+                "//div[contains(@class,'post-content')]",
+                "//article//div[contains(@class,'content') or contains(@class,'body')]",
+                "//div[@itemprop='articleBody']",
+                "//article"
+            };
+
+            foreach (var xpath in candidates)
+            {
+                var node = doc.DocumentNode.SelectSingleNode(xpath);
+                if (node != null && node.InnerText.Trim().Length > 150)
+                    return node;
+            }
+
+            return doc.DocumentNode.SelectSingleNode("//article | //div[contains(@class,'content')]");
         }
 
         private void CleanNode(HtmlNode node, string host)
         {
             if (node == null) return;
 
-            foreach (var tag in new[] { "script", "style", "nav", "header", "footer", "aside", "form", "noscript", "iframe" })
+            // حذف تگ‌های غیرضروری
+            foreach (var tag in new[] { "script", "style", "nav", "header", "footer", "aside", "form", "noscript", "iframe", "svg" })
+            {
                 foreach (var n in node.SelectNodes($"//{tag}") ?? Enumerable.Empty<HtmlNode>())
                     n.Remove();
+            }
 
-            foreach (var sel in new[] { "//*[contains(@class,'ad') or contains(@class,'banner')]", "//*[contains(@id,'ad')]" })
-                foreach (var n in node.SelectNodes(sel) ?? Enumerable.Empty<HtmlNode>())
+            // حذف تبلیغات
+            foreach (var xpath in new[]
+            {
+                "//*[contains(@class,'ad') or contains(@class,'banner') or contains(@class,'advert')]",
+                "//*[contains(@id,'ad') or contains(@id,'banner')]",
+                "//div[contains(@class,'share') or contains(@class,'social')]",
+                "//div[contains(@class,'related') or contains(@class,'tag')]"
+            })
+            {
+                foreach (var n in node.SelectNodes(xpath) ?? Enumerable.Empty<HtmlNode>())
                     n.Remove();
+            }
 
+            // سایت‌های خاص
             if (host.Contains("tarafdari.com"))
+            {
                 RemoveNodes(node, ".//div[contains(@class,'node__meta') or contains(@class,'author') or contains(@class,'links') or contains(@class,'field--name-field-tags')]");
+            }
+
+            if (host.Contains("khabarvarzeshi.com"))
+            {
+                RemoveNodes(node, ".//div[contains(@class,'author') or contains(@class,'meta') or contains(@class,'time') or contains(@class,'share')]");
+            }
         }
 
         private static void RemoveNodes(HtmlNode root, string xpath)
@@ -130,53 +148,83 @@ namespace TelegramAggregator.Infrastructure
                 node.Remove();
         }
 
-        private HtmlNode? SelectBestContentNode(HtmlDocument doc, string host) => host switch
+        private string NormalizeText(string text)
         {
-            var h when h.Contains("varzesh3.com") => doc.DocumentNode.SelectSingleNode("//div[contains(@class,'news-body')]") ?? doc.DocumentNode.SelectSingleNode("//article"),
-            var h when h.Contains("tarafdari.com") => doc.DocumentNode.SelectSingleNode("//div[contains(@class,'node-content')]") ?? doc.DocumentNode.SelectSingleNode("//article"),
-            var h when h.Contains("khabarvarzeshi") => doc.DocumentNode.SelectSingleNode("//div[contains(@class,'story-body')]") ?? doc.DocumentNode.SelectSingleNode("//article"),
-            _ => doc.DocumentNode.SelectSingleNode("//article | //div[@itemprop='articleBody'] | //div[contains(@class,'content')]")
-        };
+            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+
+            text = HtmlEntity.DeEntitize(text)
+                             .Replace("\t", " ")
+                             .Replace("\u200C", " ")
+                             .Replace("\u200B", "")
+                             .Replace(" ", " ") // فضای غیرقابل شکستن
+                             .Trim();
+
+            text = Regex.Replace(text, @"^\|+\s*", "");
+            text = Regex.Replace(text, @"\s{2,}", " ");
+
+            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                            .Select(l => l.Trim())
+                            .Where(l => l.Length > 3 && !l.StartsWith("خبرنگار") && !l.StartsWith("منبع"));
+
+            return string.Join("\n\n", lines).Trim();
+        }
 
         private string CleanTarafdariText(string text)
         {
-            text = Regex.Replace(text, @"@\w+", "");
-            text = Regex.Replace(text, @"#\w+", "");
-            text = Regex.Replace(text, @"با دعوت.*?هدیه بگیرید\.?", "", RegexOptions.Singleline);
-            text = Regex.Replace(text, @"تبدیل\s*،?\s*\d+\s*هزار\s*تومان.*", "", RegexOptions.Singleline);
-            return text.Trim();
+            return Regex.Replace(text, @"(@|#)\w+|با دعوت.*هدیه.*|تبدیل.*تومان.*", "", RegexOptions.IgnoreCase).Trim();
         }
 
         private string CleanVarzesh3Text(string text)
         {
-            text = Regex.Replace(text, @"کد\s*خبر.*", "", RegexOptions.Multiline);
-            text = Regex.Replace(text, @"برای\s*مشاهده.*", "", RegexOptions.Multiline);
-            text = Regex.Replace(text, @"ورود\s*\|\s*ثبت\s*نام.*", "", RegexOptions.Multiline);
-            return text.Trim();
+            return Regex.Replace(text,
+                @"کد\s*خبر.*|برای\s*مشاهده.*|ورود\s*\|\s*ثبت\s*نام.*|کد\b.*",
+                "", RegexOptions.IgnoreCase | RegexOptions.Multiline).Trim();
         }
-
         private string CleanKhabarVarzeshiText(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
-            // هر چیزی که قبل از اولین فعل مهم باشه → نویسنده‌ست!
-            var patterns = new[]
+            // پیدا کردن موقعیت عبارت "وی افزود متن کامل گفتگو را اینجا بخوانید." و حذف متن از آن به بعد
+            int moreReadIndex = text.IndexOf("وی افزود متن کامل گفتگو را اینجا بخوانید.");
+            if (moreReadIndex >= 0)
             {
-        @"^[\w\s\.\-–—|/:،]+?(?=\b(استقلال|پرسپولیس|دربی|طارمی|ساپینتو|محروم|اخراج|گل|پنالتی|داور|جنجال|قهرمان|صدر|لیگ|رسمی|فوری|اعلام|شکست|برد|تساوی|قهرمانی)\b)",
-        @"^[\w\s\.\-–—|/:،]+?[:\-–—]\s*",
-        @"^توسط\s+[\w\s\.]+",
-        @"^نویسنده\s*[:\-]\s*[\w\s\.]+",
-        @"^گزارش از\s+[\w\s\.]+"
-    };
+                text = text.Substring(0, moreReadIndex).Trim(); // فقط بخش قبل از "وی افزود متن کامل گفتگو را اینجا بخوانید." را نگه می‌دارد
+            }
 
-            foreach (var pattern in patterns)
-                text = Regex.Replace(text, pattern, "", RegexOptions.IgnoreCase);
+            var lines = text.Split('\n')
+                            .Select(l => l.Trim())
+                            .Where(l => l.Length > 0)
+                            .ToList();
 
-            // بقیه تمیزکاری‌ها
-            text = Regex.Replace(text, @"خبر[:：]\s*\d+|زمان مطالعه[:：]\s*\d+\s*دقیقه|\|\s*", " ", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"\s{2,}", " ").Trim();
+            var result = new List<string>();
+            bool contentStarted = false;
 
-            return text;
+            foreach (var line in lines)
+            {
+                // رد کردن خطوط نویسنده، منبع، زمان مطالعه
+                if (!contentStarted)
+                {
+                    if (Regex.IsMatch(line, @"(نویسنده|خبرنگار|منبع|زمان مطالعه|ارسال شده توسط|گزارش از)", RegexOptions.IgnoreCase))
+                        continue;
+
+                    if (line.Length < 80 && Regex.IsMatch(line, @"^[آ-ی\s]+\s*[:\-–—]"))
+                        continue;
+
+                    if (line.Contains("خبر :") || line.Contains("زمان مطالعه :"))
+                        continue;
+
+                    contentStarted = true;
+                }
+
+                // حذف باقی‌مانده‌های اضافی
+                var cleaned = Regex.Replace(line, @"\|.*$|خبر\s*:\s*\d+|زمان مطالعه.*|#\w+|@\w+", "", RegexOptions.IgnoreCase);
+                if (cleaned.Length > 3)
+                    result.Add(cleaned.Trim());
+            }
+
+            var final = string.Join("\n\n", result);
+            final = Regex.Replace(final, @"\n{3,}", "\n\n");
+            return final.Trim();
         }
 
     }
