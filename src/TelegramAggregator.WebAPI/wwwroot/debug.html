@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8" />
-    <title>دیباگ زنده ربات فوتبال فوری</title>
+    <title>دیباگ زنده ربات فوتبال فوری — نسخه هوشمند</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
         :root {
@@ -10,6 +10,7 @@
             --red: #f66;
             --yellow: #ff0;
             --cyan: #0cf;
+            --gold: #ffd700;
             --dark: #000;
             --box: #0a0a0a;
         }
@@ -31,9 +32,12 @@
 
         h1 {
             text-align: center;
-            font-size: clamp(24px,6vw,34px);
-            text-shadow: 0 0 20px var(--green);
+            font-size: clamp(26px,7vw,38px);
+            text-shadow: 0 0 25px var(--cyan);
             margin-bottom: 20px;
+            background: linear-gradient(90deg, #0f9, #0cf, #ff0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         .grid {
@@ -52,34 +56,60 @@
             box-shadow: 0 0 30px rgba(0,255,150,0.2);
         }
 
-        h2.queues-title {
-            color: #0f9;
-            text-shadow: 0 0 15px #0f9;
+        h2 {
+            margin-bottom: 12px;
+            text-shadow: 0 0 15px;
         }
 
-        h2.published-title {
-            color: #0cf;
-            text-shadow: 0 0 15px #0cf;
-        }
+            h2.queues-title {
+                color: var(--green);
+            }
 
-        h2.logs-title {
-            color: #ff0;
-            text-shadow: 0 0 15px #ff0;
-        }
+            h2.next-title {
+                color: var(--gold);
+                text-shadow: 0 0 25px var(--gold);
+                font-size: 1.4em;
+            }
+
+            h2.published-title {
+                color: var(--cyan);
+            }
+
+            h2.logs-title {
+                color: var(--yellow);
+            }
 
         .scroll-queues {
-            border: 2px solid #0f9;
+            border: 2px solid var(--green);
             background: #001100;
         }
 
+        .scroll-next {
+            border: 3px solid var(--gold);
+            background: #221100;
+            box-shadow: 0 0 40px rgba(255,215,0,0.4);
+            animation: pulse-next 2s infinite;
+        }
+
         .scroll-published {
-            border: 2px solid #0cf;
+            border: 2px solid var(--cyan);
             background: #001111;
         }
 
         .scroll-logs {
-            border: 2px solid #ff0;
+            border: 2px solid var(--yellow);
             background: #111100;
+        }
+
+        @keyframes pulse-next {
+            0%,100% {
+                opacity: 0.9;
+            }
+
+            50% {
+                opacity: 1;
+                box-shadow: 0 0 60px #ffd700;
+            }
         }
 
         .scroll-box {
@@ -130,11 +160,44 @@
             background: #002200;
         }
 
+        tr.best-item {
+            background: #003300 !important;
+            animation: glow-item 2s infinite;
+        }
+
+        @keyframes glow-item {
+            0%,100% {
+                box-shadow: 0 0 10px #0f9;
+            }
+
+            50% {
+                box-shadow: 0 0 25px #0f9;
+            }
+        }
+
         .num {
             width: 45px;
             text-align: center;
             font-weight: bold;
             color: var(--green);
+        }
+
+        .score {
+            font-weight: bold;
+            text-align: center;
+            width: 70px;
+        }
+
+        .score-high {
+            color: #0f9;
+        }
+
+        .score-med {
+            color: #ff0;
+        }
+
+        .score-low {
+            color: #f66;
         }
 
         .status-accepted {
@@ -157,27 +220,20 @@
             font-weight: bold;
         }
 
-        .link-cell {
-            text-align: center;
-            width: 80px;
-            font-weight: bold;
+        .link-cell a {
+            color: #0cf;
+            text-decoration: none;
+            font-size: 18px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            background: rgba(0,204,255,0.1);
         }
 
-            .link-cell a {
-                color: #0cf;
-                text-decoration: none;
-                font-size: 18px;
-                padding: 4px 10px;
-                border-radius: 6px;
-                background: rgba(0,204,255,0.1);
-                display: inline-block;
+            .link-cell a:hover {
+                color: #ff0;
+                background: rgba(255,255,0,0.2);
+                text-shadow: 0 0 10px #ff0;
             }
-
-                .link-cell a:hover {
-                    color: #ff0;
-                    background: rgba(255,255,0,0.2);
-                    text-shadow: 0 0 10px #ff0;
-                }
 
         .stats-grid {
             display: grid;
@@ -237,7 +293,7 @@
     </style>
 </head>
 <body>
-    <h1>دیباگ زنده ربات فوتبال فوری</h1>
+    <h1>دیباگ زنده ربات فوتبال فوری — نسخه هوشمند</h1>
     <div class="grid">
         <div class="box"><div id="main">در حال بارگذاری...</div></div>
         <div class="box">
@@ -250,6 +306,8 @@
     <script>
         const e = t => t ? String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : '';
         const nf = (num, fallback = "۰") => (num ?? 0).toLocaleString('fa-IR');
+        const getScoreClass = s => s >= 90 ? 'score-high' : s >= 70 ? 'score-med' : 'score-low';
+
         const mainEl = document.getElementById('main');
         const statsEl = document.getElementById('stats');
         const countdownEl = document.getElementById('countdown');
@@ -289,7 +347,30 @@
                 const data = await feedRes.json();
                 const s = await statsRes.json();
 
-                // صف‌های انتشار
+                // خبر بعدی که ارسال میشه (بهترین خبر فعلی)
+                const nextBest = data.nextBestItem;
+                const nextHtml = nextBest ? `
+                        <div class="box" style="border: 3px solid var(--gold); background: #221100;">
+                            <h2 class="next-title">خبر بعدی که ارسال میشه!</h2>
+                            <div class="scroll-box scroll-next">
+                                <table>
+                                    <tr>
+                                        <th>منبع</th>
+                                        <th>عنوان</th>
+                                        <th>امتیاز</th>
+                                        <th>دلیل انتخاب</th>
+                                    </tr>
+                                    <tr class="best-item">
+                                        <td><strong style="color:#0cf;">${e(cleanSourceName(nextBest.source))}</strong></td>
+                                        <td style="color:#ff0;font-weight:bold;">${e(nextBest.title.substring(0, 80))}...</td>
+                                        <td class="score ${getScoreClass(nextBest.score)}" style="font-size:24px;">${nextBest.score}</td>
+                                        <td style="color:#0f9;">${nextBest.reason || 'بالاترین امتیاز در کل صف‌ها'}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>` : '';
+
+                // صف‌های انتشار با امتیاز + هایلایت بهترین خبر
                 const queuesHtml = !data.queues || Object.keys(data.queues).length === 0
                     ? '<div class="empty">همه صف‌ها خالی — عالی!</div>'
                     : '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;">' +
@@ -297,50 +378,50 @@
                         const count = (items || []).length;
                         const color = count > 15 ? '#f66' : count > 8 ? '#ff0' : '#0f9';
                         return `
-                                      <div class="box" style="border-color:${color};">
-                                          <h2 class="queues-title">${e(cleanSourceName(source))} <span style="color:#0f9;font-weight:bold;">${count} خبر</span></h2>
-                                          <div class="scroll-box scroll-queues">
-                                              ${count === 0 ? '<div class="empty">صف خالی</div>' :
-                                `<table><tr><th>#</th><th>عنوان</th><th>زمان</th></tr>
-                                                      ${items.map((item, i) => `
-                                                          <tr>
-                                                              <td class="num">${i + 1}</td>
-                                                              <td title="${e(item.title)}">${e((item.title || "بدون عنوان").substring(0, 65))}...</td>
-                                                              <td>${item.pubDate || ''}</td>
-                                                          </tr>`).join('')}
-                                                  </table>`
+                                  <div class="box" style="border-color:${color};">
+                                      <h2 class="queues-title">${e(cleanSourceName(source))} <span style="color:#0f9;font-weight:bold;">${count} خبر</span></h2>
+                                      <div class="scroll-box scroll-queues">
+                                          ${count === 0 ? '<div class="empty">صف خالی</div>' :
+                                `<table>
+                                                  <tr><th>#</th><th>عنوان</th><th>امتیاز</th><th>زمان</th></tr>
+                                                  ${items.map((item, i) => {
+                                    const isBest = nextBest && item.uniqueKey === nextBest.uniqueKey;
+                                    return `<tr ${isBest ? 'class="best-item"' : ''}>
+                                                          <td class="num">${i + 1}</td>
+                                                          <td title="${e(item.title)}">${e((item.title || "بدون عنوان").substring(0, 65))}...</td>
+                                                          <td class="score ${getScoreClass(item.score || 0)}">${item.score || 0}</td>
+                                                          <td>${item.pubDate || ''}</td>
+                                                      </tr>`;
+                                }).join('')}
+                                              </table>`
                             }
-                                          </div>
-                                      </div>`;
+                                      </div>
+                                  </div>`;
                     }).join('') + '</div>';
 
                 // آخرین ارسال‌شده‌ها
                 const publishedHtml = data.publishedItems?.length
                     ? `<div class="scroll-box scroll-published">
-                                <table>
-                                <tr>
-                                <th>#</th>
-                                <th>منبع</th>
-                                <th>عنوان</th>
-                                <th>زمان ارسال</th>
-                                </tr>
-                                    ${data.publishedItems.map((i, idx) => `
-                                        <tr>
-                                            <td class="num">${idx + 1}</td>
-                                            <td><span class="status-sent">${e(cleanSourceName(i.source))}</span></td>
-                                            <td title="${e(i.title)}">${e((i.title || "بدون عنوان").substring(0, 70))}...</td>
-                                            <td>${i.sentAt || ''}</td>
-                                        </tr>`).join('')}
-                                </table>
-                               </div>`
+                            <table>
+                                <tr><th>#</th><th>منبع</th><th>عنوان</th><th>امتیاز</th><th>زمان ارسال</th></tr>
+                                ${data.publishedItems.map((i, idx) => `
+                                    <tr>
+                                        <td class="num">${idx + 1}</td>
+                                        <td><span class="status-sent">${e(cleanSourceName(i.source))}</span></td>
+                                        <td title="${e(i.title)}">${e((i.title || "بدون عنوان").substring(0, 70))}...</td>
+                                        <td class="score ${getScoreClass(i.score || 0)}">${i.score || 0}</td>
+                                        <td>${i.sentAt || ''}</td>
+                                    </tr>`).join('')}
+                            </table>
+                           </div>`
                     : '<div class="empty">هنوز خبری ارسال نشده</div>';
 
-                // آخرین پردازش‌شده‌ها
+                // آخرین پردازش‌شده‌ها (همون قبلی — کامل و بدون تغییر)
                 const recentHtml = data.recentProcessed?.length
                     ? `<div class="scroll-box scroll-logs">
-            <table>
-                <tr><th>#</th><th>منبع</th><th>عنوان</th><th>وضعیت</th><th>دلیل</th><th>زمان</th><th>لینک خبر</th></tr>
-                ${data.recentProcessed.map((i, idx) => {
+                            <table>
+                                <tr><th>#</th><th>منبع</th><th>عنوان</th><th>وضعیت</th><th>دلیل</th><th>زمان</th><th>لینک خبر</th></tr>
+                                ${data.recentProcessed.map((i, idx) => {
                         const source = cleanSourceName(i.source) || 'نامشخص';
                         const title = i.title || 'بدون عنوان';
                         const link = i.link || null;
@@ -350,44 +431,43 @@
                         if (statusText === 'ارسال شد') statusColor = 'status-sent';
                         else if (statusText.includes('در صف')) statusColor = 'status-queued';
                         else if (statusText === 'قبول شده') statusColor = 'status-accepted';
-                        const linkHtml = link
-                            ? `<a href="${e(link)}" target="_blank" title="باز کردن خبر">Link</a>`
-                            : '—';
+                        const linkHtml = link ? `<a href="${e(link)}" target="_blank" title="باز کردن خبر">Link</a>` : '—';
                         return `
-                        <tr>
-                            <td class="num">${idx + 1}</td>
-                            <td>${e(source)}</td>
-                            <td title="${e(title)}">${e(title.substring(0, 55))}...</td>
-                            <td class="${statusColor}">${statusText}</td>
-                            <td style="font-size:11px;color:#ff9;" title="${e(reasonText)}">
-                                ${e(reasonText.substring(0, 45))}${reasonText.length > 45 ? '...' : ''}
-                            </td>
-                            <td>${i.time || ''}</td>
-                            <td class="link-cell">${linkHtml}</td>
-                        </tr>`;
+                                    <tr>
+                                        <td class="num">${idx + 1}</td>
+                                        <td>${e(source)}</td>
+                                        <td title="${e(title)}">${e(title.substring(0, 55))}...</td>
+                                        <td class="${statusColor}">${statusText}</td>
+                                        <td style="font-size:11px;color:#ff9;" title="${e(reasonText)}">
+                                            ${e(reasonText.substring(0, 45))}${reasonText.length > 45 ? '...' : ''}
+                                        </td>
+                                        <td>${i.time || ''}</td>
+                                        <td class="link-cell">${linkHtml}</td>
+                                    </tr>`;
                     }).join('')}
-            </table>
-           </div>`
+                            </table>
+                           </div>`
                     : '<div class="empty">هنوز خبری پردازش نشده</div>';
 
                 mainEl.innerHTML = `
-                            <h2 class="queues-title">صف‌های انتشار</h2>
-                            ${queuesHtml}
-                            <h2 class="published-title">آخرین ارسال‌شده‌ها</h2>
-                            ${publishedHtml}
-                            <h2 class="logs-title">آخرین پردازش‌شده‌ها</h2>
-                            ${recentHtml}
-                        `;
+                        ${nextHtml}
+                        <h2 class="queues-title">صف‌های انتشار (با امتیاز هوشمند)</h2>
+                        ${queuesHtml}
+                        <h2 class="published-title">آخرین ارسال‌شده‌ها</h2>
+                        ${publishedHtml}
+                        <h2 class="logs-title">آخرین پردازش‌شده‌ها</h2>
+                        ${recentHtml}
+                    `;
 
                 const color = s.dashboardStatusColor === 'red' ? '#f66' : s.dashboardStatusColor === 'yellow' ? '#ff0' : '#0f9';
                 statsEl.innerHTML = `
-                            <div class="stat-box"><span class="stat-num" style="color:#0f9;">${nf(s.acceptedCount)}</span>قبول شده</div>
-                            <div class="stat-box"><span class="stat-num" style="color:#f66;">${nf(s.rejectedCount)}</span>رد شده</div>
-                            <div class="stat-box"><span class="stat-num" style="color:#0cf;">${nf(s.publishedCount)}</span>ارسال شده</div>
-                            <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(s.inQueueCount)}</span>در صف</div>
-                            <div class="stat-box"><span class="stat-num" style="color:#aaa;">${nf(s.totalProcessed)}</span>کل پردازش</div>
-                            <div class="stat-box"><span class="stat-num" style="color:${color};">${nf(s.acceptanceRate)}%</span>درصد قبولی</div>
-                        `;
+                        <div class="stat-box"><span class="stat-num" style="color:#0f9;">${nf(s.acceptedCount)}</span>قبول شده</div>
+                        <div class="stat-box"><span class="stat-num" style="color:#f66;">${nf(s.rejectedCount)}</span>رد شده</div>
+                        <div class="stat-box"><span class="stat-num" style="color:#0cf;">${nf(s.publishedCount)}</span>ارسال شده</div>
+                        <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(s.inQueueCount)}</span>در صف</div>
+                        <div class="stat-box"><span class="stat-num" style="color:#aaa;">${nf(s.totalProcessed)}</span>کل پردازش</div>
+                        <div class="stat-box"><span class="stat-num" style="color:${color};">${nf(s.acceptanceRate)}%</span>درصد قبولی</div>
+                    `;
 
                 startCountdown();
             } catch (err) {

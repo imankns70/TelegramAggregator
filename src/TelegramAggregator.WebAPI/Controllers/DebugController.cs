@@ -29,12 +29,15 @@ namespace TelegramAggregator.WebAPI.Controllers
                     kvp => kvp.Key,
                     kvp => kvp.Value.Select((item, index) => new
                     {
+                        score= item.Score,
                         position = index + 1,
                         title = item.Title?.Truncate(90),
                         link = item.Link,
                         pubDate = item.PubDate.ToString("HH:mm"),
                         source = item.SourceName ?? kvp.Key
-                    }).ToList()
+                    })
+                    .OrderByDescending(a=> a.score)
+                    .ToList()
                 ),
 
                 totalInQueue = queueBySource.Sum(x => x.Value.Count),
@@ -43,6 +46,7 @@ namespace TelegramAggregator.WebAPI.Controllers
                 publishedItems = _newsStorage.GetPublishedItems()
                     .Select((x, i) => new
                     {
+                        score = x.Score,
                         position = i + 1,
                         source = x.SourceName ?? "نامشخص",
                         title = x.Title?.Truncate(80),
@@ -149,45 +153,7 @@ namespace TelegramAggregator.WebAPI.Controllers
 
             return Ok(result);
         }
-        [HttpGet("duplicates")]
-        public IActionResult CheckDuplicates()
-        {
-            var duplicates = _newsStorage._debugItems.Values
-                .Where(x => !string.IsNullOrEmpty(x.Link) || !string.IsNullOrEmpty(x.Title))
-                .GroupBy(x => x.Link ?? $"{x.Title?.Trim()}-{x.SourceName}")
-                .Where(g => g.Count() > 1)
-                .Select(g => new
-                {
-                    Key = g.Key,
-                    Count = g.Count(),
-                    Items = g.OrderByDescending(x => x.ProcessedAt)
-                             .Select(x => new
-                             {
-                                 x.Title,
-                                 x.SourceName,
-                                 x.Link,
-                                 Status = x.PublishStatus,
-                                 //Reason = x.RejectReason ?? x.QueueReason ?? "—",
-                                 Time = x.ProcessedAt.ToString("HH:mm:ss")
-                             })
-                             .ToList()
-                })
-                .OrderByDescending(x => x.Count)
-                .ToList();
-
-            var totalDuplicates = duplicates.Sum(x => x.Count - 1); // هر گروه چند تا اضافه داره
-            var totalGroups = duplicates.Count;
-
-            return Ok(new
-            {
-                TotalDuplicateGroups = totalGroups,
-                TotalExtraItems = totalDuplicates,
-                Message = totalGroups == 0
-                    ? "عالی! هیچ خبر تکراری وجود ندارد — سیستم کاملاً تمیزه"
-                    : $"هشدار: {totalGroups} گروه تکراری پیدا شد ({totalDuplicates} خبر اضافه)",
-                Duplicates = duplicates
-            });
-        }
+       
         private static string GetItemStatus(DebugFeedItem x)
         {
             // اولویت مطلق: PublishStatus

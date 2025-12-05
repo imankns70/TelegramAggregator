@@ -252,28 +252,29 @@ namespace TelegramAggregator.WebAPI.Services
 
                 var caption = MessageTemplateFormatter.GetCaption(item);
 
-                Message sentMessage;
+                //Message sentMessage;
 
-                if (!string.IsNullOrEmpty(item.ImageUrl))
-                {
-                    sentMessage = await _bot.SendPhoto(
-                        chatId: channelId, // 👈 مستقیماً کانال
-                        photo: new InputFileUrl(item.ImageUrl),
-                        caption: caption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
-                }
-                else
-                {
-                    sentMessage = await _bot.SendMessage(
-                        chatId: channelId, // 👈 مستقیماً کانال
-                        text: caption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
-                }
+                //if (!string.IsNullOrEmpty(item.ImageUrl))
+                //{
+                //    sentMessage = await _bot.SendPhoto(
+                //        chatId: channelId, // 👈 مستقیماً کانال
+                //        photo: new InputFileUrl(item.ImageUrl),
+                //        caption: caption,
+                //        parseMode: ParseMode.Html,
+                //        cancellationToken: ct);
+                //}
+                //else
+                //{
+                //    sentMessage = await _bot.SendMessage(
+                //        chatId: channelId, // 👈 مستقیماً کانال
+                //        text: caption,
+                //        parseMode: ParseMode.Html,
+                //        cancellationToken: ct);
+                //}
                  
                 
-                await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
+                await Task.Delay(TimeSpan.FromSeconds(15), ct);
+                //await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }
 

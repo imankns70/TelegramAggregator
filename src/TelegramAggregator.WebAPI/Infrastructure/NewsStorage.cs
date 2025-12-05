@@ -39,22 +39,51 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             };
 
         }
+        public bool TryDequeueAny2(out NewsItem? item)
+        {
+            item = null;
+
+            // Shuffle channels to avoid bias
+            var channels = _sourceChannels.Values.ToList();
+            if (channels.Count == 0)
+                return false;
+
+            // انتخاب تصادفی یک کانال تا زمانی که آیتم داشته باشد
+            for (int i = 0; i < channels.Count; i++)
+            {
+                var idx = Random.Shared.Next(channels.Count);
+                var channel = channels[idx];
+
+                if (!channel.Reader.TryRead(out var readItem))
+                    continue;
+
+                item = readItem;
+
+                // MIRROR SYNCHRONIZATION
+                if (_debugMirror.TryGetValue(item.SourceName, out var mirrorQueue))
+                {
+                    mirrorQueue.TryDequeue(out _); // drop oldest to reflect real read
+                }
+
+                return true;
+            }
+
+            return false;
+        }
         public bool TryDequeueAny(out NewsItem? item)
-        {  
+        {
             item = null;
             var candidates = new List<(NewsItem Item, string SourceName)>();
             int maxScore = -1;
 
+            // فقط peek یک آیتم از هر کانال و بررسی score
             foreach (var kvp in _sourceChannels)
             {
                 var sourceName = kvp.Key;
                 var channel = kvp.Value;
-                var tempList = new List<NewsItem>();
 
-                while (channel.Reader.TryRead(out var news))
+                if (channel.Reader.TryRead(out var news)) // فقط یک آیتم بخوان
                 {
-                    tempList.Add(news);
-
                     if (news.Score > maxScore)
                     {
                         maxScore = news.Score;
@@ -65,26 +94,36 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                     {
                         candidates.Add((news, sourceName));
                     }
-                }
 
-                // برگردوندن همه به جز کاندیداها
-                foreach (var n in tempList)
-                {
-                    if (!candidates.Any(c => c.Item.UniqueKey == n.UniqueKey))
-                        channel.Writer.TryWrite(n);
+                    // برگرداندن news به کانال (فعلاً نگه داشتن برای بعد)
+                    channel.Writer.TryWrite(news);
                 }
             }
 
             if (candidates.Count == 0)
                 return false;
 
+            // انتخاب یکی از کاندیدها
             var selected = candidates.Count == 1
                 ? candidates[0]
                 : candidates[Random.Shared.Next(candidates.Count)];
 
             item = selected.Item;
 
-            // Mirror: حذف دقیق همون خبر
+            // حذف دقیق از کانال و Mirror
+            if (_sourceChannels.TryGetValue(selected.SourceName, out var selChannel))
+            {
+                // Remove the exact item
+                var tempList = new List<NewsItem>();
+                while (selChannel.Reader.TryRead(out var n))
+                {
+                    if (n.UniqueKey != item.UniqueKey)
+                        tempList.Add(n);
+                }
+                foreach (var n in tempList)
+                    selChannel.Writer.TryWrite(n);
+            }
+
             if (_debugMirror.TryGetValue(selected.SourceName, out var mirrorQueue))
             {
                 var temp = new List<NewsItem>();
@@ -99,6 +138,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             return true;
         }
+
         public async ValueTask AddAsync(NewsItem item, CancellationToken ct = default)
         {
             if (item?.SourceName is not { } source ||
@@ -237,13 +277,13 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
         public IReadOnlyList<DebugFeedItem> GetPublishedItems() =>
             _debugItems.Where(x => x.Value.PublishStatus == "ارسال شد")
-                       .OrderByDescending(x => x.Value.ProcessedAt)
+                       .OrderByDescending(x => x.Value.PublishedAt)
                        .Take(60)
                        .Select(a => a.Value)
                        .ToList();
 
         public IReadOnlyList<DebugFeedItem> GetRecentProcessed(int take = 40) =>
-            _debugItems.Values.OrderByDescending(a=> a.ProcessedAt).Take(take).ToList();
+            _debugItems.Values.OrderByDescending(a=> a.Score).Take(take).ToList();
 
         public IReadOnlyDictionary<string, int> GetQueueCounts() =>
             _sourceChannels.ToDictionary(x => x.Key, x => x.Value.Reader.Count);
@@ -257,6 +297,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                     kvp => kvp.Value
                         .Select(item => new DebugFeedItem
                         {
+                            Score = item.Score,
                             SourceName = kvp.Key,
                             Title = item.Title ?? "بدون عنوان",
                             Link = item.Link,
@@ -264,41 +305,12 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                             PublishStatus = "در صف انتشار",
                             ProcessedAt = DateTimeOffset.Now
 
-                        })
-                        //.OrderByDescending(x => x.PubDate)
+                        })                        
                         .ToList())
-                .Where(x => x.Value.Any())
+                .Where(x => x.Value.Any())                
                 .ToDictionary(x => x.Key, x => x.Value);
         }
-        //public IReadOnlyDictionary<string, List<DebugFeedItem>> GetQueueBySource()
-        //{
-        //    var result = new Dictionary<string, List<DebugFeedItem>>();
-
-        //    foreach (var kvp in _debugMirror)
-        //    {
-        //        var sourceName = kvp.Key;
-        //        var queue = kvp.Value; // این ConcurrentQueue<NewsItem> هست
-
-        //        var items = queue.Select(item => new DebugFeedItem
-        //        {
-        //            SourceName = sourceName,
-        //            Title = item.Title ?? "بدون عنوان",
-        //            Link = item.Link,
-        //            PubDate = item.PubDate,
-        //            PublishStatus = "در صف انتشار",
-        //            ProcessedAt = DateTimeOffset.Now
-        //        })
-        //        .OrderByDescending(x => x.PubDate)
-        //        .ToList();
-
-        //        if (items.Any())
-        //        {
-        //            result[sourceName] = items;
-        //        }
-        //    }
-
-        //    return result;
-        //}
+       
 
         private string CleanSourceName(string source)
         {
@@ -369,6 +381,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         {
             LogOrUpdate(new DebugFeedItem
             {
+                Score= item.Score,
                 SourceName = item.SourceName!,
                 Title = item.Title,
                 Link = item.Link,
@@ -385,6 +398,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         {
             LogOrUpdate(new DebugFeedItem
             {
+                Score = item.Score,
                 SourceName = item.SourceName!,
                 Title = item.Title,
                 Link = item.Link,
@@ -399,6 +413,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         {
             LogOrUpdate(new DebugFeedItem
             {
+                Score = item.Score,
                 SourceName = item.SourceName!,
                 Title = item.Title,
                 Link = item.Link,
