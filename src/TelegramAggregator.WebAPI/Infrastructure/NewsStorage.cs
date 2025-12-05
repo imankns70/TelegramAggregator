@@ -40,7 +40,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
         }
         public bool TryDequeueAny(out NewsItem? item)
-        {
+        {  
             item = null;
             var candidates = new List<(NewsItem Item, string SourceName)>();
             int maxScore = -1;
