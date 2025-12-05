@@ -1,4 +1,6 @@
-﻿namespace TelegramAggregator.WebAPI.Models
+﻿using TelegramAggregator.WebAPI.Models.FootbalSettings;
+
+namespace TelegramAggregator.WebAPI.Models
 {
     public class AppSettings
     {

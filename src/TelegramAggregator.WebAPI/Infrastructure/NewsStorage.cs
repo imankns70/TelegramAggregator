@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Linq;
+using System.Runtime;
 using System.Threading.Channels;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
@@ -38,39 +39,66 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             };
 
         }
-
         public bool TryDequeueAny(out NewsItem? item)
         {
             item = null;
+            var candidates = new List<(NewsItem Item, string SourceName)>();
+            int maxScore = -1;
 
-            // Shuffle channels to avoid bias
-            var channels = _sourceChannels.Values.ToList();
-            if (channels.Count == 0)
-                return false;
-
-            // انتخاب تصادفی یک کانال تا زمانی که آیتم داشته باشد
-            for (int i = 0; i < channels.Count; i++)
+            foreach (var kvp in _sourceChannels)
             {
-                var idx = Random.Shared.Next(channels.Count);
-                var channel = channels[idx];
+                var sourceName = kvp.Key;
+                var channel = kvp.Value;
+                var tempList = new List<NewsItem>();
 
-                if (!channel.Reader.TryRead(out var readItem))
-                    continue;
-
-                item = readItem;
-
-                // MIRROR SYNCHRONIZATION
-                if (_debugMirror.TryGetValue(item.SourceName, out var mirrorQueue))
+                while (channel.Reader.TryRead(out var news))
                 {
-                    mirrorQueue.TryDequeue(out _); // drop oldest to reflect real read
+                    tempList.Add(news);
+
+                    if (news.Score > maxScore)
+                    {
+                        maxScore = news.Score;
+                        candidates.Clear();
+                        candidates.Add((news, sourceName));
+                    }
+                    else if (news.Score == maxScore)
+                    {
+                        candidates.Add((news, sourceName));
+                    }
                 }
 
-                return true;
+                // برگردوندن همه به جز کاندیداها
+                foreach (var n in tempList)
+                {
+                    if (!candidates.Any(c => c.Item.UniqueKey == n.UniqueKey))
+                        channel.Writer.TryWrite(n);
+                }
             }
 
-            return false;
-        }
+            if (candidates.Count == 0)
+                return false;
 
+            var selected = candidates.Count == 1
+                ? candidates[0]
+                : candidates[Random.Shared.Next(candidates.Count)];
+
+            item = selected.Item;
+
+            // Mirror: حذف دقیق همون خبر
+            if (_debugMirror.TryGetValue(selected.SourceName, out var mirrorQueue))
+            {
+                var temp = new List<NewsItem>();
+                while (mirrorQueue.TryDequeue(out var m))
+                {
+                    if (m.UniqueKey != item.UniqueKey)
+                        temp.Add(m);
+                }
+                foreach (var m in temp)
+                    mirrorQueue.Enqueue(m);
+            }
+
+            return true;
+        }
         public async ValueTask AddAsync(NewsItem item, CancellationToken ct = default)
         {
             if (item?.SourceName is not { } source ||

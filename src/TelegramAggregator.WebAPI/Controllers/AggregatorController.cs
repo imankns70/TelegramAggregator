@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Telegram.Bot.Types;
 using TelegramAggregator.WebAPI.Infrastructure;
-using TelegramAggregator.WebAPI.Models;
+using TelegramAggregator.WebAPI.Models.FootbalSettings;
 using TelegramAggregator.WebAPI.Services;
 
 namespace TelegramAggregator.WebAPI.Controllers

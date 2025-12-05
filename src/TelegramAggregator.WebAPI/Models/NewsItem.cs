@@ -7,6 +7,7 @@ namespace TelegramAggregator.WebAPI.Models;
 /// </summary>
 public class NewsItem
 {
+    public int Score { get; set; } = 0;
     /// <summary>عنوان خبر یا پست</summary>
     public string Title { get; set; } = "";
 

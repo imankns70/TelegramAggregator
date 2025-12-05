@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
+using System.Runtime;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Telegram.Bot;
@@ -10,6 +11,7 @@ using TelegramAggregator.Infrastructure;
 using TelegramAggregator.Services;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
+using TelegramAggregator.WebAPI.Models.FootbalSettings;
 
 namespace TelegramAggregator.WebAPI.Services
 {
@@ -127,6 +129,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             var videoKeywords = _footbalForiSettings.VideoKeywords;
             var otherSportsKeywords = _footbalForiSettings.OtherSportsKeywords;
+            var womenKeywords = _footbalForiSettings.WomenKeywords;
 
             var acceptedItems = new List<NewsItem>();
 
@@ -148,6 +151,12 @@ namespace TelegramAggregator.WebAPI.Services
                     continue;
 
                 }
+                else if (womenKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
+                {
+                    _newsStorage.LogRejected(item, "فوتبال بانوان");
+                    continue;
+
+                }
                 else if (text.Contains("ترکیب رسمی"))
                 {
                     _newsStorage.LogRejected(item, "ترکیب رسمی");
@@ -160,7 +169,7 @@ namespace TelegramAggregator.WebAPI.Services
                     continue;
                 }
 
-
+                item.Score = ScoreCalculator.Calculate(item, _footbalForiSettings);
 
                 // خبر قبول شد !
                 _newsStorage.LogAccepted(item);
