@@ -30,8 +30,7 @@ namespace TelegramAggregator.WebAPI.Controllers
         [Route("Status")]
         public ActionResult Status()
         {
-            //if (!IsValidApiKey(apiKey))
-            //    return Unauthorized("API Key نامعتبر است");
+            
 
             var channels = _config.GetSection("Channels").Get<List<FootbalForiSettings>>() ?? new();
             var lastRun = DateTime.Now; // بعداً با لاگ واقعی جایگزین کن

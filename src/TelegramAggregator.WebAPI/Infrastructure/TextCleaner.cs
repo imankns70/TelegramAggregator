@@ -17,7 +17,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             var text = input.Trim();
 
-            // فقط حذف منبع از اول عنوان — همین و بس
+            // حذف منبع از اول عنوان
             foreach (var source in KnownSources)
             {
                 text = Regex.Replace(text,
@@ -26,18 +26,17 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                     RegexOptions.IgnoreCase);
             }
 
-            // حذف پیشوند کانال مثل "ورزش سه | "
             text = Regex.Replace(text, @"^[^\n|:]{2,40}[\|:]\s*", "");
-
-            // حذف منشن و هشتگ
             text = Regex.Replace(text, @"@\w+", "");
             text = Regex.Replace(text, @"#\S+", "");
 
-            // حذف کاراکترهای مخفی و فاصله اضافی
-            text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
-            text = Regex.Replace(text, @"\s{2,}", " ").Trim();
+            // حذف نویسه‌های مخفی (ولی نیم‌فاصله رو هوشمندانه نگه دار!)
+            text = Regex.Replace(text, @"[\u200B\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
+            text = Regex.Replace(text, @"(\u200C)+", "\u200C"); // چند نیم‌فاصله → یکی
+            text = Regex.Replace(text, @"^[\u200C\s]+|[\u200C\s]+$", ""); // اول و آخر خط
+            text = Regex.Replace(text, @"[\u200C\s]{2,}", " "); // دو یا بیشتر → فاصله معمولی
 
-            return text;
+            return text.Trim();
         }
 
         public static string CleanShortDescription(string input, string title = "")
@@ -46,19 +45,19 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             var text = input;
 
-            // حذف منشن، هشتگ، کاراکترهای مخفی
             text = Regex.Replace(text, @"@\w+", "");
             text = Regex.Replace(text, @"#\S+", "");
-            text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
-            text = Regex.Replace(text, @"\s{2,}", " ");
+            text = Regex.Replace(text, @"[\u200B\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
+            text = Regex.Replace(text, @"(\u200C)+", "\u200C");
+            text = Regex.Replace(text, @"^[\u200C\s]+|[\u200C\s]+$", "");
+            text = Regex.Replace(text, @"[\u200C\s]{2,}", " ");
 
-            // حذف عنوان تکراری از اول متن
             if (!string.IsNullOrEmpty(title))
             {
                 var cleanTitle = CleanTitle(title);
                 if (text.TrimStart().StartsWith(cleanTitle, StringComparison.OrdinalIgnoreCase))
                 {
-                    text = text.Substring(cleanTitle.Length).Trim();
+                    text = text.Substring(cleanTitle.Length).TrimStart();
                 }
             }
 

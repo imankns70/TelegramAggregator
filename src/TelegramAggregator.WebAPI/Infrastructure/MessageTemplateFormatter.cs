@@ -94,31 +94,70 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
         private static string Escape(string text) =>
             text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+        private static string CleanFullDescription(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
 
-       private static string CleanFullDescription(string? text)
-{
-    if (string.IsNullOrWhiteSpace(text)) return "";
+            // ۱. حذف همه کاراکترهای مخفی
+            text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
 
-    // ۱. حذف همه کاراکترهای مخفی (مهم‌ترین!)
-    text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
+            // ۲. حذف لینک‌ها
+            text = Regex.Replace(text, @"https?://\S+", "");
 
-    // ۲. حذف لینک‌ها
-    text = Regex.Replace(text, @"https?://\S+", "");
+            // ۳. حذف "به گزارش ورزش سه" و هر منبع دیگه‌ای — با یا بدون نقل قول
+            text = Regex.Replace(text,
+                @"به\s*گزارش\s*[""']?\s*(ورزش\s*سه|طرفداری|خبرورزشی|khabarvarzeshi).*?[,،:]\s*",
+                "",
+                RegexOptions.IgnoreCase);
 
-    // ۳. حذف پیشوندهای رایج کانال و منبع (ورزش سه | ، طرفداری - ، خبرورزشی: و ...)
-    text = Regex.Replace(text, @"^(ورزش\s*سه|طرفداری|خبرورزشی|khabarvarzeshi).*?[:|\/\-–—]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            // ۴. حذف هر خطی که با "به گزارش" شروع میشه
+            text = Regex.Replace(text,
+                @"^به\s*گزارش.*?$",
+                "",
+                RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
-    // ۴. حذف نویسنده و گزارشگر از اول خط
-    text = Regex.Replace(text, @"^[\w\s\.\-–—]+?[:\-–—]\s*", "", RegexOptions.Multiline);
-    text = Regex.Replace(text, @"^[\w\s\.\-–—]+?\s*[-–—]\s*", "", RegexOptions.Multiline);
+            // ۵. حذف پیشوند منبع با | یا : یا - 
+            text = Regex.Replace(text,
+                @"^(ورزش\s*سه|طرفداری|خبرورزشی).*?[:|\/\-–—]\s*",
+                "",
+                RegexOptions.IgnoreCase | RegexOptions.Multiline);
 
-    // ۵. حذف | و : و ؛ اول خط
-    text = Regex.Replace(text, @"^\s*[\|｜:؛]\s*", "", RegexOptions.Multiline);
+            // ۶. حذف نویسنده و تاریخ و هر چیز قبل از متن اصلی
+            text = Regex.Replace(text, @"^[\w\s\.\-–—]+?[:\-–—]\s*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"^[\w\s\.\-–—]+?\s*[-–—]\s*", "", RegexOptions.Multiline);
 
-    // ۶. حذف فاصله‌های اضافی
-    text = Regex.Replace(text, @"\s{2,}", " ");
+            // ۷. حذف | و : اول خط
+            text = Regex.Replace(text, @"^\s*[\|｜:؛]\s*", "", RegexOptions.Multiline);
 
-    return text.Trim();
-}
+            // ۸. حذف فاصله‌های اضافی
+            text = Regex.Replace(text, @"\s{2,}", " ");
+
+            return text.Trim();
+        }
+        private static string CleanFullDescription2(string? text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+
+            // ۱. حذف همه کاراکترهای مخفی (مهم‌ترین!)
+            text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
+
+            // ۲. حذف لینک‌ها
+            text = Regex.Replace(text, @"https?://\S+", "");
+
+            // ۳. حذف پیشوندهای رایج کانال و منبع (ورزش سه | ، طرفداری - ، خبرورزشی: و ...)
+            text = Regex.Replace(text, @"^(ورزش\s*سه|طرفداری|خبرورزشی|khabarvarzeshi).*?[:|\/\-–—]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+            // ۴. حذف نویسنده و گزارشگر از اول خط
+            text = Regex.Replace(text, @"^[\w\s\.\-–—]+?[:\-–—]\s*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"^[\w\s\.\-–—]+?\s*[-–—]\s*", "", RegexOptions.Multiline);
+
+            // ۵. حذف | و : و ؛ اول خط
+            text = Regex.Replace(text, @"^\s*[\|｜:؛]\s*", "", RegexOptions.Multiline);
+
+            // ۶. حذف فاصله‌های اضافی
+            text = Regex.Replace(text, @"\s{2,}", " ");
+
+            return text.Trim();
+        }
     }
 }

@@ -51,7 +51,7 @@ namespace TelegramAggregator.WebAPI.Controllers
                         source = x.SourceName ?? "نامشخص",
                         title = x.Title?.Truncate(80),
                         link = x.Link,
-                        sentAt = x.ProcessedAt.ToString("HH:mm:ss") // چون PublishedAt نداریم، از ProcessedAt استفاده می‌کنیم
+                        sentAt = x.PublishedAt.Value.ToString("HH:mm:ss") // چون PublishedAt نداریم، از ProcessedAt استفاده می‌کنیم
                     }).ToList(),
 
                 // آخرین پردازش‌شده‌ها (قبول + رد + در صف)
