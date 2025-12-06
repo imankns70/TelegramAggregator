@@ -10,5 +10,7 @@
         public int SevereInjury { get; set; } 
         public int ExclusiveTag { get; set; } 
         public int FreshnessBonus { get; set; } 
+        public int DerbyMatch { get; set; } 
+        public int LiveMatch { get; set; } 
     }
 }
