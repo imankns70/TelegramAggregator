@@ -95,20 +95,30 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         private static string Escape(string text) =>
             text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
 
-        private static string CleanFullDescription(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return "";
+       private static string CleanFullDescription(string? text)
+{
+    if (string.IsNullOrWhiteSpace(text)) return "";
 
-            text = Regex.Replace(text, @"https?://\S+", "");
-            text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
-            text = Regex.Replace(text, @"^\s*[\|｜:：]\s*", "", RegexOptions.Multiline);
-            text = Regex.Replace(text, @"\s{2,}", " ");
+    // ۱. حذف همه کاراکترهای مخفی (مهم‌ترین!)
+    text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
 
-            text = Regex.Replace(text, @"^(ورزش\s*سه|طرفداری|خبرورزشی|khabarvarzeshi).*?[:|\/\-–—]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            text = Regex.Replace(text, @"^[\w\s\.\-–—]+?[:\-–—]\s*", "", RegexOptions.Multiline);
-            text = Regex.Replace(text, @"^[\w\s\.\-–—]+?\s*[-–—]\s*", "", RegexOptions.Multiline);
+    // ۲. حذف لینک‌ها
+    text = Regex.Replace(text, @"https?://\S+", "");
 
-            return text.Trim();
-        }
+    // ۳. حذف پیشوندهای رایج کانال و منبع (ورزش سه | ، طرفداری - ، خبرورزشی: و ...)
+    text = Regex.Replace(text, @"^(ورزش\s*سه|طرفداری|خبرورزشی|khabarvarzeshi).*?[:|\/\-–—]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+    // ۴. حذف نویسنده و گزارشگر از اول خط
+    text = Regex.Replace(text, @"^[\w\s\.\-–—]+?[:\-–—]\s*", "", RegexOptions.Multiline);
+    text = Regex.Replace(text, @"^[\w\s\.\-–—]+?\s*[-–—]\s*", "", RegexOptions.Multiline);
+
+    // ۵. حذف | و : و ؛ اول خط
+    text = Regex.Replace(text, @"^\s*[\|｜:؛]\s*", "", RegexOptions.Multiline);
+
+    // ۶. حذف فاصله‌های اضافی
+    text = Regex.Replace(text, @"\s{2,}", " ");
+
+    return text.Trim();
+}
     }
 }

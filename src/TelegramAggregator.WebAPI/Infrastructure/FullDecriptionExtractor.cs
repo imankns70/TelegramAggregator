@@ -131,9 +131,20 @@ namespace TelegramAggregator.Infrastructure
             }
 
             // سایت‌های خاص
+            // حذف کامل متای نویسنده و آمار بازدید در طرفداری
             if (host.Contains("tarafdari.com"))
             {
-                RemoveNodes(node, ".//div[contains(@class,'node__meta') or contains(@class,'author') or contains(@class,'links') or contains(@class,'field--name-field-tags')]");
+                // حذف کامل خط کثیف "عنوان + مشاهده + دیدگاه + عدد"
+                RemoveNodes(node, ".//*[contains(text(),'مشاهده') and contains(text(),'دیدگاه')]");
+
+                // حذف هر چیزی که شامل عدد + "مشاهده" یا "دیدگاه" باشه
+                RemoveNodes(node, ".//*[contains(text(),'مشاهده') or contains(text(),'دیدگاه')]");
+
+                // حذف بلوک‌های متا، نویسنده، آمار
+                RemoveNodes(node, ".//div[contains(@class,'node__meta') or contains(@class,'author') or contains(@class,'submitted') or contains(@class,'meta') or contains(@class,'stats')]");
+
+                // حذف هر چیزی که شامل عدد ۴ رقمی یا بیشتر باشه و احتمالاً ID باشه
+                RemoveNodes(node, ".//*[contains(text(),' 8') or contains(text(),' 9')][string-length(text()) < 100]");
             }
 
             if (host.Contains("khabarvarzeshi.com"))
@@ -168,17 +179,42 @@ namespace TelegramAggregator.Infrastructure
 
             return string.Join("\n\n", lines).Trim();
         }
-
         private string CleanTarafdariText(string text)
         {
-            return Regex.Replace(text, @"(@|#)\w+|با دعوت.*هدیه.*|تبدیل.*تومان.*", "", RegexOptions.IgnoreCase).Trim();
+            if (string.IsNullOrWhiteSpace(text))
+                return string.Empty;
+
+            // حذف منشن‌ها و هشتگ‌ها
+            text = Regex.Replace(text, @"@\w+", "");
+            text = Regex.Replace(text, @"#\w+", "");
+
+            // حذف تبلیغات دعوت به هدیه و تبدیل پول
+            text = Regex.Replace(text, @"با دعوت.*?هدیه بگیرید\.?", "", RegexOptions.Singleline);
+            text = Regex.Replace(text, @"تبدیل\s*،?\s*\d+\s*هزار\s*تومان.*", "", RegexOptions.Singleline);
+
+            // حذف "مشاهده / دیدگاه" و اعداد اضافی در ابتدا و انتهای خطوط
+            text = Regex.Replace(text, @"\d+\s*(مشاهده|دیدگاه).*?$", "", RegexOptions.IgnoreCase);
+
+            // حذف جملات حاشیه‌ای یا مربوط به طرفداری
+            text = Regex.Replace(text, @"^طرفداری\s*[\|｜]\s*.*", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"^طرفداری\s*$", "", RegexOptions.IgnoreCase);
+
+            // حذف لینک‌ها
+            text = Regex.Replace(text, @"https?://[^\s]+", "", RegexOptions.IgnoreCase);
+
+            // حذف نیم‌فاصله‌ها و فضای اضافی
+            text = Regex.Replace(text, @"[\s\u200C]+", " ", RegexOptions.IgnoreCase).Trim();
+
+            return text;
         }
+
 
         private string CleanVarzesh3Text(string text)
         {
-            return Regex.Replace(text,
-                @"کد\s*خبر.*|برای\s*مشاهده.*|ورود\s*\|\s*ثبت\s*نام.*|کد\b.*",
-                "", RegexOptions.IgnoreCase | RegexOptions.Multiline).Trim();
+            text = Regex.Replace(text, @"کد\s*خبر.*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"برای\s*مشاهده.*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"ورود\s*\|\s*ثبت\s*نام.*", "", RegexOptions.Multiline);
+            return text.Trim();
         }
         private string CleanKhabarVarzeshiText(string text)
         {
