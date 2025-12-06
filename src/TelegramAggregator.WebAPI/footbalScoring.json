@@ -20,119 +20,121 @@
       "S+": [
         {
           "Name": "پرسپولیس",
-          "Score": 45
+          "Score": 52
         },
         {
           "Name": "استقلال",
-          "Score": 45
+          "Score": 52
         },
         {
           "Name": "تیم ملی ایران",
-          "Score": 45
+          "Score":52
         },
         {
           "Name": "تیم ملی",
-          "Score": 42
+          "Score": 52
+        },
+        {
+          "Name": "ایران",
+          "Score": 52
         }
       ],
       "S": [
         {
           "Name": "ال کلاسیکو",
-          "Score": 42
+          "Score": 50
         },
         {
           "Name": "رئال مادرید",
-          "Score": 42
+          "Score": 50
         },
         {
           "Name": "رئال",
-          "Score": 42
+          "Score": 50
         },
         {
           "Name": "بارسلونا",
-          "Score": 42
+          "Score": 50
         },
         {
           "Name": "بارسا",
-          "Score": 42
+          "Score": 50
         },
         {
           "Name": "منچسترسیتی",
-          "Score": 42
+          "Score": 50
         },
         {
           "Name": "سیتی",
-          "Score": 42
+          "Score": 50
         },
         {
           "Name": "لیورپول",
-          "Score": 42
+          "Score": 50
         },
         {
           "Name": "بایرن مونیخ",
-          "Score": 42
+          "Score": 50
         },
         {
           "Name": "بایرن",
-          "Score": 42
+          "Score": 50
         },
         {
           "Name": "چلسی",
-          "Score": 42
+          "Score": 50
+        },
+        {
+          "Name": "منچستر یونایتد",
+          "Score": 50
+        },
+        {
+          "Name": "آرسنال",
+          "Score": 50
+        },
+        {
+          "Name": "پاری سن ژرمن",
+          "Score": 50
+        },
+        {
+          "Name": "پاریس",
+          "Score": 50
         }
       ],
       "A+": [
         {
           "Name": "یوونتوس",
-          "Score": 38
+          "Score": 45
         },
         {
           "Name": "تاتنهام",
-          "Score": 38
+          "Score": 45
         },
-        {
-          "Name": "منچستر یونایتد",
-          "Score": 38
-        },
-        {
-          "Name": "یونایتد",
-          "Score": 38
-        },
+        
         {
           "Name": "اتلتیکو مادرید",
-          "Score": 38
+          "Score": 45
         },
-        {
-          "Name": "آرسنال",
-          "Score": 38
-        },
-        {
-          "Name": "پاری سن ژرمن",
-          "Score": 38
-        },
-        {
-          "Name": "پاریس",
-          "Score": 38
-        },
+       
         {
           "Name": "میلان",
-          "Score": 38
+          "Score": 45
         },
         {
           "Name": "اینتر",
-          "Score": 38
+          "Score": 45
         },
         {
           "Name": "ناپولی",
-          "Score": 38
+          "Score": 45
         },
         {
           "Name": "رم",
-          "Score": 38
+          "Score":45
         },
         {
           "Name": "دورتموند",
-          "Score": 38
+          "Score": 45
         }
       ],
       "A": [
@@ -338,6 +340,10 @@
         },
         {
           "Name": "آرتتا",
+          "Score": 45
+        },
+        {
+          "Name": "کمپانی",
           "Score": 45
         }
       ],
