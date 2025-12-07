@@ -73,10 +73,10 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         public bool TryDequeueAny(out NewsItem? item)
         {
             item = null;
-            NewsItem? best = null;
-            string? bestSource = null;
-            double max = double.MinValue;
+            var bestCandidates = new List<(NewsItem Item, string Source, DateTimeOffset PubDate)>();
+            double maxScore = double.MinValue;
 
+            // مرحله ۱: اسکن همه صف‌ها و پیدا کردن بهترین‌ها
             foreach (var kvp in _sourceChannels)
             {
                 var source = kvp.Key;
@@ -86,40 +86,58 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 while (channel.Reader.TryRead(out var n))
                 {
                     temp.Add(n);
-                    if (n.Score > max)
+
+                    
+                    if (n.Score > maxScore)
                     {
-                        max = n.Score;
-                        best = n;
-                        bestSource = source;
+                        maxScore = n.Score;
+                        bestCandidates.Clear();
+                        bestCandidates.Add((n, source, n.PubDate));
+                    }
+                    else if (n.Score == maxScore)
+                    {
+                        bestCandidates.Add((n, source, n.PubDate));
                     }
                 }
 
+                // همه رو برگردون به صف
                 foreach (var n in temp)
                     channel.Writer.TryWrite(n);
             }
 
-            if (best == null) return false;
+            if (bestCandidates.Count == 0)
+                return false;
 
-            item = best;
+            // مرحله ۲: از بین بهترین‌ها → قدیمی‌ترین رو انتخاب کن
+            var selected = bestCandidates
+                .OrderBy(x => x.PubDate)  // قدیمی‌ترین اول
+                .First();
 
-            // حذف از صف اصلی
-            if (_sourceChannels.TryGetValue(bestSource!, out var ch))
+            item = selected.Item;
+            var selectedSource = selected.Source;
+
+            // مرحله ۳: حذف واقعی از صف اصلی
+            if (_sourceChannels.TryGetValue(selectedSource, out var ch))
             {
                 var temp = new List<NewsItem>();
                 while (ch.Reader.TryRead(out var n))
+                {
                     if (n.UniqueKey != item.UniqueKey)
                         temp.Add(n);
+                }
                 foreach (var n in temp)
                     ch.Writer.TryWrite(n);
             }
 
-            // حذف از آینه
-            if (_debugMirror.TryGetValue(bestSource!, out var m))
+            // مرحله ۴: حذف از میرور
+            if (_debugMirror.TryGetValue(selectedSource, out var m))
             {
                 var temp = new List<NewsItem>();
                 while (m.TryDequeue(out var x))
+                {
                     if (x.UniqueKey != item.UniqueKey)
                         temp.Add(x);
+                }
                 foreach (var x in temp)
                     m.Enqueue(x);
             }
