@@ -244,39 +244,43 @@ namespace TelegramAggregator.WebAPI.Services
                 await Task.Delay(3000, ct);
 
             }
-
-            else
+            else if (item.FullDescription.Contains("خطا"))
             {
-
-                _newsStorage.LogPublished(item);
-
-                var caption = MessageTemplateFormatter.GetCaption(item);
-
-                Message sentMessage;
-
-                if (!string.IsNullOrEmpty(item.ImageUrl))
-                {
-                    sentMessage = await _bot.SendPhoto(
-                        chatId: channelId, // 👈 مستقیماً کانال
-                        photo: new InputFileUrl(item.ImageUrl),
-                        caption: caption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
-                }
-                else
-                {
-                    sentMessage = await _bot.SendMessage(
-                        chatId: channelId, // 👈 مستقیماً کانال
-                        text: caption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
-                }
-
-
-                await Task.Delay(TimeSpan.FromSeconds(15), ct);
-                await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
-
+                _newsStorage.LogRejected(item, "خطا در واکشی شرح کامل");
+                await Task.Delay(3000, ct);
             }
+            else
+                    {
+
+                        _newsStorage.LogPublished(item);
+
+                        var caption = MessageTemplateFormatter.GetCaption(item);
+
+                        Message sentMessage;
+
+                        if (!string.IsNullOrEmpty(item.ImageUrl))
+                        {
+                            sentMessage = await _bot.SendPhoto(
+                                chatId: channelId, // 👈 مستقیماً کانال
+                                photo: new InputFileUrl(item.ImageUrl),
+                                caption: caption,
+                                parseMode: ParseMode.Html,
+                                cancellationToken: ct);
+                        }
+                        else
+                        {
+                            sentMessage = await _bot.SendMessage(
+                                chatId: channelId, // 👈 مستقیماً کانال
+                                text: caption,
+                                parseMode: ParseMode.Html,
+                                cancellationToken: ct);
+                        }
+
+
+                        await Task.Delay(TimeSpan.FromSeconds(15), ct);
+                        await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
+
+                    }
 
         }
     }

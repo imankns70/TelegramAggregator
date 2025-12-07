@@ -149,15 +149,15 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                     _seenKeys.TryRemove(oldestKey, out _);
 
             // لایه ۲: فقط خبرهای قدیمی‌تر از آخرین خبر این منبع رو رد کن
-            if (_lastSentBySource.TryGetValue(source, out var lastFromSource))
-            {
-                if (item.PubDate <= lastFromSource.PubDate)
-                {
-                    LogRejected(item, "قدیمی، فیلتر لایه دوم");
-                    //"تکراری (قدیمی‌تر یا هم‌زمان
-                    return;
-                }
-            }
+            // if (_lastSentBySource.TryGetValue(source, out var lastFromSource))
+            // {
+            //     if (item.PubDate <= lastFromSource.PubDate)
+            //     {
+            //         LogRejected(item, "قدیمی، فیلتر لایه دوم");
+            //         //"تکراری (قدیمی‌تر یا هم‌زمان
+            //         return;
+            //     }
+            // }
 
             // لایه ۳: شباهت با آخرین خبرهای منابع دیگر
             foreach (var kvp in _lastSentBySource.Where(x => x.Key != source))
