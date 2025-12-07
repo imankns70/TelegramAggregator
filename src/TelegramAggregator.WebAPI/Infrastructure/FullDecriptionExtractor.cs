@@ -130,21 +130,18 @@ namespace TelegramAggregator.Infrastructure
                     n.Remove();
             }
 
-            // سایت‌های خاص
-            // حذف کامل متای نویسنده و آمار بازدید در طرفداری
             if (host.Contains("tarafdari.com"))
             {
+                // حذف کامل عنوان خبر (h1) از داخل محتوا — این خط طلاییه!
+                var titleNode = node.SelectSingleNode(".//h1[contains(@class,'node__title') or contains(@class,'title')]");
+                titleNode?.Remove();
+
                 // حذف کامل خط کثیف "عنوان + مشاهده + دیدگاه + عدد"
                 RemoveNodes(node, ".//*[contains(text(),'مشاهده') and contains(text(),'دیدگاه')]");
-
-                // حذف هر چیزی که شامل عدد + "مشاهده" یا "دیدگاه" باشه
-                RemoveNodes(node, ".//*[contains(text(),'مشاهده') or contains(text(),'دیدگاه')]");
-
-                // حذف بلوک‌های متا، نویسنده، آمار
+                RemoveNodes(node, ".//*[contains(text(),'مشاهده')]");
+                RemoveNodes(node, ".//*[contains(text(),'دیدگاه')]");
+                RemoveNodes(node, ".//*[contains(text(),'طرفداری |')]");
                 RemoveNodes(node, ".//div[contains(@class,'node__meta') or contains(@class,'author') or contains(@class,'submitted') or contains(@class,'meta') or contains(@class,'stats')]");
-
-                // حذف هر چیزی که شامل عدد ۴ رقمی یا بیشتر باشه و احتمالاً ID باشه
-                RemoveNodes(node, ".//*[contains(text(),' 8') or contains(text(),' 9')][string-length(text()) < 100]");
             }
 
             if (host.Contains("khabarvarzeshi.com"))
