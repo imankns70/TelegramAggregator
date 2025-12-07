@@ -94,6 +94,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
         private static string Escape(string text) =>
             text.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+
         private static string CleanFullDescription(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return "";
@@ -104,57 +105,32 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             // ۲. حذف لینک‌ها
             text = Regex.Replace(text, @"https?://\S+", "");
 
-            // ۳. حذف "به گزارش ورزش سه" و هر منبع دیگه‌ای — با یا بدون نقل قول
-            text = Regex.Replace(text,
-                @"به\s*گزارش\s*[""']?\s*(ورزش\s*سه|طرفداری|خبرورزشی|khabarvarzeshi).*?[,،:]\s*",
-                "",
-                RegexOptions.IgnoreCase);
+            // حذف دقیق و کامل "طرفداری |" — حتی اگه وسط متن باشه!
+            text = Regex.Replace(text, @"طرفداری\s*[\|｜]\s*", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"ورزش\s*سه\s*[\|｜]\s*", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"خبرورزشی\s*[\|｜]\s*", "", RegexOptions.IgnoreCase);
 
-            // ۴. حذف هر خطی که با "به گزارش" شروع میشه
-            text = Regex.Replace(text,
-                @"^به\s*گزارش.*?$",
-                "",
-                RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            // حذف هر خطی که با منبع شروع بشه (طرفداری | ، ورزش سه | و …)
+            text = Regex.Replace(text, @"^(طرفداری|ورزش\s*سه|خبرورزشی).*?[\|｜].*$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
 
-            // ۵. حذف پیشوند منبع با | یا : یا - 
-            text = Regex.Replace(text,
-                @"^(ورزش\s*سه|طرفداری|خبرورزشی).*?[:|\/\-–—]\s*",
-                "",
-                RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            // حذف "به گزارش طرفداری"، "به گزارش ورزش سه" و …
+            text = Regex.Replace(text, @"به\s*گزارش\s*.{0,30}?(طرفداری|ورزش\s*سه|خبرورزشی).*?[,،:]\s*", "", RegexOptions.IgnoreCase);
 
-            // ۶. حذف نویسنده و تاریخ و هر چیز قبل از متن اصلی
-            text = Regex.Replace(text, @"^[\w\s\.\-–—]+?[:\-–—]\s*", "", RegexOptions.Multiline);
-            text = Regex.Replace(text, @"^[\w\s\.\-–—]+?\s*[-–—]\s*", "", RegexOptions.Multiline);
+            // حذف هر خطی که فقط منبع باشه
+            text = Regex.Replace(text, @"^[\w\s]*?(طرفداری|ورزش\s*سه|خبرورزشی)[\|｜:].*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
-            // ۷. حذف | و : اول خط
+            // حذف نویسنده و تاریخ و هر چیز قبل از متن اصلی
+            text = Regex.Replace(text, @"^[\w\s\.\-–—آ-ی]+?[:\-–—]\s*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"^[\w\s\.\-–—آ-ی]+?\s*[-–—]\s*", "", RegexOptions.Multiline);
+
+            // حذف | و : و ؛ اول خط
             text = Regex.Replace(text, @"^\s*[\|｜:؛]\s*", "", RegexOptions.Multiline);
 
-            // ۸. حذف فاصله‌های اضافی
-            text = Regex.Replace(text, @"\s{2,}", " ");
+            // حذف خطوطی که شامل "مشاهده" یا "دیدگاه" باشن
+            text = Regex.Replace(text, @".*?\d+[\s\u200C]*مشاهده.*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @".*?\d+[\s\u200C]*دیدگاه.*", "", RegexOptions.Multiline);
 
-            return text.Trim();
-        }
-        private static string CleanFullDescription2(string? text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return "";
-
-            // ۱. حذف همه کاراکترهای مخفی (مهم‌ترین!)
-            text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
-
-            // ۲. حذف لینک‌ها
-            text = Regex.Replace(text, @"https?://\S+", "");
-
-            // ۳. حذف پیشوندهای رایج کانال و منبع (ورزش سه | ، طرفداری - ، خبرورزشی: و ...)
-            text = Regex.Replace(text, @"^(ورزش\s*سه|طرفداری|خبرورزشی|khabarvarzeshi).*?[:|\/\-–—]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-
-            // ۴. حذف نویسنده و گزارشگر از اول خط
-            text = Regex.Replace(text, @"^[\w\s\.\-–—]+?[:\-–—]\s*", "", RegexOptions.Multiline);
-            text = Regex.Replace(text, @"^[\w\s\.\-–—]+?\s*[-–—]\s*", "", RegexOptions.Multiline);
-
-            // ۵. حذف | و : و ؛ اول خط
-            text = Regex.Replace(text, @"^\s*[\|｜:؛]\s*", "", RegexOptions.Multiline);
-
-            // ۶. حذف فاصله‌های اضافی
+            // حذف فاصله‌های اضافی
             text = Regex.Replace(text, @"\s{2,}", " ");
 
             return text.Trim();
