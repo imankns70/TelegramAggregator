@@ -23,7 +23,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         private readonly BoundedChannelOptions _channelOptions;
         // اینا اضافه شدن — قلب جدید دیباگ!
         internal readonly ConcurrentDictionary<string, DebugFeedItem> _debugItems = new();
-        private const int MaxDebugItems = 400;
+        private const int MaxDebugItems = 200;
 
         private readonly ConcurrentDictionary<string, ConcurrentQueue<NewsItem>> _debugMirror = new();
 
