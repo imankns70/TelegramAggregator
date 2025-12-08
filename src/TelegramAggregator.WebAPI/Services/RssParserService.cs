@@ -2,21 +2,22 @@
 using System.Net;
 using System.ServiceModel.Syndication;
 using System.Xml;
+using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 
-namespace TelegramAggregator.WebAPI.Infrastructure;
+namespace TelegramAggregator.WebAPI.Services;
 
 /// <summary>
 /// پارس کردن RSS با SyndicationFeed + فیلتر تاریخ + منبع
 /// </summary>
-public class RssParser : IRssParser
+public class RssParserService : IRssParserService
 {
-    private readonly ILogger<RssParser> _logger;
-    private readonly ConcurrentDictionary<string, DebugFeedItem> _debugItems;
-    public RssParser(ILogger<RssParser> logger, NewsStorage newsStorage)
+    private readonly ILogger<RssParserService> _logger;
+    private readonly IDebugStore _debugStore;
+    public RssParserService(ILogger<RssParserService> logger, IDebugStore debugStore)
     {
         _logger = logger;
-        _debugItems = newsStorage._debugItems;
+        _debugStore = debugStore;
     }
 
     public IEnumerable<NewsItem> Parse(string xml)
@@ -25,7 +26,7 @@ public class RssParser : IRssParser
             return Enumerable.Empty<NewsItem>();
 
         var result = new List<NewsItem>();
-        XmlReader? reader = null;
+        XmlReader reader = null;
 
         try
         {
@@ -36,26 +37,7 @@ public class RssParser : IRssParser
             var feedTitle = feed.Title?.Text ?? "RSS";
 
 
-            result = feed.Items             
-              .Where(item =>
-              {
-                  var rawLink = item.Links.FirstOrDefault()?.Uri?.ToString()?.Trim();
-                  if (string.IsNullOrWhiteSpace(rawLink))
-                      return false;
-
-                  // نرمال‌سازی لینک — این خط همه تکراری‌ها رو میکشه!
-                  var normalizedLink = NormalizeLink(rawLink);
-
-                  return _debugItems.TryAdd(normalizedLink, new DebugFeedItem
-                  {
-                      Link = normalizedLink,                    // لینک پاک شده                 
-                      Title = item.Title?.Text ?? "",
-                      SourceName = feedTitle,
-                      PubDate = item.PublishDate.DateTime,
-                      ProcessedAt = DateTime.UtcNow,
-                      PublishStatus = "جدید_واکشی_شده"
-                  });
-              })
+            result = feed.Items 
                 .OrderByDescending(i => i.PublishDate.DateTime)
                 .Take(10)
                 .Reverse()
@@ -73,6 +55,25 @@ public class RssParser : IRssParser
                         SourceName = feed.Title?.Text ?? "RSS"
                     };
                 }).ToList();
+
+
+            foreach (var item in result)
+            {
+                var rawLink = item.Link.Trim();        
+
+                // نرمال‌سازی لینک — این خط همه تکراری‌ها رو میکشه!
+                var normalizedLink = NormalizeLink(rawLink);
+                _debugStore.LogOrUpdate(new DebugFeedItem
+                {
+                    Link = normalizedLink,                    // لینک پاک شده                 
+                    Title = item.Title,
+                    SourceName = feedTitle,
+                    PubDate = item.PubDate.DateTime,
+                    ProcessedAt = DateTime.UtcNow,
+                    PublishStatus = "جدید_واکشی_شده"
+                });
+
+            }
 
 
         }

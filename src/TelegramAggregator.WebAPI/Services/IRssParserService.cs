@@ -1,11 +1,11 @@
 ﻿using TelegramAggregator.WebAPI.Models;
 
-namespace TelegramAggregator.WebAPI.Infrastructure;
+namespace TelegramAggregator.WebAPI.Services;
 
 /// <summary>
 /// رابط پارس RSS
 /// </summary>
-public interface IRssParser
+public interface IRssParserService
 {
     /// <summary>
     /// پارس کردن محتوای RSS و تبدیل به لیست NewsItem

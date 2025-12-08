@@ -4,22 +4,17 @@ using HtmlAgilityPack;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace TelegramAggregator.Infrastructure
+namespace TelegramAggregator.WebAPI.Services
 {
-    public class ImageExtractor : IImageExtractor
+    public class ImageExtractorService : IImageExtractorService
     {
-        private readonly HttpClient _httpClient;
-        private readonly ILogger<ImageExtractor> _logger;
-        private readonly IBrowsingContext _context = BrowsingContext.New(Configuration.Default);
+        private readonly IHttpHelperService _httpClient;
+        private readonly ILogger<ImageExtractorService> _logger;
 
-        public ImageExtractor(IHttpClientFactory factory, ILogger<ImageExtractor> logger)
+        public ImageExtractorService(ILogger<ImageExtractorService> logger, IHttpHelperService httpClient)
         {
-            _httpClient = factory.CreateClient(nameof(ImageExtractor));
-            _httpClient.Timeout = TimeSpan.FromSeconds(22);
-            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36");
-
             _logger = logger;
+            _httpClient = httpClient;
         }
 
 
@@ -62,7 +57,7 @@ namespace TelegramAggregator.Infrastructure
                 return null;
             }
         }
- 
+
         private record ImageCandidate(string Url, int Score);
         private void AddMetaImage(HtmlDocument doc, string baseUrl, string property, int score, List<ImageCandidate> list)
         {
@@ -210,28 +205,18 @@ namespace TelegramAggregator.Infrastructure
 
             try
             {
-                var separator = url.Contains('?') ? "&" : "?";
-                var requestUrl = $"{url}{separator}nocache={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
 
-                var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
-                request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 60_000); // فقط 60KB اول
+                (bool, string) httpResult = await _httpClient.TryHtmlForCheckVideoAsync(url, ct);
 
-                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+                if (httpResult.Item1 == false)
+                    return false;
 
-                if (!response.IsSuccessStatusCode) return false;
-
-                // اگر خودش فایل ویدئوست → ۱۰۰٪
-                if (response.Content.Headers.ContentType?.MediaType?.StartsWith("video/", StringComparison.OrdinalIgnoreCase) == true)
+                if (httpResult.Item1 && string.IsNullOrEmpty(httpResult.Item2))
                     return true;
 
-                var stream = await response.Content.ReadAsStreamAsync(ct);
-                using var reader = new StreamReader(stream);
-                var html = await reader.ReadToEndAsync();
-
-                if (string.IsNullOrWhiteSpace(html)) return false;
 
                 var doc = new HtmlAgilityPack.HtmlDocument();
-                doc.LoadHtml(html);
+                doc.LoadHtml(httpResult.Item2);
                 var root = doc.DocumentNode;
 
                 // ۱. تگ <video> واقعی
@@ -271,7 +256,6 @@ namespace TelegramAggregator.Infrastructure
         };
     }
 
-    
+
 
 }
- 

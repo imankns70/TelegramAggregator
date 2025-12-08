@@ -1,19 +1,20 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using TelegramAggregator.WebAPI.Infrastructure;
-using TelegramAggregator.WebAPI.Models;
+using TelegramAggregator.WebAPI.Services.Dashboard;
 
 namespace TelegramAggregator.WebAPI.Controllers
 {
     [ApiController]
     [Route("api/debug")]
     public class DebugApiController : ControllerBase
-    {
-        private readonly NewsStorage _newsStorage;
+    { 
+        private readonly IFootballForiDashboardService _footballforiDashboardService;
 
-        public DebugApiController(NewsStorage newsStorage)
+        public DebugApiController(IFootballForiDashboardService footballforiDashboardService)
         {
-            _newsStorage = newsStorage;
+            _footballforiDashboardService = footballforiDashboardService;
         }
+
+
 
         /// <summary>
         /// صفحه اصلی دیباگ — داشبورد زنده با صف‌های کامل و شفاف
@@ -21,57 +22,7 @@ namespace TelegramAggregator.WebAPI.Controllers
         [HttpGet("feed")]
         public IActionResult Feed()
         {
-            var queueBySource = _newsStorage.GetQueueBySource();
-            var result = new
-            {
-                // صف‌ها به تفکیک منبع — همه خبرها رو نشون میده!
-                queues = queueBySource.ToDictionary(
-                    kvp => kvp.Key,
-                    kvp => kvp.Value.Select((item, index) => new
-                    {
-                        score= item.Score,
-                        position = index + 1,
-                        title = item.Title?.Truncate(90),
-                        link = item.Link,
-                        pubDate = item.PubDate.ToString("HH:mm"),
-                        source = item.SourceName ?? kvp.Key
-                    })
-                    .OrderByDescending(a=> a.score)
-                    .ToList()
-                ),
-
-                totalInQueue = queueBySource.Sum(x => x.Value.Count),
-
-                // آخرین خبرهای ارسال‌شده
-                publishedItems = _newsStorage.GetPublishedItems()
-                    .Select((x, i) => new
-                    {
-                        score = x.Score,
-                        position = i + 1,
-                        source = x.SourceName ?? "نامشخص",
-                        title = x.Title?.Truncate(80),
-                        link = x.Link,
-                        sentAt = x.PublishedAt.Value.ToString("HH:mm:ss") // چون PublishedAt نداریم، از ProcessedAt استفاده می‌کنیم
-                    }).ToList(),
-
-                // آخرین پردازش‌شده‌ها (قبول + رد + در صف)
-                recentProcessed = _newsStorage.GetRecentProcessed(80)              
-    .Select(x => new
-    {
-        source = x.SourceName ?? "نامشخص",
-        title = x.Title?.Truncate(80) ?? "بدون عنوان",
-        link = x.Link,
-        time = x.ProcessedAt.ToString("HH:mm:ss"),
-
-        // این دو خط کلید پیروزی هستن!
-        status = GetItemStatus(x),      // درست و منطقی
-        reason = GetItemReason(x),      // درست و صادقانه
-    })
- 
-    .Take(60)
-    .ToList()
-            };
-       
+            var result = _footballforiDashboardService.GetFeed();
             return Ok(result);
         }
 
@@ -80,36 +31,8 @@ namespace TelegramAggregator.WebAPI.Controllers
         /// </summary>
         [HttpGet("stats")]
         public IActionResult Stats()
-        {
-            var now = DateTimeOffset.Now;
-
-            // تابع کمکی: آیا خبر واقعاً قبول شده حساب میشه؟
-            bool IsActuallyAccepted(DebugFeedItem x)
-            {
-                return x.PublishStatus is "جدید_واکشی_شده" or "در صف انتشار" || x.IsAccepted;
-            }
-
-            // همه خبرهای اخیر (کافی برای محاسبه همه چیز)
-            var recentAll = _newsStorage.GetRecentProcessed(10000);
-
-            // آخرین ساعت
-            var lastHourItems = recentAll
-                .Where(x => x.ProcessedAt > now.AddHours(-1))
-                .ToList();
-
-            // امروز
-            var todayItems = recentAll
-                .Where(x => x.ProcessedAt.Date == now.Date)
-                .ToList();
-
-            // محاسبه آمار واقعی و صادقانه
-            var lastHourAccepted = lastHourItems.Count(IsActuallyAccepted);
-            var lastHourRejected = lastHourItems.Count - lastHourAccepted;
-
-            var todayAccepted = todayItems.Count(IsActuallyAccepted);
-
-            // از GetSummary() استفاده می‌کنیم که الان خودش هم صادقه!
-            var summary = _newsStorage.GetSummary();
+        { 
+            var summary = _footballforiDashboardService.GetSummary();
 
             var result = new
             {
@@ -127,55 +50,27 @@ namespace TelegramAggregator.WebAPI.Controllers
                 // آمار آخرین ساعت — کاملاً واقعی و هماهنگ
                 LastHour = new
                 {
-                    Total = lastHourItems.Count,
-                    Accepted = lastHourAccepted,
-                    Rejected = lastHourRejected,
-                    AcceptanceRate = lastHourItems.Count > 0
-                        ? Math.Round((double)lastHourAccepted * 100 / lastHourItems.Count, 1)
-                        : 0.0
+                    Total = summary.LastHourItemsTotal,
+                    Accepted = summary.LastHourAccepted,
+                    Rejected = summary.LastHourRejected,
+                    AcceptanceRate = summary.LastHourAcceptanceRate
                 },
 
                 // آمار امروز — کامل و صادقانه
                 Today = new
                 {
-                    Total = todayItems.Count,
-                    Accepted = todayAccepted,
-                    Rejected = todayItems.Count - todayAccepted,
-                    AcceptanceRate = todayItems.Count > 0
-                        ? Math.Round((double)todayAccepted * 100 / todayItems.Count, 1)
-                        : 0.0
+                    Total = summary.TodayItemsTotal,
+                    Accepted = summary.TodayAccepted,
+                    Rejected = summary.TodayRejected,
+                    AcceptanceRate = summary.TodayAcceptanceRate
                 },
-
-                // رنگ داشبورد — بر اساس آخرین ساعت (واقعی‌تر)
-                DashboardStatusColor = lastHourAccepted >= lastHourItems.Count * 0.90 ? "green" :
-                                       lastHourAccepted >= lastHourItems.Count * 0.70 ? "yellow" : "red"
+              
+               summary.DashboardStatusColor
             };
 
             return Ok(result);
         }
-       
-        private static string GetItemStatus(DebugFeedItem x)
-        {
-            // اولویت مطلق: PublishStatus
-            return x.PublishStatus switch
-            {
-                "ارسال شد" => "ارسال شد",
-                "در صف انتشار" => "قبول شده",
-                "جدید_واکشی_شده" => "قبول شده",  // این مهمه!
-                _ when x.IsAccepted => "قبول شده",
-                _ => "رد شد"
-            };
-        }
 
-        private static string GetItemReason(DebugFeedItem x)
-        {
-            return x.PublishStatus switch
-            {
-                "جدید_واکشی_شده" => "در حال پردازش — تازه رسید",
-                "در صف انتشار" => "در صف ارسال",
-                "ارسال شد" => "ارسال موفق",
-                _ => x.RejectReason ?? "در حال بررسی"
-            };
-        }
+
     }
 }

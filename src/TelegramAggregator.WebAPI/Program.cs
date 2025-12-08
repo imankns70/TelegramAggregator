@@ -3,12 +3,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text;
-using Telegram.Bot;
-using TelegramAggregator.Infrastructure;
-using TelegramAggregator.Services;
+using Telegram.Bot; 
 using TelegramAggregator.WebAPI.Infrastructure;
+using TelegramAggregator.WebAPI.Infrastructure.Storage;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Services;
+using TelegramAggregator.WebAPI.Services.Dashboard;
 
 Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding = Encoding.UTF8;
@@ -45,7 +45,9 @@ builder.Logging.AddConsole();
 // ------------------- سرویس‌های اصلی -------------------
 
 // NewsStorage با تنظیمات دقیق
-builder.Services.AddSingleton<NewsStorage>(sp =>
+builder.Services.AddSingleton<IDebugStore, DebugStore>();
+
+builder.Services.AddSingleton<INewsStorage, NewsStorage>(sp =>
 {
     var settings = sp.GetRequiredService<IOptions<AppSettings>>().Value;
     return new NewsStorage(queueCapacityPerSource: settings.FootbalForiSettings.QueueCapacityPerSource,
@@ -54,19 +56,8 @@ builder.Services.AddSingleton<NewsStorage>(sp =>
 });
 
 
-builder.Services.AddHttpClient(nameof(ImageExtractor), client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-    client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; FootballforiBot/1.0)");
-});
 
-builder.Services.AddHttpClient(nameof(FullDecriptionExtractor), client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-    client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; FootballforiBot/1.0)");
-});
-
-builder.Services.AddHttpClient("RssHttpClient", client =>
+builder.Services.AddHttpClient<IHttpHelperService, HttpHelperService>("RssHttpClient", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
 
@@ -83,15 +74,20 @@ builder.Services.AddHttpClient("RssHttpClient", client =>
     };
 
     client.DefaultRequestHeaders.Pragma.TryParseAdd("no-cache");
-    client.DefaultRequestHeaders.IfNoneMatch.Clear(); // حذف ETag
+    client.DefaultRequestHeaders.IfNoneMatch.Clear();
 });
 
 
+builder.Services.AddSingleton<IDebugStore, DebugStore>();
+builder.Services.AddSingleton<IFootballForiDashboardService, FootballForiDashboardService>();
 // سرویس‌های Scoped
-builder.Services.AddScoped<IHttpHelper, HttpHelper>();
-builder.Services.AddScoped<IRssParser, RssParser>();
-builder.Services.AddScoped<IImageExtractor, ImageExtractor>();
-builder.Services.AddScoped<IFullDecriptionExtractor, FullDecriptionExtractor>();
+builder.Services.AddScoped<IRssParserService, RssParserService>();
+builder.Services.AddScoped<IImageExtractorService, ImageExtractorService>();
+builder.Services.AddScoped<IFullDecriptionExtractorService, FullDecriptionExtractorService>();
+builder.Services.AddScoped<IFootball360ScraperService, Football360ScraperService>();
+
+
+
 
 // Telegram Bot
 builder.Services.AddSingleton<ITelegramBotClient>(sp =>
@@ -109,7 +105,7 @@ builder.Services.AddHostedService<FootballforiBackgroundService>(); // این خ
 
 // ------------------- اپلیکیشن -------------------
 var app = builder.Build();
- 
+
 
 // Middleware ها
 app.UseHttpsRedirection();

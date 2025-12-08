@@ -7,9 +7,8 @@ using System.Threading.Channels;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
-using TelegramAggregator.Infrastructure;
-using TelegramAggregator.Services;
 using TelegramAggregator.WebAPI.Infrastructure;
+using TelegramAggregator.WebAPI.Infrastructure.Storage;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Models.FootbalSettings;
 
@@ -19,25 +18,29 @@ namespace TelegramAggregator.WebAPI.Services
     {
         private readonly ITelegramBotClient _bot;
         private readonly ILogger<FootballforiService> _logger;
-        private readonly IHttpHelper _httpHelper;
-        private readonly IRssParser _rssParser;
-        private readonly NewsStorage _newsStorage;
-        private readonly IImageExtractor _imageExtractor;
-        private readonly IFullDecriptionExtractor _fullDecriptionExtractor;
+        private readonly IHttpHelperService _httpHelper;
+        private readonly IRssParserService _rssParser;
+        private readonly INewsStorage _newsStorage;
+        private readonly IDebugStore _debugStore;
+        private readonly IImageExtractorService _imageExtractor;
+        private readonly IFullDecriptionExtractorService _fullDecriptionExtractor;
         private readonly FootbalForiSettings _footbalForiSettings;
-        private readonly Random _rnd = Random.Shared;
+        private readonly IFootball360ScraperService _football360ScraperService;
+
 
 
         public FootballforiService(
             ITelegramBotClient bot,
             ILogger<FootballforiService> logger,
-            IHttpHelper httpHelper,
-            IRssParser rssParser,
-            NewsStorage newsStorage,
+            IHttpHelperService httpHelper,
+            IRssParserService rssParser,
+            INewsStorage newsStorage,
             IOptions<AppSettings> appSettings,
-            IImageExtractor imageExtractor,
-            IFullDecriptionExtractor fullDecriptionExtractor,
-            IHostEnvironment environment)
+            IImageExtractorService imageExtractor,
+            IFullDecriptionExtractorService fullDecriptionExtractor,
+            IHostEnvironment environment,
+            IDebugStore debugStore,
+            IFootball360ScraperService football360ScraperService)
         {
             _bot = bot;
             _logger = logger;
@@ -47,8 +50,8 @@ namespace TelegramAggregator.WebAPI.Services
             _newsStorage = newsStorage;
             _imageExtractor = imageExtractor;
             _fullDecriptionExtractor = fullDecriptionExtractor;
-
-
+            _debugStore = debugStore;
+            _football360ScraperService = football360ScraperService;
         }
 
 
@@ -100,25 +103,25 @@ namespace TelegramAggregator.WebAPI.Services
             var cutoff = DateTimeOffset.Now.AddHours(-6);
 
             // مرحله ۱: واکشی همه RSSها
-            foreach (var source in sources)
-            {
-                try
-                {
-                    var rssContent = await _httpHelper.GetStringAsync(source.Url, ct);
-                    if (string.IsNullOrWhiteSpace(rssContent))
-                    {
-                        _logger.LogWarning("RSS خالی از {Source}", source.Name);
-                        continue;
-                    }
+            //foreach (var source in sources)
+            //{
+            //    try
+            //    {
+            //        var rssContent = await _httpHelper.GetStringAsync(source.Url, ct);
+            //        if (string.IsNullOrWhiteSpace(rssContent))
+            //        {
+            //            _logger.LogWarning("RSS خالی از {Source}", source.Name);
+            //            continue;
+            //        }
 
-                    var parsed = _rssParser.Parse(rssContent);
-                    allItems.AddRange(parsed);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name, source.Url);
-                }
-            }
+            //        var parsed = _rssParser.Parse(rssContent);
+            //        allItems.AddRange(parsed);
+            //    }
+            //    catch (Exception ex)
+            //    {
+            //        _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name, source.Url);
+            //    }
+            //}
 
             if (!allItems.Any())
             {
@@ -126,6 +129,8 @@ namespace TelegramAggregator.WebAPI.Services
                 return;
             }
 
+            var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
+            allItems.AddRange(allItems);
 
             var videoKeywords = _footbalForiSettings.VideoKeywords;
             var otherSportsKeywords = _footbalForiSettings.OtherSportsKeywords;
@@ -141,38 +146,38 @@ namespace TelegramAggregator.WebAPI.Services
 
                 if (otherSportsKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
                 {
-                    _newsStorage.LogRejected(item, "غیر فوتبالی");
+                    _debugStore.LogRejected(item, "غیر فوتبالی");
                     continue;
 
                 }
                 else if (videoKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
                 {
-                    _newsStorage.LogRejected(item, "عنوان ویدئو");
+                    _debugStore.LogRejected(item, "عنوان ویدئو");
                     continue;
 
                 }
                 else if (womenKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
                 {
-                    _newsStorage.LogRejected(item, "فوتبال بانوان");
+                    _debugStore.LogRejected(item, "فوتبال بانوان");
                     continue;
 
                 }
                 else if (text.Contains("ترکیب رسمی"))
                 {
-                    _newsStorage.LogRejected(item, "ترکیب رسمی");
+                    _debugStore.LogRejected(item, "ترکیب رسمی");
                     continue;
 
                 }
                 else if (item.PubDate < cutoff)
                 {
-                    _newsStorage.LogRejected(item, "قدیمی‌تر از ۶ ساعت");
+                    _debugStore.LogRejected(item, "قدیمی‌تر از ۶ ساعت");
                     continue;
                 }
 
                 item.Score = ScoreCalculator.Calculate(item, _footbalForiSettings);
 
                 // خبر قبول شد !
-                _newsStorage.LogAccepted(item);
+                _debugStore.LogAccepted(item);
                 _logger.LogInformation("قبول شد ← [{Source}] {Title}", item.SourceName, item.Title.Truncate(80));
                 acceptedItems.Add(item);
             }
@@ -186,7 +191,12 @@ namespace TelegramAggregator.WebAPI.Services
 
             foreach (var item in acceptedItems)
             {
-                await _newsStorage.AddAsync(item, ct);
+                (bool, string) result = await _newsStorage.TryAddAsync(item, ct);
+                if (result.Item1)
+                    _debugStore.LogAccepted(item);
+                else
+                    _debugStore.LogRejected(item, result.Item2);
+
 
                 _logger.LogInformation("نهایی و در صف → [{Source}] {Title}", item.SourceName, item.Title.Truncate(80));
 
@@ -240,45 +250,45 @@ namespace TelegramAggregator.WebAPI.Services
             bool hasVideo = await hasVideoTask;
             if (hasVideo)
             {
-                _newsStorage.LogRejected(item, "حاوی تگ ویدئو");
+                _debugStore.LogRejected(item, "حاوی تگ ویدئو");
                 await Task.Delay(3000, ct);
 
             }
             else if (item.FullDescription.Contains("خطا در دریافت محتوا"))
             {
-                _newsStorage.LogRejected(item, "خطا در واکشی شرح کامل");
+                _debugStore.LogRejected(item, "خطا در واکشی شرح کامل");
                 await Task.Delay(3000, ct);
             }
             else
             {
 
-                _newsStorage.LogPublished(item);
+                _debugStore.LogPublished(item);
 
-                var caption = MessageTemplateFormatter.GetCaption(item);
+                var caption = CaptionMakerExtension.GetCaption(item);
 
-                Message sentMessage;
+                //Message sentMessage;
 
-                if (!string.IsNullOrEmpty(item.ImageUrl))
-                {
-                    sentMessage = await _bot.SendPhoto(
-                        chatId: channelId, // 👈 مستقیماً کانال
-                        photo: new InputFileUrl(item.ImageUrl),
-                        caption: caption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
-                }
-                else
-                {
-                    sentMessage = await _bot.SendMessage(
-                        chatId: channelId, // 👈 مستقیماً کانال
-                        text: caption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
-                }
+                //if (!string.IsNullOrEmpty(item.ImageUrl))
+                //{
+                //    sentMessage = await _bot.SendPhoto(
+                //        chatId: channelId, // 👈 مستقیماً کانال
+                //        photo: new InputFileUrl(item.ImageUrl),
+                //        caption: caption,
+                //        parseMode: ParseMode.Html,
+                //        cancellationToken: ct);
+                //}
+                //else
+                //{
+                //    sentMessage = await _bot.SendMessage(
+                //        chatId: channelId, // 👈 مستقیماً کانال
+                //        text: caption,
+                //        parseMode: ParseMode.Html,
+                //        cancellationToken: ct);
+                //}
 
 
-                //await Task.Delay(TimeSpan.FromSeconds(15), ct);
-                await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
+                await Task.Delay(TimeSpan.FromSeconds(15), ct);
+                //await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }
 

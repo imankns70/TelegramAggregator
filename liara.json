@@ -4,7 +4,7 @@
   "port": "5000",
   "app": "telegramaggregator",
   "netcore": {
-    "version": "9.0",
+    "version": "10.0",
     "finalDllName": "TelegramAggregator.WebAPI",
     "csprojectFile": "/src/TelegramAggregator.WebAPI/TelegramAggregator.WebAPI.csproj"
   }   

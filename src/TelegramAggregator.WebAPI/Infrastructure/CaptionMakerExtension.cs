@@ -4,7 +4,7 @@ using TelegramAggregator.WebAPI.Models;
 
 namespace TelegramAggregator.WebAPI.Infrastructure
 {
-    public static class MessageTemplateFormatter
+    public static class CaptionMakerExtension
     {
         private const string ChannelName = "@FOOTBALFORI";
         private const string Admin = "#iman";

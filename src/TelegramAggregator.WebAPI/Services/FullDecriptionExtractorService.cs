@@ -1,18 +1,18 @@
 ﻿using HtmlAgilityPack;
 using System.Text.RegularExpressions;
 
-namespace TelegramAggregator.Infrastructure
+namespace TelegramAggregator.WebAPI.Services
 {
-    public class FullDecriptionExtractor : IFullDecriptionExtractor
+    public class FullDecriptionExtractorService : IFullDecriptionExtractorService
     {
-        private readonly HttpClient _httpClient;
-        private readonly ILogger<FullDecriptionExtractor> _logger; // بهتره از همین کلاس لاگ بگیریم
+        private readonly IHttpHelperService _httpClient;
+        private readonly ILogger<FullDecriptionExtractorService> _logger; // بهتره از همین کلاس لاگ بگیریم
 
-        public FullDecriptionExtractor(IHttpClientFactory httpClientFactory, ILogger<FullDecriptionExtractor> logger)
-        {
-            _httpClient = httpClientFactory.CreateClient(nameof(FullDecriptionExtractor));
-            _httpClient.Timeout = TimeSpan.FromSeconds(30);
+        public FullDecriptionExtractorService(ILogger<FullDecriptionExtractorService> logger, IHttpHelperService httpClient)
+        {   
+        
             _logger = logger;
+            _httpClient = httpClient;
         }
 
         public async Task<string> GetFullDescriptionAsync(string url)

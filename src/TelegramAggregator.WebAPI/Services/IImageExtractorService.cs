@@ -1,9 +1,9 @@
-﻿namespace TelegramAggregator.Infrastructure;
+﻿namespace TelegramAggregator.WebAPI.Services;
 
 /// <summary>
 /// رابط استخراج محتوا و تصویر از صفحات HTML
 /// </summary>
-public interface IImageExtractor
+public interface IImageExtractorService
 {
     
 

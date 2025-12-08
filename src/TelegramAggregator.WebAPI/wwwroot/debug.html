@@ -200,23 +200,8 @@
             color: #f66;
         }
 
-        .status-accepted {
-            color: #0f9;
-            font-weight: bold;
-        }
-
-        .status-rejected {
-            color: #f66;
-            font-weight: bold;
-        }
-
         .status-sent {
-            color: #0cf;
-            font-weight: bold;
-        }
-
-        .status-queued {
-            color: #ff0;
+            color: var(--cyan);
             font-weight: bold;
         }
 
@@ -259,10 +244,10 @@
 
         .empty {
             text-align: center;
-            padding: 35px;
+            padding: 40px;
             background: #001a00;
             border-radius: 12px;
-            font-size: 18px;
+            font-size: 19px;
             color: var(--green);
         }
 
@@ -337,6 +322,9 @@
                 .replace(/\s+/g, ' ');
         }
 
+        // لیست ثابت منابع (همیشه اینا نمایش داده بشن)
+        const ALL_SOURCES = ["ورزش ۳", "طرفداری", "خبر ورزشی", "فوتبال ۳۶۰"];
+
         async function load() {
             try {
                 const [feedRes, statsRes] = await Promise.all([
@@ -347,59 +335,55 @@
                 const data = await feedRes.json();
                 const s = await statsRes.json();
 
-                // خبر بعدی که ارسال میشه (بهترین خبر فعلی)
+                // خبر بعدی که ارسال میشه
                 const nextBest = data.nextBestItem;
                 const nextHtml = nextBest ? `
-                        <div class="box" style="border: 3px solid var(--gold); background: #221100;">
+                        <div class="box" style="border:3px solid var(--gold); background:#221100;">
                             <h2 class="next-title">خبر بعدی که ارسال میشه!</h2>
                             <div class="scroll-box scroll-next">
                                 <table>
-                                    <tr>
-                                        <th>منبع</th>
-                                        <th>عنوان</th>
-                                        <th>امتیاز</th>
-                                        <th>دلیل انتخاب</th>
-                                    </tr>
+                                    <tr><th>منبع</th><th>عنوان</th><th>امتیاز</th><th>دلیل</th></tr>
                                     <tr class="best-item">
                                         <td><strong style="color:#0cf;">${e(cleanSourceName(nextBest.source))}</strong></td>
                                         <td style="color:#ff0;font-weight:bold;">${e(nextBest.title.substring(0, 80))}...</td>
                                         <td class="score ${getScoreClass(nextBest.score)}" style="font-size:24px;">${nextBest.score}</td>
-                                        <td style="color:#0f9;">${nextBest.reason || 'بالاترین امتیاز در کل صف‌ها'}</td>
+                                        <td style="color:#0f9;">${nextBest.reason || 'بالاترین امتیاز'}</td>
                                     </tr>
                                 </table>
                             </div>
-                        </div>` : '';
+                        </div>` : '<div class="empty">هیچ خبری در صف نیست</div>';
 
-                // صف‌های انتشار با امتیاز + هایلایت بهترین خبر
-                const queuesHtml = !data.queues || Object.keys(data.queues).length === 0
-                    ? '<div class="empty">همه صف‌ها خالی — عالی!</div>'
-                    : '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;">' +
-                    Object.entries(data.queues).map(([source, items]) => {
-                        const count = (items || []).length;
+                // صف‌های انتشار — همیشه همه منابع نمایش داده بشن
+                const queuesHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:18px;">' +
+                    ALL_SOURCES.map(sourceName => {
+                        const items = data.queues?.[sourceName] || [];
+                        const count = items.length;
                         const color = count > 15 ? '#f66' : count > 8 ? '#ff0' : '#0f9';
+
                         return `
-                                  <div class="box" style="border-color:${color};">
-                                      <h2 class="queues-title">${e(cleanSourceName(source))} <span style="color:#0f9;font-weight:bold;">${count} خبر</span></h2>
-                                      <div class="scroll-box scroll-queues">
-                                          ${count === 0 ? '<div class="empty">صف خالی</div>' :
-                                `<table>
-                                                  <tr><th>#</th><th>عنوان</th><th>امتیاز</th><th>زمان</th></tr>
-                                                  ${items.map((item, i) => {
+                                <div class="box" style="border-color:${color};">
+                                    <h2 class="queues-title">${e(sourceName)} <span style="color:#0f9;font-weight:bold;">${count} خبر</span></h2>
+                                    <div class="scroll-box scroll-queues">
+                                        ${count === 0
+                                ? '<div class="empty">صف خالی — در انتظار خبر جدید</div>'
+                                : `<table>
+                                                <tr><th>#</th><th>عنوان</th><th>امتیاز</th><th>زمان</th></tr>
+                                                ${items.map((item, i) => {
                                     const isBest = nextBest && item.uniqueKey === nextBest.uniqueKey;
                                     return `<tr ${isBest ? 'class="best-item"' : ''}>
-                                                          <td class="num">${i + 1}</td>
-                                                          <td title="${e(item.title)}">${e((item.title || "بدون عنوان").substring(0, 65))}...</td>
-                                                          <td class="score ${getScoreClass(item.score || 0)}">${item.score || 0}</td>
-                                                          <td>${item.pubDate || ''}</td>
-                                                      </tr>`;
+                                                        <td class="num">${i + 1}</td>
+                                                        <td title="${e(item.title)}">${e((item.title || "بدون عنوان").substring(0, 65))}...</td>
+                                                        <td class="score ${getScoreClass(item.score || 0)}">${item.score || 0}</td>
+                                                        <td>${item.pubDate || ''}</td>
+                                                    </tr>`;
                                 }).join('')}
-                                              </table>`
+                                            </table>`
                             }
-                                      </div>
-                                  </div>`;
+                                    </div>
+                                </div>`;
                     }).join('') + '</div>';
 
-                // آخرین ارسال‌شده‌ها
+                // بقیه بخش‌ها (آخرین ارسال‌شده‌ها و پردازش‌شده‌ها) مثل قبل
                 const publishedHtml = data.publishedItems?.length
                     ? `<div class="scroll-box scroll-published">
                             <table>
@@ -416,7 +400,6 @@
                            </div>`
                     : '<div class="empty">هنوز خبری ارسال نشده</div>';
 
-                // آخرین پردازش‌شده‌ها (همون قبلی — کامل و بدون تغییر)
                 const recentHtml = data.recentProcessed?.length
                     ? `<div class="scroll-box scroll-logs">
                             <table>
@@ -433,17 +416,17 @@
                         else if (statusText === 'قبول شده') statusColor = 'status-accepted';
                         const linkHtml = link ? `<a href="${e(link)}" target="_blank" title="باز کردن خبر">Link</a>` : '—';
                         return `
-                                    <tr>
-                                        <td class="num">${idx + 1}</td>
-                                        <td>${e(source)}</td>
-                                        <td title="${e(title)}">${e(title.substring(0, 55))}...</td>
-                                        <td class="${statusColor}">${statusText}</td>
-                                        <td style="font-size:11px;color:#ff9;" title="${e(reasonText)}">
-                                            ${e(reasonText.substring(0, 45))}${reasonText.length > 45 ? '...' : ''}
-                                        </td>
-                                        <td>${i.time || ''}</td>
-                                        <td class="link-cell">${linkHtml}</td>
-                                    </tr>`;
+                                        <tr>
+                                            <td class="num">${idx + 1}</td>
+                                            <td>${e(source)}</td>
+                                            <td title="${e(title)}">${e(title.substring(0, 55))}...</td>
+                                            <td class="${statusColor}">${statusText}</td>
+                                            <td style="font-size:11px;color:#ff9;" title="${e(reasonText)}">
+                                                ${e(reasonText.substring(0, 45))}${reasonText.length > 45 ? '...' : ''}
+                                            </td>
+                                            <td>${i.time || ''}</td>
+                                            <td class="link-cell">${linkHtml}</td>
+                                        </tr>`;
                     }).join('')}
                             </table>
                            </div>`
@@ -459,6 +442,7 @@
                         ${recentHtml}
                     `;
 
+                // آمار مثل قبل
                 const color = s.dashboardStatusColor === 'red' ? '#f66' : s.dashboardStatusColor === 'yellow' ? '#ff0' : '#0f9';
                 statsEl.innerHTML = `
                         <div class="stat-box"><span class="stat-num" style="color:#0f9;">${nf(s.acceptedCount)}</span>قبول شده</div>
@@ -473,7 +457,6 @@
             } catch (err) {
                 console.error("خطا:", err);
                 mainEl.innerHTML = '<div class="empty" style="color:#f66;">خطا در ارتباط — دوباره تلاش می‌کنم...</div>';
-                statsEl.innerHTML = '<div class="empty" style="color:#f66;">آمار در دسترس نیست</div>';
                 startCountdown();
             }
         }
