@@ -1,4 +1,5 @@
 ﻿using HtmlAgilityPack;
+using System.Text;
 using System.Web;
 using TelegramAggregator.WebAPI.Models;
 
@@ -7,7 +8,7 @@ namespace TelegramAggregator.WebAPI.Services
     public class Football360ScraperService : IFootball360ScraperService
     {
         private readonly IHttpHelperService _http;
-        private const int MaxItems = 18;
+        private const int MaxItems = 20; // افزایش دادم تا بیشتر بگیره
 
         public Football360ScraperService(IHttpHelperService http)
         {
@@ -24,14 +25,16 @@ namespace TelegramAggregator.WebAPI.Services
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
-                // سلکتورهای دقیق و تست‌شده برای football360.ir (دسامبر ۲۰۲۵
+                // سلکتورهای جدید و گسترده — بر اساس ساختار واقعی سایت (دسامبر ۲۰۲۵)
                 var newsNodes = doc.DocumentNode.SelectNodes(
-                    "//div[contains(@class,'news-card') or contains(@class,'post-card') or contains(@class,'news-item')] | " +
-                    "//article[contains(@class,'post')] | " +
-                    "//div[.//h3 or .//h2]//a[contains(@href,'/news/')]"
+                    "//li[contains(@class, 'post') or contains(@class, 'news-item') or contains(@class, 'card')] | " +
+                    "//div[contains(@class, 'post') or contains(@class, 'news-item') or contains(@class, 'card') or contains(@class, 'item')] | " +
+                    "//article | " +
+                    "//section[contains(@class, 'posts') or contains(@class, 'news')]//li | " +
+                    "//ul[contains(@class, 'posts') or contains(@class, 'news')]//li"  // لیست‌های خبر
                 ) ?? Enumerable.Empty<HtmlNode>();
 
-            
+
 
                 foreach (var node in newsNodes.Take(MaxItems))
                 {
@@ -43,7 +46,7 @@ namespace TelegramAggregator.WebAPI.Services
 
                         await EnrichFullNewsAsync(item, ct);
 
-                     
+
                         newsList.Add(item);
                     }
                     catch (Exception ex)
@@ -54,16 +57,13 @@ namespace TelegramAggregator.WebAPI.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Football360] خطا در دریافت صفحه اصلی");
+                Console.WriteLine($"[Football360] خطا در دریافت صفحه اصلی: {ex.Message}");
             }
 
-            return newsList
-                .Where(n => !string.IsNullOrWhiteSpace(n.Title))
-                .OrderByDescending(n => n.PubDate)
-                .ToList();
+            return newsList;
         }
 
-        private NewsItem? ExtractNewsItem(HtmlNode node)
+        private NewsItem ExtractNewsItem(HtmlNode node)
         {
             var item = new NewsItem
             {
@@ -71,8 +71,16 @@ namespace TelegramAggregator.WebAPI.Services
                 PubDate = DateTimeOffset.UtcNow
             };
 
-            // لینک خبر
-            var linkNode = node.SelectSingleNode(".//a[contains(@href, '/news/') or contains(@href, '/post/')]");
+            // لینک خبر — سلکتورهای گسترده و fallback
+            var linkNode = node.SelectSingleNode(".//a[contains(@href, '/news/') or contains(@href, '/post/') or contains(@href, '/article/')]");
+            if (linkNode == null)
+            {
+                linkNode = node.SelectSingleNode(".//a[.//h3 or .//h2 or .//img or .//div[contains(@class,'title')]]");
+            }
+            if (linkNode == null)
+            {
+                linkNode = node.SelectSingleNode(".//a"); // آخرین fallback
+            }
             if (linkNode == null) return null;
 
             var href = linkNode.GetAttributeValue("href", "").Trim();
@@ -82,17 +90,21 @@ namespace TelegramAggregator.WebAPI.Services
                 ? href
                 : "https://football360.ir" + (href.StartsWith("/") ? href : "/" + href);
 
-            // عنوان
-            var titleNode = node.SelectSingleNode(".//h3 | .//h2 | .//div[contains(@class,'title')]//strong | .//a//strong");
-            item.Title = HttpUtility.HtmlDecode(titleNode?.InnerText.Trim() ?? "").Trim();
+            // عنوان — از لینک یا والد
+            var titleNode = linkNode.SelectSingleNode(".//h3 | .//h2 | .//strong")
+                          ?? node.SelectSingleNode(".//h3 | .//h2 | .//strong");
+            item.Title = HttpUtility.HtmlDecode(titleNode?.InnerText.Trim() ?? linkNode.InnerText.Trim() ?? "").Trim();
             if (string.IsNullOrWhiteSpace(item.Title)) return null;
+            if (item.Title.Contains("لایو")) return null;
+            
 
-            // عکس
-            var imgNode = node.SelectSingleNode(".//img");
+            // عکس — سلکتورهای گسترده
+            var imgNode = node.SelectSingleNode(".//img[contains(@class,'thumb') or contains(@class,'image') or contains(@class,'lazy')] | .//figure//img");
             if (imgNode != null)
             {
                 var src = imgNode.GetAttributeValue("data-src", "")
                        ?? imgNode.GetAttributeValue("data-lazy-src", "")
+                       ?? imgNode.GetAttributeValue("data-original", "")
                        ?? imgNode.GetAttributeValue("src", "");
 
                 if (!string.IsNullOrWhiteSpace(src))
@@ -103,11 +115,11 @@ namespace TelegramAggregator.WebAPI.Services
                 }
             }
 
-            // شرح کوتاه
-            var leadNode = node.SelectSingleNode(".//p | .//div[contains(@class,'lead') or contains(@class,'excerpt')]");
+            // شرح کوتاه — از p یا div.summary
+            var leadNode = node.SelectSingleNode(".//p[contains(@class,'lead') or contains(@class,'excerpt') or contains(@class,'summary')] | .//div[contains(@class,'excerpt')] | .//p[not(preceding-sibling::h2)]");
             item.ShortDescription = HttpUtility.HtmlDecode(leadNode?.InnerText.Trim() ?? "");
 
-           
+
             // نوع محتوا (ویدیو)
             item.Type = node.SelectSingleNode(".//iframe | .//video") != null ? "Video" : "News";
 
@@ -121,7 +133,7 @@ namespace TelegramAggregator.WebAPI.Services
         {
             var candidates = new[]
             {
-                // Attribute ها (InnerText در HtmlAgilityPack مقدار attribute رو برمی‌گردونه!)
+                // Attribute ها — InnerText مقدار رو برمی‌گردونه
                 node.SelectSingleNode(".//time/@datetime")?.InnerText,
                 node.SelectSingleNode(".//meta[@property='article:published_time']/@content")?.InnerText,
                 node.SelectSingleNode(".//meta[@name='date']/@content")?.InnerText,
@@ -130,7 +142,8 @@ namespace TelegramAggregator.WebAPI.Services
                 // تگ‌های معمولی
                 node.SelectSingleNode(".//time")?.InnerText,
                 node.SelectSingleNode(".//span[contains(@class,'date') or contains(@class,'time')]")?.InnerText,
-                node.SelectSingleNode(".//div[contains(@class,'date')]")?.InnerText
+                node.SelectSingleNode(".//div[contains(@class,'date')]")?.InnerText,
+                node.SelectSingleNode(".//p[contains(@class,'date')]")?.InnerText
             };
 
             foreach (var text in candidates)
@@ -142,7 +155,6 @@ namespace TelegramAggregator.WebAPI.Services
                 }
             }
         }
-
         private async Task EnrichFullNewsAsync(NewsItem item, CancellationToken ct)
         {
             try
@@ -151,47 +163,30 @@ namespace TelegramAggregator.WebAPI.Services
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
-                // زمان دقیق — با روش امن (بدون OwnerNode و بدون as HtmlAttribute)
-                var timeCandidates = new[]
+                var subTitleNode = doc.DocumentNode.SelectSingleNode("//div[@class='style_subTitle__iNvlW']");
+                if (subTitleNode != null)
                 {
-                    doc.DocumentNode.SelectSingleNode("//meta[@property='article:published_time']/@content")?.InnerText,
-                    doc.DocumentNode.SelectSingleNode("//meta[@name='date']/@content")?.InnerText,
-                    doc.DocumentNode.SelectSingleNode("//time/@datetime")?.InnerText,
-                    doc.DocumentNode.SelectSingleNode("//time")?.InnerText,
-                    doc.DocumentNode.SelectSingleNode("//span[contains(@class,'date')]")?.InnerText
-                };
-
-                foreach (var t in timeCandidates)
-                {
-                    if (!string.IsNullOrWhiteSpace(t) && DateTimeOffset.TryParse(t.Trim(), out var dt))
-                    {
-                        item.PubDate = dt;
-                        break;
-                    }
+                    item.ShortDescription = HttpUtility.HtmlDecode(subTitleNode.InnerText.Trim());
                 }
 
-                // شرح کامل
-                var contentNode = doc.DocumentNode.SelectSingleNode(
-                    "//div[contains(@class,'news-content') or contains(@class,'content') or contains(@class,'post-body')] | " +
-                    "//article | //div[@id='content'] | //div[contains(@class,'body')]"
-                );
+
+
+                // شرح کامل — سلکتورهای گسترده و بهبودیافته
+                var contentNode = doc.DocumentNode.SelectSingleNode("//div[@class='style_body__jQpYO']//div[@class='style_content__qroM7']");
 
                 if (contentNode != null)
                 {
-                    // حذف تبلیغات و اسکریپت
-                    var junk = contentNode.SelectNodes(".//script | .//style | .//iframe | .//div[contains(@class,'ad')] | .//aside");
+                    // حذف عناصر غیرمتن (تبلیغات، اسکریپت و ...)
+                    var junk = contentNode.SelectNodes(".//script | .//style | .//iframe | .//div[contains(@class,'ad')] | .//aside | .//footer | .//nav");
                     junk?.ToList().ForEach(n => n.Remove());
 
-                    item.FullDescription = HttpUtility.HtmlDecode(contentNode.InnerText.Trim());
+                    var fullText = contentNode.InnerText.Trim();
+                    item.FullDescription = HttpUtility.HtmlDecode(fullText);
                 }
                 else
                 {
                     item.FullDescription = item.ShortDescription ?? "توضیحی موجود نیست.";
                 }
-
-                // ویدیو یوتیوب — روش امن و تضمینی
-                var iframe = doc.DocumentNode.SelectSingleNode("//iframe[contains(@src,'youtube') or contains(@src,'youtu.be')]");
-                item.VideoUrl = iframe?.Attributes["src"]?.Value?.Trim();
 
             }
             catch (Exception ex)
@@ -200,5 +195,6 @@ namespace TelegramAggregator.WebAPI.Services
                 item.FullDescription ??= item.ShortDescription ?? "توضیحی موجود نیست.";
             }
         }
+
     }
 }

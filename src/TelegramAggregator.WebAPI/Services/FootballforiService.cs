@@ -123,11 +123,11 @@ namespace TelegramAggregator.WebAPI.Services
             //    }
             //}
 
-            if (!allItems.Any())
-            {
-                _logger.LogInformation("هیچ خبری از هیچ منبعی دریافت نشد.");
-                return;
-            }
+            // if (!allItems.Any())
+            // {
+            //     _logger.LogInformation("هیچ خبری از هیچ منبعی دریافت نشد.");
+            //     return;
+            // }
 
             var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
             allItems.AddRange(allItems);
