@@ -16,7 +16,7 @@ namespace TelegramAggregator.WebAPI.Models.FootbalSettings
         public List<string> VideoKeywords { get; set; }
         public List<string> OtherSportsKeywords { get; set; } 
         public List<string> WomenKeywords { get; set; } 
-        public List<SourceConfig> Sources { get; set; }
+        public List<SourceConfig> Sources { get; set; }= new List<SourceConfig>();
 
         //scoring
         public ScoringConfig Scoring { get; set; } = new();

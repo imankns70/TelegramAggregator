@@ -103,34 +103,30 @@ namespace TelegramAggregator.WebAPI.Services
             var cutoff = DateTimeOffset.Now.AddHours(-6);
 
             // مرحله ۱: واکشی همه RSSها
-            //foreach (var source in sources)
-            //{
-            //    try
-            //    {
-            //        var rssContent = await _httpHelper.GetStringAsync(source.Url, ct);
-            //        if (string.IsNullOrWhiteSpace(rssContent))
-            //        {
-            //            _logger.LogWarning("RSS خالی از {Source}", source.Name);
-            //            continue;
-            //        }
+            foreach (var source in sources)
+            {
+                try
+                {
+                    var rssContent = await _httpHelper.GetStringAsync(source.Url, ct);
+                    if (string.IsNullOrWhiteSpace(rssContent))
+                    {
+                        _logger.LogWarning("RSS خالی از {Source}", source.Name);
+                        continue;
+                    }
 
-            //        var parsed = _rssParser.Parse(rssContent);
-            //        allItems.AddRange(parsed);
-            //    }
-            //    catch (Exception ex)
-            //    {
-            //        _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name, source.Url);
-            //    }
-            //}
+                    var parsed = _rssParser.Parse(rssContent);
+                    allItems.AddRange(parsed);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name, source.Url);
+                }
+            }
 
-            // if (!allItems.Any())
-            // {
-            //     _logger.LogInformation("هیچ خبری از هیچ منبعی دریافت نشد.");
-            //     return;
-            // }
 
-            var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
-            allItems.AddRange(allItems);
+
+            //var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
+            //allItems.AddRange(football360News);
 
             var videoKeywords = _footbalForiSettings.VideoKeywords;
             var otherSportsKeywords = _footbalForiSettings.OtherSportsKeywords;
@@ -165,6 +161,18 @@ namespace TelegramAggregator.WebAPI.Services
                 else if (text.Contains("ترکیب رسمی"))
                 {
                     _debugStore.LogRejected(item, "ترکیب رسمی");
+                    continue;
+
+                }
+                else if (text.Contains("جدول پخش زنده"))
+                {
+                    _debugStore.LogRejected(item, "جدول پخش زنده");
+                    continue;
+
+                }
+                else if (text.Contains("روزنامه خبرورزشی"))
+                {
+                    _debugStore.LogRejected(item, "روزنامه خبرورزشی");
                     continue;
 
                 }
@@ -240,14 +248,32 @@ namespace TelegramAggregator.WebAPI.Services
         }
         private async Task SendToTelegramAsync(NewsItem item, long channelId, CancellationToken ct)
         {
-            var fullDescTask = _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link);
+            bool hasVideo = false;
+
+            // همیشه این دو Task مشترک هستند
             var imageTask = _imageExtractor.ExtractMainImageAsync(item.Link, ct);
             var hasVideoTask = _imageExtractor.HasVideoAsync(item.Link, ct);
-            await Task.WhenAll(imageTask, fullDescTask, hasVideoTask);
+
+            Task<string> fullDescTask = null;
+
+            if (!item.SourceName.Contains("360"))
+            {
+                // فقط برای منابع غیر 360
+                fullDescTask = _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link);
+                await Task.WhenAll(imageTask, hasVideoTask, fullDescTask);
+            }
+            else
+            {
+                await Task.WhenAll(imageTask, hasVideoTask);
+            }
 
             item.ImageUrl = await imageTask;
-            item.FullDescription = await fullDescTask;
-            bool hasVideo = await hasVideoTask;
+            hasVideo = await hasVideoTask;
+
+            if (fullDescTask != null)
+                item.FullDescription = await fullDescTask;
+
+
             if (hasVideo)
             {
                 _debugStore.LogRejected(item, "حاوی تگ ویدئو");
@@ -266,7 +292,7 @@ namespace TelegramAggregator.WebAPI.Services
 
                 var caption = CaptionMakerExtension.GetCaption(item);
 
-                //Message sentMessage;
+                Message sentMessage;
 
                 //if (!string.IsNullOrEmpty(item.ImageUrl))
                 //{

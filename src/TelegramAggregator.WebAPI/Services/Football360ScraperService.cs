@@ -1,6 +1,8 @@
 ﻿using HtmlAgilityPack;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Web;
+using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 
 namespace TelegramAggregator.WebAPI.Services
@@ -8,11 +10,13 @@ namespace TelegramAggregator.WebAPI.Services
     public class Football360ScraperService : IFootball360ScraperService
     {
         private readonly IHttpHelperService _http;
-        private const int MaxItems = 20; // افزایش دادم تا بیشتر بگیره
+        private readonly IDebugStore _debugStore;
+        private const int MaxItems = 10; // افزایش دادم تا بیشتر بگیره
 
-        public Football360ScraperService(IHttpHelperService http)
+        public Football360ScraperService(IHttpHelperService http, IDebugStore debugStore)
         {
             _http = http;
+            _debugStore = debugStore;
         }
 
         public async Task<List<NewsItem>> GetLatestNewsAsync(CancellationToken ct = default)
@@ -46,6 +50,15 @@ namespace TelegramAggregator.WebAPI.Services
 
                         await EnrichFullNewsAsync(item, ct);
 
+                        _debugStore.LogOrUpdate(new DebugFeedItem
+                        {
+                            Link = item.Link,                    // لینک پاک شده                 
+                            Title = item.Title,
+                            SourceName = item.SourceName,
+                            PubDate = item.PubDate.DateTime,
+                            ProcessedAt = DateTime.UtcNow,
+                            PublishStatus = "جدید_واکشی_شده"
+                        });
 
                         newsList.Add(item);
                     }
@@ -96,24 +109,11 @@ namespace TelegramAggregator.WebAPI.Services
             item.Title = HttpUtility.HtmlDecode(titleNode?.InnerText.Trim() ?? linkNode.InnerText.Trim() ?? "").Trim();
             if (string.IsNullOrWhiteSpace(item.Title)) return null;
             if (item.Title.Contains("لایو")) return null;
-            
 
-            // عکس — سلکتورهای گسترده
-            var imgNode = node.SelectSingleNode(".//img[contains(@class,'thumb') or contains(@class,'image') or contains(@class,'lazy')] | .//figure//img");
-            if (imgNode != null)
-            {
-                var src = imgNode.GetAttributeValue("data-src", "")
-                       ?? imgNode.GetAttributeValue("data-lazy-src", "")
-                       ?? imgNode.GetAttributeValue("data-original", "")
-                       ?? imgNode.GetAttributeValue("src", "");
 
-                if (!string.IsNullOrWhiteSpace(src))
-                {
-                    item.ImageUrl = src.StartsWith("http")
-                        ? src
-                        : "https://football360.ir" + (src.StartsWith("/") ? src : "/" + src);
-                }
-            }
+            item.Title = CleanDescription(item.Title);
+
+          
 
             // شرح کوتاه — از p یا div.summary
             var leadNode = node.SelectSingleNode(".//p[contains(@class,'lead') or contains(@class,'excerpt') or contains(@class,'summary')] | .//div[contains(@class,'excerpt')] | .//p[not(preceding-sibling::h2)]");
@@ -167,6 +167,8 @@ namespace TelegramAggregator.WebAPI.Services
                 if (subTitleNode != null)
                 {
                     item.ShortDescription = HttpUtility.HtmlDecode(subTitleNode.InnerText.Trim());
+                    item.ShortDescription = CleanDescription(item.ShortDescription);
+
                 }
 
 
@@ -188,12 +190,51 @@ namespace TelegramAggregator.WebAPI.Services
                     item.FullDescription = item.ShortDescription ?? "توضیحی موجود نیست.";
                 }
 
+                item.FullDescription = CleanDescription(item.FullDescription);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[Football360] خطا در تکمیل خبر {item.Link}: {ex.Message}");
                 item.FullDescription ??= item.ShortDescription ?? "توضیحی موجود نیست.";
             }
+        }
+
+        private static string CleanDescription(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return "";
+
+            // ۱. حذف همه کاراکترهای مخفی و نامرئی (Zero-Width و RTL/LTR marks)
+            text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "", RegexOptions.Compiled);
+
+            // ۲. حذف لینک‌ها
+            text = Regex.Replace(text, @"https?://\S+", " ", RegexOptions.Compiled);
+
+            // ۳. حذف عبارت‌های رایج منبع در فوتبال ۳۶۰
+            text = Regex.Replace(text, @"به\s*گزارش\s*فوتبال\s*۳۶۰[،,:]?.*", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"فوتبال\s*۳۶۰\s*[\|｜:؛]\s*", " ", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"^فوتبال\s*۳۶۰.*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+
+            // ۴. حذف برچسب‌ها، تگ‌ها و بخش‌های پایانی (مثل "برچسب‌ها"، "تگ‌ها")
+            text = Regex.Replace(text, @"برچسب[‌\s]*ها.*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"تگ[‌\s]*ها.*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"کلیدواژه[‌\s]*ها.*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+
+            // ۵. حذف بخش "مشاهده" و "دیدگاه" و آمار
+            text = Regex.Replace(text, @"\d+[\s\u200C]*مشاهده.*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"\d+[\s\u200C]*دیدگاه.*", "", RegexOptions.Multiline);
+            text = Regex.Replace(text, @"\d+[\s\u200C]*نفر.*", "", RegexOptions.Multiline);
+
+            // ۶. حذف خطوط خالی و فاصله‌های اضافی
+            text = Regex.Replace(text, @"\r\n|\r|\n", "\n", RegexOptions.Compiled); // یکسان‌سازی خطوط جدید
+            text = Regex.Replace(text, @"^\s*$\n", "", RegexOptions.Multiline); // حذف خطوط خالی
+            text = Regex.Replace(text, @"\n{3,}", "\n\n", RegexOptions.Compiled); // حداکثر دو خط خالی
+            text = Regex.Replace(text, @"\s{2,}", " ", RegexOptions.Compiled); // حذف فاصله‌های اضافی
+
+            // ۷. حذف کاراکترهای خاص و نیم‌فاصله‌های اشتباه
+            text = text.Replace("\u200C", " "); // نیم‌فاصله رو به فاصله تبدیل کن (اگه اشتباه باشه)
+            text = Regex.Replace(text, @"[ـ–—‒]", "-"); // همه خط تیره‌ها رو یکسان کن
+
+            return text.Trim();
         }
 
     }

@@ -181,28 +181,38 @@ namespace TelegramAggregator.WebAPI.Services
             if (string.IsNullOrWhiteSpace(text))
                 return string.Empty;
 
-            // حذف منشن‌ها و هشتگ‌ها
-            text = Regex.Replace(text, @"@\w+", "");
-            text = Regex.Replace(text, @"#\w+", "");
+            // ۱. حذف منشن‌ها و هشتگ‌ها
+            text = Regex.Replace(text, @"@\w+", " ", RegexOptions.Compiled);
+            text = Regex.Replace(text, @"#\w+", " ", RegexOptions.Compiled);
 
-            // حذف تبلیغات دعوت به هدیه و تبدیل پول
-            text = Regex.Replace(text, @"با دعوت.*?هدیه بگیرید\.?", "", RegexOptions.Singleline);
-            text = Regex.Replace(text, @"تبدیل\s*،?\s*\d+\s*هزار\s*تومان.*", "", RegexOptions.Singleline);
+            // ۲. حذف بخش "داغ‌ترین‌ها" و لیست خبرهای پیشنهادی (شامل عنوان و خبرها)
+            text = Regex.Replace(text, @"داغ\s*ترین\s*ها.*$", "", RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-            // حذف "مشاهده / دیدگاه" و اعداد اضافی در ابتدا و انتهای خطوط
-            text = Regex.Replace(text, @"\d+\s*(مشاهده|دیدگاه).*?$", "", RegexOptions.IgnoreCase);
+            // ۳. حذف تبلیغات دعوت به هدیه، تبدیل پول و چیزهای مشابه
+            text = Regex.Replace(text, @"با دعوت.*?هدیه بگیرید\.?", "", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            text = Regex.Replace(text, @"تبدیل\s*،?\s*\d+\s*هزار\s*تومان.*", "", RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
-            // حذف جملات حاشیه‌ای یا مربوط به طرفداری
-            text = Regex.Replace(text, @"^طرفداری\s*[\|｜]\s*.*", "", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"^طرفداری\s*$", "", RegexOptions.IgnoreCase);
+            // ۴. حذف "مشاهده / دیدگاه" و آمار
+            text = Regex.Replace(text, @"\d+\s*(مشاهده|دیدگاه).*?$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
 
-            // حذف لینک‌ها
-            text = Regex.Replace(text, @"https?://[^\s]+", "", RegexOptions.IgnoreCase);
+            // ۵. حذف منبع و عنوان‌های اضافی طرفداری
+            text = Regex.Replace(text, @"^طرفداری\s*[\|｜:؛]\s*.*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            text = Regex.Replace(text, @"^طرفداری\s*$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            text = Regex.Replace(text, @"به\s*گزارش\s*طرفداری.*", "", RegexOptions.IgnoreCase);
 
-            // حذف نیم‌فاصله‌ها و فضای اضافی
-            text = Regex.Replace(text, @"[\s\u200C]+", " ", RegexOptions.IgnoreCase).Trim();
+            // ۶. حذف لینک‌ها
+            text = Regex.Replace(text, @"https?://[^\s]+", " ", RegexOptions.Compiled);
 
-            return text;
+            // ۷. حذف کاراکترهای مخفی و نیم‌فاصله‌های اشتباه
+            text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "", RegexOptions.Compiled);
+            text = text.Replace("\u200C", " "); // نیم‌فاصله رو به فاصله تبدیل کن
+
+            // ۸. حذف فاصله‌ها و خطوط اضافی
+            text = Regex.Replace(text, @"\s{2,}", " ", RegexOptions.Compiled);
+            text = Regex.Replace(text, @"^\s+|\s+$", "", RegexOptions.Multiline); // trim هر خط
+            text = Regex.Replace(text, @"\n{3,}", "\n\n"); // حداکثر دو خط خالی
+
+            return text.Trim();
         }
 
 

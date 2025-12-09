@@ -13,7 +13,7 @@ public interface IImageExtractorService
     /// <param name="url">آدرس صفحه خبر</param>
     /// <param name="ct">توکن لغو عملیات</param>
     /// <returns>آدرس تصویر یا null</returns>
-    Task<string?> ExtractMainImageAsync(string url, CancellationToken ct = default);
+    Task<string> ExtractMainImageAsync(string url, CancellationToken ct = default);
 
     Task<bool> HasVideoAsync(string url, CancellationToken ct = default);
 }
