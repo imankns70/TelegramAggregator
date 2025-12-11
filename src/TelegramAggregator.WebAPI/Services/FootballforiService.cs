@@ -125,8 +125,8 @@ namespace TelegramAggregator.WebAPI.Services
 
 
 
-            //var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
-            //allItems.AddRange(football360News);
+            var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
+            allItems.AddRange(football360News);
 
             var videoKeywords = _footbalForiSettings.VideoKeywords;
             var otherSportsKeywords = _footbalForiSettings.OtherSportsKeywords;
@@ -273,8 +273,13 @@ namespace TelegramAggregator.WebAPI.Services
             if (fullDescTask != null)
                 item.FullDescription = await fullDescTask;
 
+            if (string.IsNullOrEmpty(item.ImageUrl))
+            {
+                _debugStore.LogRejected(item, "خبر بدون عکس");
+                await Task.Delay(3000, ct);
+            }
 
-            if (hasVideo)
+            else if (hasVideo)
             {
                 _debugStore.LogRejected(item, "حاوی تگ ویدئو");
                 await Task.Delay(3000, ct);
@@ -294,27 +299,27 @@ namespace TelegramAggregator.WebAPI.Services
 
                 Message sentMessage;
 
-                //if (!string.IsNullOrEmpty(item.ImageUrl))
-                //{
-                //    sentMessage = await _bot.SendPhoto(
-                //        chatId: channelId, // 👈 مستقیماً کانال
-                //        photo: new InputFileUrl(item.ImageUrl),
-                //        caption: caption,
-                //        parseMode: ParseMode.Html,
-                //        cancellationToken: ct);
-                //}
-                //else
-                //{
-                //    sentMessage = await _bot.SendMessage(
-                //        chatId: channelId, // 👈 مستقیماً کانال
-                //        text: caption,
-                //        parseMode: ParseMode.Html,
-                //        cancellationToken: ct);
-                //}
+                if (!string.IsNullOrEmpty(item.ImageUrl))
+                {
+                    sentMessage = await _bot.SendPhoto(
+                        chatId: channelId, // 👈 مستقیماً کانال
+                        photo: new InputFileUrl(item.ImageUrl),
+                        caption: caption,
+                        parseMode: ParseMode.Html,
+                        cancellationToken: ct);
+                }
+                else
+                {
+                    sentMessage = await _bot.SendMessage(
+                        chatId: channelId, // 👈 مستقیماً کانال
+                        text: caption,
+                        parseMode: ParseMode.Html,
+                        cancellationToken: ct);
+                }
 
 
-                await Task.Delay(TimeSpan.FromSeconds(15), ct);
-                //await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
+                //await Task.Delay(TimeSpan.FromSeconds(10), ct);
+                await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }
 

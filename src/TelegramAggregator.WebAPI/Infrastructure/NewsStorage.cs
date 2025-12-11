@@ -179,7 +179,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 if (!string.IsNullOrWhiteSpace(a) && !string.IsNullOrWhiteSpace(b))
                     if (TextSimilarity.GetSimilarity(a, b) >= 0.90)
                     {
-                        //LogRejected(item, $"شبیه به خبر اخیر لایه سوم {other.UniqueKey}");
+                        
                         return (false, $"شبیه به خبر اخیر لایه سوم {other.UniqueKey}");
                     }
             }

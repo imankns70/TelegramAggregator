@@ -30,24 +30,65 @@
             min-height: 100vh;
         }
 
-        h1 {
+        /* عنوان + رفرش — کاملاً ریسپانسیو */
+        .top-header {
             text-align: center;
-            font-size: clamp(26px,7vw,38px);
-            text-shadow: 0 0 25px var(--cyan);
+            padding: 16px 12px;
+            background: rgba(0,255,150,0.08);
+            border: 2px solid var(--green);
+            border-radius: 20px;
             margin-bottom: 25px;
-            background: linear-gradient(90deg, #0f9, #0cf, #ff0);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            box-shadow: 0 0 40px rgba(0,255,150,0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
         }
 
-        .container {
-            max-width: 1800px;
+        .main-title {
+            font-size: clamp(24px, 6vw, 40px);
+            font-weight: bold;
+            background: linear-gradient(90deg,#0f9,#0cf,#ff0,#f0f);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 30px var(--cyan);
+        }
+
+        .refresh-text {
+            font-size: clamp(17px, 4vw, 22px);
+            color: var(--gold);
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%,100% {
+                opacity: .9;
+            }
+
+            50% {
+                opacity: 1;
+                text-shadow: 0 0 35px var(--gold);
+            }
+        }
+
+        @media (min-width: 768px) {
+            .top-header {
+                flex-direction: row;
+                justify-content: center;
+                gap: 40px;
+            }
+        }
+
+        .main-container {
+            max-width: 1900px;
             margin: 0 auto;
-            display: grid;
+            display: flex;
+            flex-direction: column;
             gap: 22px;
         }
-        /* سطر اول: آمار — کاملاً افقی */
-        .stats-row {
+
+        .full-width-block {
             background: var(--box);
             border: 1px solid var(--green);
             border-radius: 16px;
@@ -57,14 +98,14 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
+            grid-template-columns: repeat(6,1fr);
             gap: 15px;
             margin: 15px 0;
         }
 
         .stat-box {
             background: #001a00;
-            padding: 15px 10px;
+            padding: 14px 8px;
             border-radius: 12px;
             text-align: center;
             border: 1px solid var(--green);
@@ -74,12 +115,12 @@
             font-size: 32px;
             font-weight: bold;
             display: block;
-            margin: 8px 0;
+            margin: 6px 0;
         }
-        /* سطر دوم: صف‌ها — دقیقاً ۴ ستون افقی */
-        .queues-row {
+
+        .queues-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(4,1fr);
             gap: 18px;
         }
 
@@ -97,19 +138,11 @@
             margin-bottom: 12px;
             font-size: 1.2em;
         }
-        /* سطر سوم: ارسال‌شده‌ها و پردازش‌شده‌ها — دو ستون */
-        .bottom-row {
+
+        .bottom-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 22px;
-        }
-
-        .box {
-            background: var(--box);
-            border: 1px solid var(--green);
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 0 30px rgba(0,255,150,0.2);
         }
 
         h2 {
@@ -158,7 +191,7 @@
 
         @keyframes pulse-next {
             0%,100% {
-                opacity: 0.9;
+                opacity: .9;
             }
 
             50% {
@@ -252,6 +285,21 @@
             font-weight: bold;
         }
 
+        .status-rejected {
+            color: #f66;
+            font-weight: bold;
+        }
+
+        .status-queued {
+            color: #ff0;
+            font-weight: bold;
+        }
+
+        .status-accepted {
+            color: #0f9;
+            font-weight: bold;
+        }
+
         .link-cell a {
             color: #0cf;
             text-decoration: none;
@@ -276,82 +324,68 @@
             color: var(--green);
         }
 
-        .refresh {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 19px;
-            animation: pulse 2s infinite;
-            color: var(--gold);
-        }
-
-        @keyframes pulse {
-            0%,100% {
-                opacity: 0.8;
-            }
-
-            50% {
-                opacity: 1;
-                text-shadow: 0 0 40px var(--gold);
-            }
-        }
-        /* ریسپانسیو */
-        @media (max-width: 1400px) {
+        @media (max-width:1400px) {
             .stats-grid {
-                grid-template-columns: repeat(3, 1fr);
+                grid-template-columns: repeat(3,1fr);
             }
 
-            .queues-row {
-                grid-template-columns: repeat(2, 1fr);
+            .queues-grid {
+                grid-template-columns: repeat(2,1fr);
             }
         }
 
-        @media (max-width: 900px) {
+        @media (max-width:900px) {
             .stats-grid {
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: repeat(2,1fr);
             }
 
-            .queues-row {
+            .queues-grid {
                 grid-template-columns: 1fr 1fr;
             }
 
-            .bottom-row {
+            .bottom-grid {
                 grid-template-columns: 1fr;
             }
         }
 
-        @media (max-width: 600px) {
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .queues-row {
+        @media (max-width:600px) {
+            .stats-grid, .queues-grid {
                 grid-template-columns: 1fr;
             }
         }
     </style>
 </head>
 <body>
-    <h1>دیباگ زنده ربات فوتبال فوری — نسخه هوشمند</h1>
-    <div class="container">
-        <!-- سطر اول: آمار افقی -->
-        <div class="stats-row">
+
+    <!-- عنوان + رفرش — ریسپانسیو و زیبا -->
+    <div class="top-header">
+        <span class="main-title">دیباگ زنده ربات فوتبال فوری — نسخه هوشمند</span>
+        <span class="refresh-text">رفرش خودکار در <span id="countdown">6</span> ثانیه</span>
+    </div>
+
+    <div class="main-container">
+        <!-- سطر ۱: آمار -->
+        <div class="full-width-block">
             <h2>آمار لحظه‌ای و شفاف</h2>
             <div id="stats" class="stats-grid"></div>
-            <div class="refresh">رفرش خودکار در <span id="countdown">10</span> ثانیه</div>
         </div>
 
-        <!-- سطر دوم: صف‌های انتشار — دقیقاً ۴ ستون -->
-        <div id="queues" class="queues-row"></div>
+        <!-- سطر ۲: صف‌ها -->
+        <div class="full-width-block">
+            <div id="queues" class="queues-grid"></div>
+        </div>
 
-        <!-- سطر سوم: ارسال‌شده‌ها و پردازش‌شده‌ها — دو ستون -->
-        <div class="bottom-row">
-            <div class="box">
-                <h2 class="published-title">آخرین ارسال‌شده‌ها</h2>
-                <div id="published" class="scroll-box scroll-published"></div>
-            </div>
-            <div class="box">
-                <h2 class="logs-title">آخرین پردازش‌شده‌ها</h2>
-                <div id="logs" class="scroll-box scroll-logs"></div>
+        <!-- سطر ۳: ارسال‌شده‌ها + پردازش‌شده‌ها -->
+        <div class="full-width-block">
+            <div class="bottom-grid">
+                <div class="queue-box">
+                    <h2 class="published-title">آخرین ارسال‌شده‌ها</h2>
+                    <div id="published" class="scroll-box scroll-published"></div>
+                </div>
+                <div class="queue-box">
+                    <h2 class="logs-title">آخرین پردازش‌شده‌ها</h2>
+                    <div id="logs" class="scroll-box scroll-logs"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -366,24 +400,35 @@
         const publishedEl = document.getElementById('published');
         const logsEl = document.getElementById('logs');
         const countdownEl = document.getElementById('countdown');
-        let countdown = 10;
+        let countdown = 6; // درست شد!
 
-        // منابع اصلی — برای همیشه ۴ ستون داشته باشیم
-        const MAIN_SOURCES = ["ورزش ۳", "طرفداری", "خبر ورزشی", "فوتبال ۳۶۰"];
+        const MAIN_SOURCES = [
+            "ورزش سه | آخرین اخبار ورزشی",
+            "طرفداری",
+            "خبرورزشی؛ آخرین اخبار ورزشی ایران و جهان",
+            "فوتبال ۳۶۰"
+        ];
+
+        function cleanSourceName(name) {
+            if (!name) return "نامشخص";
+            if (name.includes("ورزش سه")) return "ورزش سه";
+            if (name.includes("طرفداری")) return "طرفداری";
+            if (name.includes("خبرورزشی")) return "خبرورزشی";
+            if (name.includes("فوتبال ۳۶۰")) return "فوتبال ۳۶۰";
+            return name.split(/[\|؛]/)[0].trim();
+        }
 
         function startCountdown() {
-            countdown = 10;
+            countdown = 6;
             countdownEl.textContent = countdown;
             const id = setInterval(() => {
                 countdown--;
                 countdownEl.textContent = countdown;
-                if (countdown <= 0) { clearInterval(id); load(); }
+                if (countdown <= 0) {
+                    clearInterval(id);
+                    load();
+                }
             }, 1000);
-        }
-
-        function cleanSourceName(name) {
-            if (!name) return "نامشخص";
-            return name.replace(/[\|؛-].*$/, '').trim().replace(/\s+/g, ' ');
         }
 
         async function load() {
@@ -393,14 +438,15 @@
                     fetch('/api/debug/stats')
                 ]);
                 if (!feedRes.ok || !statsRes.ok) throw new Error("API Error");
+
                 const data = await feedRes.json();
                 const s = await statsRes.json();
 
-                // خبر بعدی — بالای همه
+                // خبر بعدی
                 const nextBest = data.nextBestItem;
                 if (nextBest) {
-                    document.querySelector('.container')?.insertAdjacentHTML('afterbegin', `
-                            <div class="box" style="border:3px solid var(--gold); background:#221100;">
+                    document.querySelector('.main-container')?.insertAdjacentHTML('afterbegin', `
+                            <div class="full-width-block" style="border:3px solid var(--gold); background:#221100;">
                                 <h2 class="next-title">خبر بعدی که ارسال میشه!</h2>
                                 <div class="scroll-box scroll-next">
                                     <table>
@@ -417,14 +463,14 @@
                         `);
                 }
 
-                // سطر دوم: صف‌ها — دقیقاً ۴ ستون (از MAIN_SOURCES)
+                // صف‌ها
                 queuesEl.innerHTML = MAIN_SOURCES.map(sourceName => {
                     const items = data.queues?.[sourceName] || [];
                     const count = items.length;
                     const color = count > 15 ? '#f66' : count > 8 ? '#ff0' : '#0f9';
                     return `
                             <div class="queue-box" style="border-color:${color};">
-                                <h2 class="queue-title">${e(sourceName)} <span style="color:#0f9;font-weight:bold;">${count} خبر</span></h2>
+                                <h2 class="queue-title">${e(cleanSourceName(sourceName))} <span style="color:#0f9;font-weight:bold;">${count} خبر</span></h2>
                                 <div class="scroll-box scroll-queues">
                                     ${count === 0
                             ? '<div class="empty">صف خالی — در انتظار خبر جدید</div>'
@@ -470,17 +516,17 @@
                         const link = i.link || null;
                         const statusText = i.status || 'نامشخص';
                         const reasonText = i.reason || 'در حال بررسی';
-                        let statusColor = 'status-rejected';
-                        if (statusText === 'ارسال شد') statusColor = 'status-sent';
-                        else if (statusText.includes('در صف')) statusColor = 'status-queued';
-                        else if (statusText === 'قبول شده') statusColor = 'status-accepted';
+                        let statusClass = 'status-rejected';
+                        if (statusText === 'ارسال شد') statusClass = 'status-sent';
+                        else if (statusText.includes('در صف')) statusClass = 'status-queued';
+                        else if (statusText === 'قبول شده') statusClass = 'status-accepted';
                         const linkHtml = link ? `<a href="${e(link)}" target="_blank">Link</a>` : '—';
                         return `
                                     <tr>
                                         <td class="num">${idx + 1}</td>
                                         <td>${e(source)}</td>
                                         <td title="${e(title)}">${e(title.substring(0, 55))}...</td>
-                                        <td class="${statusColor}">${statusText}</td>
+                                        <td class="${statusClass}">${statusText}</td>
                                         <td style="font-size:11px;color:#ff9;" title="${e(reasonText)}">
                                             ${e(reasonText.substring(0, 45))}${reasonText.length > 45 ? '...' : ''}
                                         </td>
@@ -491,7 +537,7 @@
                         </table>`
                     : '<div class="empty">هنوز خبری پردازش نشده</div>';
 
-                // آمار افقی
+                // آمار
                 const color = s.dashboardStatusColor === 'red' ? '#f66' : s.dashboardStatusColor === 'yellow' ? '#ff0' : '#0f9';
                 statsEl.innerHTML = `
                         <div class="stat-box"><span class="stat-num" style="color:#0f9;">${nf(s.acceptedCount)}</span>قبول شده</div>
