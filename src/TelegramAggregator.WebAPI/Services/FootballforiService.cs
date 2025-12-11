@@ -26,7 +26,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly IFullDecriptionExtractorService _fullDecriptionExtractor;
         private readonly FootbalForiSettings _footbalForiSettings;
         private readonly IFootball360ScraperService _football360ScraperService;
-
+        private readonly Random _rnd = Random.Shared;
 
 
         public FootballforiService(
