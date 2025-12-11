@@ -152,7 +152,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             var pubDate = item.PubDate;
 
             // لایه ۱: کلید جهانی (لینک + دقیقه)
-            var globalKey = item.UniqueKey;
+            var globalKey = $"{item.Link}-{pubDate:yyyyMMddHHmm}";
             if (!_seenKeys.TryAdd(globalKey, 1))
             {
                
