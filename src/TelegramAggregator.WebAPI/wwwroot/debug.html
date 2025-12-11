@@ -360,7 +360,7 @@
     <!-- عنوان + رفرش — ریسپانسیو و زیبا -->
     <div class="top-header">
         <span class="main-title">دیباگ زنده ربات فوتبال فوری — نسخه هوشمند</span>
-        <span class="refresh-text">رفرش خودکار در <span id="countdown">6</span> ثانیه</span>
+        <span class="refresh-text">رفرش خودکار در <span id="countdown">10</span> ثانیه</span>
     </div>
 
     <div class="main-container">
@@ -400,7 +400,7 @@
         const publishedEl = document.getElementById('published');
         const logsEl = document.getElementById('logs');
         const countdownEl = document.getElementById('countdown');
-        let countdown = 6; // درست شد!
+        let countdown = 10; // درست شد!
 
         const MAIN_SOURCES = [
             "ورزش سه | آخرین اخبار ورزشی",
@@ -419,7 +419,7 @@
         }
 
         function startCountdown() {
-            countdown = 6;
+            countdown = 10;
             countdownEl.textContent = countdown;
             const id = setInterval(() => {
                 countdown--;
