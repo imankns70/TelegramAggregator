@@ -43,46 +43,46 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                 : "همه صف‌ها خالی!";
 
 
-            var now = DateTimeOffset.Now;
-            var recentAll = _debugStore.GetRecentProcessed(10000);
+            //var now = DateTimeOffset.Now;
+            //var recentAll = _debugStore.GetRecentProcessed(10000);
 
-            // آخرین ساعت
-            var lastHourItems = recentAll
-                .Where(x => x.ProcessedAt > now.AddHours(-1))
-                .ToList();
+            //// آخرین ساعت
+            //var lastHourItems = recentAll
+            //    .Where(x => x.ProcessedAt > now.AddHours(-1))
+            //    .ToList();
 
-            // امروز
-            var todayItems = recentAll
-                .Where(x => x.ProcessedAt.Date == now.Date)
-                .ToList();
-            var lastHourAccepted = lastHourItems.Count(x => x.PublishStatus == "جدید_واکشی_شده" || x.PublishStatus == "در صف انتشار" || x.IsAccepted);
-            var lastHourRejected = lastHourItems.Count - lastHourAccepted;
-            // آمار آخرین ساعت — کاملاً واقعی و هماهنگ
-            var lastHour = new
-            {
-                Total = lastHourItems.Count,
-                Accepted = lastHourAccepted,
-                Rejected = lastHourRejected,
-                AcceptanceRate = lastHourItems.Count > 0
-                    ? Math.Round((double)lastHourAccepted * 100 / lastHourItems.Count, 1)
-                    : 0.0
-            };
-            var todayAccepted = todayItems.Count(x => x.PublishStatus == "جدید_واکشی_شده" || x.PublishStatus == "در صف انتشار" || x.IsAccepted);
-            // آمار امروز — کامل و صادقانه
-            var today = new
-            {
-                Total = todayItems.Count,
-                Accepted = todayAccepted,
-                Rejected = todayItems.Count - todayAccepted,
-                AcceptanceRate = todayItems.Count > 0
-                      ? Math.Round((double)todayAccepted * 100 / todayItems.Count, 1)
-                      : 0.0
-            };
+            //// امروز
+            //var todayItems = recentAll
+            //    .Where(x => x.ProcessedAt.Date == now.Date)
+            //    .ToList();
+            //var lastHourAccepted = lastHourItems.Count(x => x.PublishStatus == "جدید_واکشی_شده" || x.PublishStatus == "در صف انتشار" || x.IsAccepted);
+            //var lastHourRejected = lastHourItems.Count - lastHourAccepted;
+            //// آمار آخرین ساعت — کاملاً واقعی و هماهنگ
+            //var lastHour = new
+            //{
+            //    Total = lastHourItems.Count,
+            //    Accepted = lastHourAccepted,
+            //    Rejected = lastHourRejected,
+            //    AcceptanceRate = lastHourItems.Count > 0
+            //        ? Math.Round((double)lastHourAccepted * 100 / lastHourItems.Count, 1)
+            //        : 0.0
+            //};
+            //var todayAccepted = todayItems.Count(x => x.PublishStatus == "جدید_واکشی_شده" || x.PublishStatus == "در صف انتشار" || x.IsAccepted);
+            //// آمار امروز — کامل و صادقانه
+            //var today = new
+            //{
+            //    Total = todayItems.Count,
+            //    Accepted = todayAccepted,
+            //    Rejected = todayItems.Count - todayAccepted,
+            //    AcceptanceRate = todayItems.Count > 0
+            //          ? Math.Round((double)todayAccepted * 100 / todayItems.Count, 1)
+            //          : 0.0
+            //};
 
 
-            // رنگ داشبورد — بر اساس آخرین ساعت (واقعی‌تر)
-            var dashboardStatusColor = lastHourAccepted >= lastHourItems.Count * 0.90 ? "green" :
-                                     lastHourAccepted >= lastHourItems.Count * 0.70 ? "yellow" : "red";
+            //// رنگ داشبورد — بر اساس آخرین ساعت (واقعی‌تر)
+            //var dashboardStatusColor = lastHourAccepted >= lastHourItems.Count * 0.90 ? "green" :
+            //                         lastHourAccepted >= lastHourItems.Count * 0.70 ? "yellow" : "red";
              
 
             return new DebugSummary
@@ -97,18 +97,18 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                 StatusColor = statusColor,
                 QueueDetails = queueDetails,
 
-                LastHourItemsTotal= lastHour.Total,
-                LastHourAccepted= lastHour.Accepted,
-                LastHourRejected= lastHour.Rejected,
-                LastHourAcceptanceRate= lastHour.AcceptanceRate,
+                //LastHourItemsTotal= lastHour.Total,
+                //LastHourAccepted= lastHour.Accepted,
+                //LastHourRejected= lastHour.Rejected,
+                //LastHourAcceptanceRate= lastHour.AcceptanceRate,
 
-                TodayItemsTotal= today.Total,
-                TodayAccepted= today.Accepted,
-                TodayRejected= today.Rejected,
-                TodayAcceptanceRate= today.AcceptanceRate, 
+                //TodayItemsTotal= today.Total,
+                //TodayAccepted= today.Accepted,
+                //TodayRejected= today.Rejected,
+                //TodayAcceptanceRate= today.AcceptanceRate, 
 
 
-                DashboardStatusColor= dashboardStatusColor
+                //DashboardStatusColor= dashboardStatusColor
             };
         }
         private string CleanSourceName(string source)

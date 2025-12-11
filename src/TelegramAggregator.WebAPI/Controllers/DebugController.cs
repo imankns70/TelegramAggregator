@@ -14,8 +14,6 @@ namespace TelegramAggregator.WebAPI.Controllers
             _footballforiDashboardService = footballforiDashboardService;
         }
 
-
-
         /// <summary>
         /// صفحه اصلی دیباگ — داشبورد زنده با صف‌های کامل و شفاف
         /// </summary>
@@ -47,25 +45,7 @@ namespace TelegramAggregator.WebAPI.Controllers
                 summary.StatusColor,
                 summary.QueueDetails,
 
-                // آمار آخرین ساعت — کاملاً واقعی و هماهنگ
-                LastHour = new
-                {
-                    Total = summary.LastHourItemsTotal,
-                    Accepted = summary.LastHourAccepted,
-                    Rejected = summary.LastHourRejected,
-                    AcceptanceRate = summary.LastHourAcceptanceRate
-                },
-
-                // آمار امروز — کامل و صادقانه
-                Today = new
-                {
-                    Total = summary.TodayItemsTotal,
-                    Accepted = summary.TodayAccepted,
-                    Rejected = summary.TodayRejected,
-                    AcceptanceRate = summary.TodayAcceptanceRate
-                },
-              
-               summary.DashboardStatusColor
+                
             };
 
             return Ok(result);

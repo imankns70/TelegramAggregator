@@ -204,27 +204,31 @@ namespace TelegramAggregator.WebAPI.Services
             if (string.IsNullOrWhiteSpace(text))
                 return "";
 
-            // ۱. حذف کاراکترهای مخفی و نامرئی
+            // ۱. حذف کاراکترهای مخفی
             text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "", RegexOptions.Compiled);
 
-            // ۲. حذف کامل هر چیزی که شامل "فوتبال ۳۶۰" باشه (در هر جایی از متن)
-            text = Regex.Replace(text, @"فوتبال\s*۳۶۰[^\n]*", "", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"فوتبال\s*360[^\n]*", "", RegexOptions.IgnoreCase); // برای 360 انگلیسی
+            // ۲. حذف کامل «فوتبال ۳۶۰» در هر شکل و جای ممکن
+            text = Regex.Replace(text, @"فوتبال\s*۳۶۰", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"فوتبال\s*360", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"«فوتبال\s*۳۶۰»", "", RegexOptions.IgnoreCase);
 
-            // ۳. حذف دقیق "به گزارش فوتبال ۳۶۰"
+            // ۳. تبدیل «در گفت‌وگو با» به «در گفت‌وگو با خبرنگار ما»
+            text = Regex.Replace(text,
+                @"در\s*گفت[‌ \u200C]*وگو\s*با\s*[:؛]?\s*",
+                "در گفت‌وگو با خبرنگار ما: ",
+                RegexOptions.IgnoreCase);
+
+            // ۴. حذف دقیق "به گزارش فوتبال ۳۶۰"
             text = Regex.Replace(text, @"به\s*گزارش\s*فوتبال\s*۳۶۰\s*[,،:؛]?\s*", "", RegexOptions.IgnoreCase);
 
-            // ۴. حذف هر خطی که فقط منبع باشه
-            text = Regex.Replace(text, @"^فوتبال\s*۳۶۰.*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"فوتبال\s*۳۶۰\s*[\|｜:؛]\s*", " ", RegexOptions.IgnoreCase);
+            // ۵. حذف خطوطی که فقط منبع هستن
+            text = Regex.Replace(text, @"^(منبع|گزارش)?\s*[:：]?\s*فوتبال\s*۳۶۰\s*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
-            // ۵. حذف لینک‌ها
+            // ۶. حذف لینک‌ها
             text = Regex.Replace(text, @"https?://\S+", " ", RegexOptions.Compiled);
 
-            // ۶. حذف برچسب‌ها و تگ‌ها
+            // ۷. حذف برچسب‌ها، تگ‌ها، آمار مشاهده/دیدگاه
             text = Regex.Replace(text, @"(برچسب|تگ|کلیدواژه)[‌\s]*ها.*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-
-            // ۷. حذف آمار مشاهده/دیدگاه
             text = Regex.Replace(text, @"\d+[\s\u200C]*(مشاهده|دیدگاه|نفر).*", "", RegexOptions.Multiline);
 
             // ۸. حذف تکرار جملات کامل
@@ -235,22 +239,22 @@ namespace TelegramAggregator.WebAPI.Services
 
             var uniqueLines = new List<string>();
             foreach (var line in lines)
-            {
                 if (uniqueLines.Count == 0 || uniqueLines[^1] != line)
                     uniqueLines.Add(line);
-            }
+
             text = string.Join("\n", uniqueLines);
 
-            // ۹. حذف خطوط خالی و فاصله‌های اضافی
+            // ۹. تمیزکاری نهایی
             text = Regex.Replace(text, @"\n{3,}", "\n\n");
             text = Regex.Replace(text, @"\s{2,}", " ");
-
-            // ۱۰. نیم‌فاصله و خط تیره
             text = text.Replace("\u200C", " ");
             text = Regex.Replace(text, @"[ـ–—‒]", "-");
 
+            // ۱۰. حذف گیومه‌های خالی یا علامت‌های اضافی بعد از تبدیل
+            text = Regex.Replace(text, @"\s*[:؛]\s*$", ""); // اگر آخر جمله فقط : یا ; مونده بود
+            text = Regex.Replace(text, @"\s*«»", "");       // گیومه خالی
+
             return text.Trim();
         }
-
     }
 }

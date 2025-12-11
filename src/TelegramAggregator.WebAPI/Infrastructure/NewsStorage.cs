@@ -145,6 +145,26 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             return true;
         }
+        // کلید یکتا فقط بر اساس لینک — برای همه منابع یکسان و بدون خطا
+        private static string GenerateGlobalKey(string link)
+        {
+            if (string.IsNullOrWhiteSpace(link))
+                return Guid.NewGuid().ToString(); // fallback
+
+            // فقط قسمت اصلی لینک رو نگه دار (بدون پارامتر و hash)
+            var uri = new Uri(link);
+            var cleanPath = uri.AbsolutePath;
+
+            // حذف اسلش آخر اگر بود
+            if (cleanPath.EndsWith("/"))
+                cleanPath = cleanPath.TrimEnd('/');
+
+            // ترکیب هاست + مسیر تمیز = کلید ۱۰۰٪ یکتا
+            return $"{uri.Host}{cleanPath}".ToLowerInvariant();
+        }
+
+        // استفاده در کد:
+   
         public async Task<(bool, string)> TryAddAsync(NewsItem item, CancellationToken ct = default)
         {
 
@@ -152,7 +172,8 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             var pubDate = item.PubDate;
 
             // لایه ۱: کلید جهانی (لینک + دقیقه)
-            var globalKey = $"{item.Link}-{pubDate:yyyyMMddHHmm}";
+            //var globalKey = $"{item.Link}-{pubDate:yyyyMMddHHmm}";
+            var globalKey = GenerateGlobalKey(item.Link);
             if (!_seenKeys.TryAdd(globalKey, 1))
             {
                
@@ -230,8 +251,6 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             return (true, "");
 
         }
-
-
 
         public IReadOnlyDictionary<string, int> GetChannelQueueCounts() =>
             _sourceChannels.ToDictionary(x => x.Key, x => x.Value.Reader.Count);
