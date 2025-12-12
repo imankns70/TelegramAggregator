@@ -2,6 +2,7 @@
   "FootbalForiSettings": {
     "Scoring": {
       "Weights": {
+        "Conferences": 38,
         "TeamName": 34,
         "CoachName": 25,
         "CelebrityName": 42,
@@ -15,7 +16,43 @@
         "DerbyMatch": 60
       }
     },
+    "Conferences": {
+      "S+": [
+        {
+          "Name": "کنفرانس خبری",
+          "Score": 45
+        },
+        {
+          "Name": "کنفرانس مطبوعاتی",
+          "Score": 45
+        },
+        {
+          "Name": "کنفرانس پیش از بازی",
+          "Score": 45
+        },
+        {
+          "Name": "کنفرانس پیش از شروع بازی",
+          "Score": 45
+        },
+        {
+          "Name": "کنفرانس قبل از شروع بازی",
+          "Score": 45
+        },
+        {
+          "Name": "کنفرانس قبل از بازی",
+          "Score": 45
+        },
+        {
+          "Name": "کنفرانس بعد از بازی",
+          "Score": 45
+        },
+        {
+          "Name": "کنفرانس پس از بازی",
+          "Score": 45
+        }
 
+      ]
+    },
     "Teams": {
       "S+": [
         {
@@ -1730,4 +1767,4 @@
       ]
     }
   }
-}
+  }

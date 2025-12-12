@@ -39,8 +39,8 @@ namespace TelegramAggregator.WebAPI.Services
                 ) ?? Enumerable.Empty<HtmlNode>();
 
 
-
-                foreach (var node in newsNodes.Take(MaxItems))
+                newsNodes = newsNodes.Take(MaxItems);
+                foreach (var node in newsNodes)
                 {
                     try
                     {

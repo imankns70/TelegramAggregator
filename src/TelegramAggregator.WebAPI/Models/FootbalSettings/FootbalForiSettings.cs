@@ -20,6 +20,7 @@ namespace TelegramAggregator.WebAPI.Models.FootbalSettings
 
         //scoring
         public ScoringConfig Scoring { get; set; } = new();
+        public Dictionary<string, List<ScoredItem>> Conferences { get; set; } = new();
         public Dictionary<string, List<ScoredItem>> Teams { get; set; } = new();
         public Dictionary<string, List<ScoredItem>> PerspolisPlayers { get; set; } = new();
         public Dictionary<string, List<ScoredItem>> EsteghlalPlayers { get; set; } = new();

@@ -8,6 +8,8 @@
         public int PublishedCount { get; set; }
         public int InQueueCount { get; set; }
         public double AcceptanceRate { get; set; } 
+        public int SeenKeys { get; set; } 
+        public int DebugItems { get; set; } 
 
 
         public int LastHourItemsTotal { get; set; }

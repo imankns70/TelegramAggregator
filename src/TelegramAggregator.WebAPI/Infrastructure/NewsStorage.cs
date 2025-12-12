@@ -280,7 +280,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
 
 
-
+        public int GetSeenKeys() => _seenKeys.Count;
 
 
     }

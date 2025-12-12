@@ -8,5 +8,6 @@ namespace TelegramAggregator.WebAPI.Infrastructure.Storage
         Task<(bool, string)> TryAddAsync(NewsItem item, CancellationToken ct = default);
         IReadOnlyDictionary<string, List<DebugFeedItem>> GetMirroQueue();
         IReadOnlyDictionary<string, int> GetChannelQueueCounts();
+        int GetSeenKeys();
     }
 }

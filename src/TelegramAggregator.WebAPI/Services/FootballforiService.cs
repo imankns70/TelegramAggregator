@@ -91,7 +91,7 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
                 // حالت عادی: هر 5 دقیقه
-                await Task.Delay(TimeSpan.FromMinutes(2), ct);
+                await Task.Delay(TimeSpan.FromMinutes(10), ct);
             }
 
             _logger.LogWarning("حلقه واکشی RSS خاتمه یافت");
@@ -317,7 +317,7 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
 
-                //await Task.Delay(TimeSpan.FromSeconds(10), ct);
+               // await Task.Delay(TimeSpan.FromSeconds(15), ct);
                 await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }

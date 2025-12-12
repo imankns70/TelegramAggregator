@@ -43,19 +43,19 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                 : "همه صف‌ها خالی!";
 
 
-            //var now = DateTimeOffset.Now;
+            var now = DateTimeOffset.Now;
             //var recentAll = _debugStore.GetRecentProcessed(10000);
 
             //// آخرین ساعت
-            //var lastHourItems = recentAll
-            //    .Where(x => x.ProcessedAt > now.AddHours(-1))
-            //    .ToList();
+            var lastHourItems = all
+                .Where(x => x.ProcessedAt > now.AddHours(-1))
+                .ToList();
 
             //// امروز
             //var todayItems = recentAll
             //    .Where(x => x.ProcessedAt.Date == now.Date)
             //    .ToList();
-            //var lastHourAccepted = lastHourItems.Count(x => x.PublishStatus == "جدید_واکشی_شده" || x.PublishStatus == "در صف انتشار" || x.IsAccepted);
+            var lastHourAccepted = lastHourItems.Count(x => x.PublishStatus == "جدید_واکشی_شده" || x.PublishStatus == "در صف انتشار" || x.IsAccepted);
             //var lastHourRejected = lastHourItems.Count - lastHourAccepted;
             //// آمار آخرین ساعت — کاملاً واقعی و هماهنگ
             //var lastHour = new
@@ -81,9 +81,9 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
 
 
             //// رنگ داشبورد — بر اساس آخرین ساعت (واقعی‌تر)
-            //var dashboardStatusColor = lastHourAccepted >= lastHourItems.Count * 0.90 ? "green" :
-            //                         lastHourAccepted >= lastHourItems.Count * 0.70 ? "yellow" : "red";
-             
+            var dashboardStatusColor = lastHourAccepted >= lastHourItems.Count * 0.90 ? "green" :
+                                     lastHourAccepted >= lastHourItems.Count * 0.70 ? "yellow" : "red";
+
 
             return new DebugSummary
             {
@@ -96,7 +96,8 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                 SystemStatus = acceptanceRate >= 90 ? "عالی" : "خوب",
                 StatusColor = statusColor,
                 QueueDetails = queueDetails,
-
+                SeenKeys = _newsStorage.GetSeenKeys(),
+                DebugItems = all.Count,
                 //LastHourItemsTotal= lastHour.Total,
                 //LastHourAccepted= lastHour.Accepted,
                 //LastHourRejected= lastHour.Rejected,
@@ -108,7 +109,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                 //TodayAcceptanceRate= today.AcceptanceRate, 
 
 
-                //DashboardStatusColor= dashboardStatusColor
+                DashboardStatusColor= dashboardStatusColor
             };
         }
         private string CleanSourceName(string source)

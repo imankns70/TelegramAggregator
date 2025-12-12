@@ -12,6 +12,9 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             int score = 0;
 
+            // ۱. Conferences
+            score += GetMaxScore(settings.Conferences, text);
+
             // ۱. تیم‌ها
             score += GetMaxScore(settings.Teams, text);
 

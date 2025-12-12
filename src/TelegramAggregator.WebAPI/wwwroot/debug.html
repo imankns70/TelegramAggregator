@@ -98,7 +98,7 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(6,1fr);
+            grid-template-columns: repeat(8,1fr);
             gap: 15px;
             margin: 15px 0;
         }
@@ -545,6 +545,8 @@
                         <div class="stat-box"><span class="stat-num" style="color:#0cf;">${nf(s.publishedCount)}</span>ارسال شده</div>
                         <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(s.inQueueCount)}</span>در صف</div>
                         <div class="stat-box"><span class="stat-num" style="color:#aaa;">${nf(s.totalProcessed)}</span>کل پردازش</div>
+                        <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(s.debugItems)}</span>تعداد تاریخچه</div>
+                        <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(s.seenKeys)}</span>تعداد کلید</div>
                         <div class="stat-box"><span class="stat-num" style="color:${color};">${nf(s.acceptanceRate)}%</span>درصد قبولی</div>
                     `;
 

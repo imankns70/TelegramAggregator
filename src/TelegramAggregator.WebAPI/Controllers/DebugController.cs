@@ -44,6 +44,8 @@ namespace TelegramAggregator.WebAPI.Controllers
                 summary.SystemStatus,
                 summary.StatusColor,
                 summary.QueueDetails,
+                summary.DebugItems,
+                summary.SeenKeys,
 
                 
             };
