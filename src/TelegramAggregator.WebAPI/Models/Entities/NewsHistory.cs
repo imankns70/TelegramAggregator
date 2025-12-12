@@ -1,8 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
-using TelegramAggregator.WebAPI.Models;
-
-namespace YourNamespace.Entities // اسم namespace خودت رو بذار
+﻿namespace TelegramAggregator.WebAPI.Models.Entities 
 {
      
     public class NewsHistory

@@ -1,9 +1,11 @@
 ﻿using AngleSharp.Dom;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text;
-using Telegram.Bot; 
+using Telegram.Bot;
+using TelegramAggregator.WebAPI.Data;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Infrastructure.Storage;
 using TelegramAggregator.WebAPI.Models;
@@ -23,6 +25,10 @@ builder.Configuration
 // Bind تنظیمات
 builder.Services.Configure<AppSettings>(builder.Configuration);
 
+builder.Services.AddDbContext<TelegramAggregatorContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddRepositories();
 // ------------------- سرویس‌ها -------------------
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

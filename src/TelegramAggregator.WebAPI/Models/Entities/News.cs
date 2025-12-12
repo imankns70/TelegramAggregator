@@ -1,11 +1,8 @@
-﻿using System.ComponentModel.DataAnnotations;
-using YourNamespace.Entities;
-
-namespace TelegramAggregator.WebAPI.Models
+﻿namespace TelegramAggregator.WebAPI.Models.Entities
 {
     public class News
     {
-        
+
         public long Id { get; set; }
         public string GlobalKey { get; set; }
         public int? Score { get; set; }
@@ -20,6 +17,6 @@ namespace TelegramAggregator.WebAPI.Models
         public SportSource SportSource { get; set; }
         public NewsStatus NewsStatus { get; set; }
         public ICollection<NewsHistory> Histories { get; set; } = new List<NewsHistory>();
-         
+
     }
 }
