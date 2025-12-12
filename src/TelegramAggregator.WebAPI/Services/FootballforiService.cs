@@ -139,9 +139,10 @@ namespace TelegramAggregator.WebAPI.Services
             {
                 var text = $"{item.Title} {item.ShortDescription}".ToLowerInvariant();
 
-                if (otherSportsKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
+                var otherSport = otherSportsKeywords.FirstOrDefault(k => text.Contains(k.ToLowerInvariant()));
+                if (!string.IsNullOrWhiteSpace(otherSport))
                 {
-                    _debugStore.LogRejected(item, "غیر فوتبالی");
+                    _debugStore.LogRejected(item, otherSport);
                     continue;
 
                 }
@@ -317,7 +318,7 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
 
-               // await Task.Delay(TimeSpan.FromSeconds(15), ct);
+                // await Task.Delay(TimeSpan.FromSeconds(15), ct);
                 await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(120, 721)), ct);
 
             }

@@ -48,19 +48,25 @@ namespace TelegramAggregator.WebAPI.Services
                         if (item == null || string.IsNullOrWhiteSpace(item.Title))
                             continue;
 
-                        await EnrichFullNewsAsync(item, ct);
-
-                        _debugStore.LogOrUpdate(new DebugFeedItem
+                        // اینجا باید از طریق لینک خبر در دیتابیس چک شود اگه وجود داشت، ادامه نده
+                       
+                        if (!_debugStore.GetAllDebugItems().Any(a => a.Link == item.Link))
                         {
-                            Link = item.Link,                    // لینک پاک شده                 
-                            Title = item.Title,
-                            SourceName = item.SourceName,
-                            PubDate = item.PubDate.DateTime,
-                            ProcessedAt = DateTime.UtcNow,
-                            PublishStatus = "جدید_واکشی_شده"
-                        });
+                            await EnrichFullNewsAsync(item, ct);
 
-                        newsList.Add(item);
+                            _debugStore.LogOrUpdate(new DebugFeedItem
+                            {
+                                Link = item.Link,                    // لینک پاک شده                 
+                                Title = item.Title,
+                                SourceName = item.SourceName,
+                                PubDate = item.PubDate.DateTime,
+                                ProcessedAt = DateTime.UtcNow,
+                                PublishStatus = "جدید_واکشی_شده"
+                            });
+
+                            newsList.Add(item);
+                        }
+
                     }
                     catch (Exception ex)
                     {
@@ -113,48 +119,18 @@ namespace TelegramAggregator.WebAPI.Services
 
             item.Title = CleanDescription(item.Title);
 
-          
+
 
             // شرح کوتاه — از p یا div.summary
             var leadNode = node.SelectSingleNode(".//p[contains(@class,'lead') or contains(@class,'excerpt') or contains(@class,'summary')] | .//div[contains(@class,'excerpt')] | .//p[not(preceding-sibling::h2)]");
             item.ShortDescription = HttpUtility.HtmlDecode(leadNode?.InnerText.Trim() ?? "");
 
 
-            // نوع محتوا (ویدیو)
-            item.Type = node.SelectSingleNode(".//iframe | .//video") != null ? "Video" : "News";
-
-            // زمان موقت از کارت
-            TryExtractPubDateFromCard(node, item);
 
             return item;
         }
 
-        private static void TryExtractPubDateFromCard(HtmlNode node, NewsItem item)
-        {
-            var candidates = new[]
-            {
-                // Attribute ها — InnerText مقدار رو برمی‌گردونه
-                node.SelectSingleNode(".//time/@datetime")?.InnerText,
-                node.SelectSingleNode(".//meta[@property='article:published_time']/@content")?.InnerText,
-                node.SelectSingleNode(".//meta[@name='date']/@content")?.InnerText,
-                node.SelectSingleNode(".//meta[@itemprop='datePublished']/@content")?.InnerText,
 
-                // تگ‌های معمولی
-                node.SelectSingleNode(".//time")?.InnerText,
-                node.SelectSingleNode(".//span[contains(@class,'date') or contains(@class,'time')]")?.InnerText,
-                node.SelectSingleNode(".//div[contains(@class,'date')]")?.InnerText,
-                node.SelectSingleNode(".//p[contains(@class,'date')]")?.InnerText
-            };
-
-            foreach (var text in candidates)
-            {
-                if (!string.IsNullOrWhiteSpace(text) && DateTimeOffset.TryParse(text.Trim(), out var dt))
-                {
-                    item.PubDate = dt;
-                    return;
-                }
-            }
-        }
         private async Task EnrichFullNewsAsync(NewsItem item, CancellationToken ct)
         {
             try
