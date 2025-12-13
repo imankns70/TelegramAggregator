@@ -319,7 +319,7 @@ namespace TelegramAggregator.WebAPI.Services
 
 
                 // await Task.Delay(TimeSpan.FromSeconds(15), ct);
-                await Task.Delay(TimeSpan.FromSeconds(_rnd.Next(1500, 2400)), ct);
+                await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 35)), ct);
 
             }
 
