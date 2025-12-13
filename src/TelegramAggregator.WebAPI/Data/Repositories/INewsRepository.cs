@@ -5,7 +5,7 @@ namespace TelegramAggregator.WebAPI.Data.Repositories
     public interface INewsRepository
     {
         IQueryable<News> GetAllAsync();
-        Task<News> GetById(int id, CancellationToken ct);
+        Task<News> GetByIdAsync(int id, CancellationToken ct);
 
     }
 }

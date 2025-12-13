@@ -19,7 +19,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             return _context.News.AsQueryable();
         }
 
-        public async Task<News> GetById(int id, CancellationToken ct)
+        public async Task<News> GetByIdAsync(int id, CancellationToken ct)
         {
             return await _context.News.FirstOrDefaultAsync(ct);
         }

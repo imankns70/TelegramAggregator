@@ -51,7 +51,7 @@ namespace TelegramAggregator.WebAPI.Services
             }
         }
 
-        private HtmlNode? SelectMainContentNode(HtmlDocument doc, string host)
+        private HtmlNode SelectMainContentNode(HtmlDocument doc, string host)
         {
             return host switch
             {
@@ -81,7 +81,7 @@ namespace TelegramAggregator.WebAPI.Services
             };
         }
 
-        private HtmlNode? SelectKhabarVarzeshiNode(HtmlDocument doc)
+        private HtmlNode SelectKhabarVarzeshiNode(HtmlDocument doc)
         {
             var candidates = new[]
             {
@@ -171,7 +171,50 @@ namespace TelegramAggregator.WebAPI.Services
 
             return string.Join("\n\n", lines).Trim();
         }
+        private static string CleanKhabarVarzeshiText(string text)
+        { 
+            // ۱. حذف بخش "بیشتر بخوانید" و همه چیز بعدش (شایع در خبرورزشی)
+            int moreIndex = text.IndexOf("بیشتر بخوانید:", StringComparison.OrdinalIgnoreCase);
+            if (moreIndex >= 0)
+                text = text.Substring(0, moreIndex).Trim();
 
+            // ۲. حذف منشن و هشتگ
+            text = Regex.Replace(text, @"@\w+|#\w+", " ", RegexOptions.IgnoreCase);
+
+            // ۳. حذف آمار مشاهده/دیدگاه/نفر
+            text = Regex.Replace(text, @"\d+\s*(مشاهده|دیدگاه|نفر|بار).*", "", RegexOptions.IgnoreCase);
+
+            // ۴. حذف بخش‌های منبع و نویسنده (بدون حذف متن اصلی)
+            text = Regex.Replace(text, @"^خبرورزشی\s*[\|｜:؛]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            text = Regex.Replace(text, @"به\s*گزارش\s*خبرورزشی.*", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"^نویسنده\s*:\s*.*$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            text = Regex.Replace(text, @"^ارسال شده توسط\s*.*$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+            // ۵. حذف تبلیغات و لینک‌های پیشنهادی
+            text = Regex.Replace(text, @"لینک کوتاه.*", "", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            text = Regex.Replace(text, @"کد خبر\s*:\s*\d+.*", "", RegexOptions.IgnoreCase);
+
+            // ۶. حذف لینک‌ها
+            text = Regex.Replace(text, @"https?://[^\s]+", " ", RegexOptions.Compiled);
+
+            // ۷. حذف کاراکترهای مخفی و نامرئی
+            text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
+
+            // ۸. تمیز کردن نیم‌فاصله و فاصله‌های اضافی
+            text = Regex.Replace(text, @"(\u200C)+", "\u200C"); // یک نیم‌فاصله نگه دار
+            text = Regex.Replace(text, @"[\u200C\s]{2,}", " "); // فاصله‌های اضافی → یک فاصله
+
+            // ۹. حذف خطوط خالی اضافی
+            var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+                            .Select(l => l.Trim())
+                            .Where(l => l.Length > 3)
+                            .ToList();
+
+            text = string.Join("\n\n", lines);
+            text = Regex.Replace(text, @"\n{3,}", "\n\n");
+
+            return text.Trim();
+        }
         private string CleanTarafdariText(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return "";
@@ -214,7 +257,7 @@ namespace TelegramAggregator.WebAPI.Services
             return text.Trim();
         }
 
-        private string CleanKhabarVarzeshiText(string text)
+        private string CleanKhabarVarzeshiTextOld(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
