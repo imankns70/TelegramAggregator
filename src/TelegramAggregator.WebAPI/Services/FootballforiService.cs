@@ -164,9 +164,21 @@ namespace TelegramAggregator.WebAPI.Services
                     continue;
 
                 }
+                else if (text.Contains("برنده های پیش بینی"))
+                {
+                    _debugStore.LogRejected(item, "پیش بینی");
+                    continue;
+
+                }
                 else if (text.Contains("جدول پخش زنده"))
                 {
                     _debugStore.LogRejected(item, "جدول پخش زنده");
+                    continue;
+
+                }
+                else if (text.Contains("پخش بازی"))
+                {
+                    _debugStore.LogRejected(item, "ویدئو");
                     continue;
 
                 }
