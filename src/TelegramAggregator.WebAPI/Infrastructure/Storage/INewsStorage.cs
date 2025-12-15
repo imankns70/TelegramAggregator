@@ -9,5 +9,6 @@ namespace TelegramAggregator.WebAPI.Infrastructure.Storage
         IReadOnlyDictionary<string, List<DebugFeedItem>> GetMirroQueue();
         IReadOnlyDictionary<string, int> GetChannelQueueCounts();
         int GetSeenKeys();
+        void ClearAllQueues();
     }
 }

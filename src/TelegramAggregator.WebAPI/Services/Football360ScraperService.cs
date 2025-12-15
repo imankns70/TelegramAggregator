@@ -2,6 +2,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
+using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 
@@ -11,12 +12,14 @@ namespace TelegramAggregator.WebAPI.Services
     {
         private readonly IHttpHelperService _http;
         private readonly IDebugStore _debugStore;
+        private readonly INewsRepository _newsRepository;
         private const int MaxItems = 10; // افزایش دادم تا بیشتر بگیره
 
-        public Football360ScraperService(IHttpHelperService http, IDebugStore debugStore)
+        public Football360ScraperService(IHttpHelperService http, IDebugStore debugStore, INewsRepository newsRepository)
         {
             _http = http;
             _debugStore = debugStore;
+            _newsRepository = newsRepository;
         }
 
         public async Task<List<NewsItem>> GetLatestNewsAsync(CancellationToken ct = default)
@@ -175,68 +178,55 @@ namespace TelegramAggregator.WebAPI.Services
             }
         }
 
+   
         private static string CleanDescription(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return string.Empty;
 
-            // ۱. حذف کاراکترهای مخفی و نامرئی (به جز نیم‌فاصله!)
-            text = Regex.Replace(text, @"[\u200B\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
+            // ۱. حذف بخش‌های خاص "بیشتر بخوانید" یا مشابه (اگر وجود داشت)
+            int moreIndex = text.IndexOf("بیشتر بخوانید:", StringComparison.OrdinalIgnoreCase);
+            if (moreIndex >= 0)
+                text = text.Substring(0, moreIndex).Trim();
 
-            // ۲. تبدیل "به گزارش فوتبال ۳۶۰" → "به گزارش فوتبال فوری"
-            text = Regex.Replace(text,
-                @"به\s*گزارش\s*فوتبال\s*۳۶۰\s*[,،:؛]?\s*",
-                "به گزارش فوتبال فوری ",
-                RegexOptions.IgnoreCase);
+            // ۲. حذف منشن، هشتگ و لینک‌ها
+            text = Regex.Replace(text, @"@\w+|#\w+|https?://[^\s]+", " ", RegexOptions.IgnoreCase);
 
-            // ۳. حذف کامل باقی‌مانده‌های «فوتبال ۳۶۰» در هر شکل دیگر (برای اطمینان)
-            text = Regex.Replace(text, @"«?\s*فوتبال\s*[۳3]۶۰\s*»?", "", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"فوتبال\s*360", "", RegexOptions.IgnoreCase);
+            // ۳. حذف آمار مشاهده/دیدگاه/نفر/بار
+            text = Regex.Replace(text, @"\d+\s*(مشاهده|دیدگاه|نفر|بار|بازدید).*", "", RegexOptions.IgnoreCase);
 
-            // ۴. تبدیل «در گفت‌وگو با...» → «در گفت‌وگو با خبرنگار فوتبال فوری:»
+            // ۴. حذف منبع و گزارش فوتبال ۳۶۰ (بدون حذف متن اصلی)
+            text = Regex.Replace(text, @"^فوتبال\s*۳۶۰\s*[\|｜:؛]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+            text = Regex.Replace(text, @"به\s*گزارش\s*فوتبال\s*۳۶۰.*", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"^منبع\s*:\s*فوتبال\s*۳۶۰\s*$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+            // ۵. تبدیل «در گفت‌وگو با...» به «در گفت‌وگو با خبرنگار فوتبال فوری:»
             text = Regex.Replace(text,
                 @"در\s*گفت[‌\u200C\s]*وگو\s*با\s*[:؛]?\s*",
                 "در گفت‌وگو با خبرنگار فوتبال فوری: ",
                 RegexOptions.IgnoreCase);
 
-            // ۵. حذف خطوطی که فقط منبع هستن
-            text = Regex.Replace(text, @"^(منبع|گزارش|نویسنده)?\s*[:：؛]?\s*فوتبال\s*[۳3]۶۰\s*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-
-            // ۶. حذف لینک‌ها، منشن و هشتگ
-            text = Regex.Replace(text, @"https?://[^\s]+|@\w+|#\w+", " ", RegexOptions.IgnoreCase);
-
-            // ۷. حذف برچسب‌ها، آمار مشاهده/دیدگاه
+            // ۶. حذف برچسب‌ها و تگ‌ها
             text = Regex.Replace(text, @"(برچسب|تگ|کلیدواژه)[‌\s]*ها.*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"\d+[\s\u200C]*(مشاهده|دیدگاه|نفر|بار).*", "", RegexOptions.IgnoreCase);
 
-            // ۸. حذف تکرار خطوط کامل (روش ساده و مطمئن — مثل قبل)
+            // ۷. حذف کاراکترهای مخفی و نامرئی (به جز نیم‌فاصله)
+            text = Regex.Replace(text, @"[\u200B\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
+
+            // ۸. تمیز کردن نیم‌فاصله و فاصله‌های اضافی
+            text = Regex.Replace(text, @"(\u200C){2,}", "\u200C"); // نیم‌فاصله تکراری → یکی
+            text = Regex.Replace(text, @"[\u200C\s]{2,}", " ");    // فاصله + نیم‌فاصله اضافی → یک فاصله
+
+            // ۹. حذف خطوط خالی اضافی و ترکیب نهایی
             var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
                             .Select(l => l.Trim())
                             .Where(l => l.Length > 3)
                             .ToList();
 
-            var uniqueLines = new List<string>();
-            string lastLine = string.Empty;
-            foreach (var line in lines)
-            {
-                if (line != lastLine)
-                {
-                    uniqueLines.Add(line);
-                    lastLine = line;
-                }
-            }
+            text = string.Join("\n\n", lines);
+            text = Regex.Replace(text, @"\n{3,}", "\n\n");
 
-            text = string.Join("\n\n", uniqueLines);
-
-            // ۹. تمیزکاری نهایی — نیم‌فاصله‌ها کاملاً حفظ می‌شن!
-            text = Regex.Replace(text, @"[\s]{2,}", " ");          // فاصله‌های اضافی → یک فاصله
-            text = Regex.Replace(text, @"(\u200C){2,}", "\u200C"); // نیم‌فاصله تکراری → یکی
-            text = Regex.Replace(text, @"[ـ–—‒]", "-");            // خط تیره یکسان
-            text = Regex.Replace(text, @"\n{3,}", "\n\n");         // خطوط خالی اضافی
-
-            // ۱۰. حذف گیومه‌های خالی یا علامت‌های اضافی
-            text = Regex.Replace(text, @"\s*«\s*»\s*", " ");
-            text = Regex.Replace(text, @"\s*[:؛]\s*$", "");
+            // ۱۰. خط تیره‌ها رو یکسان کن
+            text = Regex.Replace(text, @"[ـ–—‒]", "-");
 
             return text.Trim();
         }

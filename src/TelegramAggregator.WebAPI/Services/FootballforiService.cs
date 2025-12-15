@@ -230,6 +230,22 @@ namespace TelegramAggregator.WebAPI.Services
 
             while (!ct.IsCancellationRequested)
             {
+                var now = DateTime.Now;
+                bool isWorkingHours = now.Hour >= 8 && now.Hour < 3;
+
+                if (!isWorkingHours)
+                {
+                    // خارج از ساعت کاری — صف‌ها رو خالی کن (فقط یک بار در شب)
+                    if (now.Hour == 3 && now.Minute < 5) // فقط یک بار نزدیک ساعت ۳
+                    {
+                        _logger.LogInformation("ساعت ۳ شب — خالی کردن همه صف‌ها برای شروع تازه فردا");
+                       _newsStorage.ClearAllQueues();
+                    }
+
+                    // خواب تا صبح (چک هر ۳۰ دقیقه کافیه)
+                    await Task.Delay(TimeSpan.FromMinutes(30), ct);
+                    continue;
+                }
 
                 if (!_newsStorage.TryDequeueAny(out var item))
                 {
@@ -331,7 +347,7 @@ namespace TelegramAggregator.WebAPI.Services
 
 
                 // await Task.Delay(TimeSpan.FromSeconds(15), ct);
-                await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(4, 35)), ct);
+                await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(7, 38)), ct);
 
             }
 

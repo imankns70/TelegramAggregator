@@ -43,13 +43,11 @@ public class RssParserService : IRssParserService
                 .Reverse()
                 .Select(entry =>
                 {
-                    var rawTitle = entry.Title?.Text ?? "";
-                    var rawSummary = entry.Summary?.Text ?? rawTitle;
-              
+                
                     return new NewsItem
                     {
-                        Title = TextCleaner.CleanTitle(rawTitle),
-                        ShortDescription = TextCleaner.CleanShortDescription(rawSummary),
+                        Title = TextCleaner.CleanTitle(entry.Title?.Text),
+                        ShortDescription = TextCleaner.CleanShortDescription(entry.Summary?.Text),
                         Link = entry.Links.FirstOrDefault()?.Uri?.ToString() ?? "",
                         PubDate = entry.PublishDate.DateTime,
                         SourceName = feed.Title?.Text ?? "RSS"

@@ -45,7 +45,7 @@ builder.Services.AddCors(options =>
 });
 
 // استاتیک فایل‌ها (برای debug.html)
-builder.Services.AddDirectoryBrowser(); // اختیاری: برای مرور فایل‌ها در wwwroot
+  // اختیاری: برای مرور فایل‌ها در wwwroot
 builder.Logging.AddConsole();
 
 // ------------------- سرویس‌های اصلی -------------------

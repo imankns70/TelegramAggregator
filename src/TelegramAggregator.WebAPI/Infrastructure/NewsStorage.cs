@@ -23,7 +23,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         internal readonly ConcurrentDictionary<string, Channel<NewsItem>> _sourceChannels = new();
         private readonly BoundedChannelOptions _channelOptions;
 
- 
+
 
 
         private readonly ConcurrentDictionary<string, ConcurrentQueue<NewsItem>> _debugMirror = new();
@@ -38,39 +38,21 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 SingleReader = false,
                 FullMode = BoundedChannelFullMode.DropOldest
             };
-     
+
         }
-        public bool TryDequeueAny2(out NewsItem item)
+        private void ClearAllQueues()
         {
-            item = null;
-
-            // Shuffle channels to avoid bias
-            var channels = _sourceChannels.Values.ToList();
-            if (channels.Count == 0)
-                return false;
-
-            // انتخاب تصادفی یک کانال تا زمانی که آیتم داشته باشد
-            for (int i = 0; i < channels.Count; i++)
+            foreach (var kvp in _sourceChannels)
             {
-                var idx = Random.Shared.Next(channels.Count);
-                var channel = channels[idx];
-
-                if (!channel.Reader.TryRead(out var readItem))
-                    continue;
-
-                item = readItem;
-
-                // MIRROR SYNCHRONIZATION
-                if (_debugMirror.TryGetValue(item.SourceName, out var mirrorQueue))
-                {
-                    mirrorQueue.TryDequeue(out _); // drop oldest to reflect real read
-                }
-
-                return true;
+                var channel = kvp.Value;
+                while (channel.Reader.TryRead(out _)) { }  
             }
 
-            return false;
+            _debugMirror.Clear();
+
+
         }
+
         public bool TryDequeueAny(out NewsItem item)
         {
             item = null;
@@ -164,7 +146,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         }
 
         // استفاده در کد:
-   
+
         public async Task<(bool, string)> TryAddAsync(NewsItem item, CancellationToken ct = default)
         {
 
@@ -176,7 +158,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             var globalKey = GenerateGlobalKey(item.Link);
             if (!_seenKeys.TryAdd(globalKey, 1))
             {
-               
+
                 return (false, "تکراری فیلتر لایه اول)");
             }
 
@@ -184,7 +166,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             if (_seenKeys.Count > _maxItem)
                 if (_seenKeysOrder.TryDequeue(out var oldestKey))
                     _seenKeys.TryRemove(oldestKey, out _);
- 
+
 
             // لایه ۳: شباهت با آخرین خبرهای منابع دیگر
             foreach (var kvp in _lastSentBySource.Where(x => x.Key != source))
@@ -200,12 +182,12 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 if (!string.IsNullOrWhiteSpace(a) && !string.IsNullOrWhiteSpace(b))
                     if (TextSimilarity.GetSimilarity(a, b) >= 0.90)
                     {
-                        
+
                         return (false, $"شبیه به خبر اخیر لایه سوم {other.UniqueKey}");
                     }
             }
 
- 
+
 
             var channel = _sourceChannels.GetOrAdd(source, _ => Channel.CreateBounded<NewsItem>(_channelOptions));
             var mirrorQueue = _debugMirror.GetOrAdd(source, _ => new ConcurrentQueue<NewsItem>());

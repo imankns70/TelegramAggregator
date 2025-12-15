@@ -171,57 +171,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             return string.Join("\n\n", lines).Trim();
         }
-        private static string CleanDescription(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return string.Empty;
-
-            // ۱. حذف بخش‌های خاص "بیشتر بخوانید" یا مشابه (اگر وجود داشت)
-            int moreIndex = text.IndexOf("بیشتر بخوانید:", StringComparison.OrdinalIgnoreCase);
-            if (moreIndex >= 0)
-                text = text.Substring(0, moreIndex).Trim();
-
-            // ۲. حذف منشن، هشتگ و لینک‌ها
-            text = Regex.Replace(text, @"@\w+|#\w+|https?://[^\s]+", " ", RegexOptions.IgnoreCase);
-
-            // ۳. حذف آمار مشاهده/دیدگاه/نفر/بار
-            text = Regex.Replace(text, @"\d+\s*(مشاهده|دیدگاه|نفر|بار|بازدید).*", "", RegexOptions.IgnoreCase);
-
-            // ۴. حذف منبع و گزارش فوتبال ۳۶۰ (بدون حذف متن اصلی)
-            text = Regex.Replace(text, @"^فوتبال\s*۳۶۰\s*[\|｜:؛]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            text = Regex.Replace(text, @"به\s*گزارش\s*فوتبال\s*۳۶۰.*", "", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"^منبع\s*:\s*فوتبال\s*۳۶۰\s*$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-
-            // ۵. تبدیل «در گفت‌وگو با...» به «در گفت‌وگو با خبرنگار فوتبال فوری:»
-            text = Regex.Replace(text,
-                @"در\s*گفت[‌\u200C\s]*وگو\s*با\s*[:؛]?\s*",
-                "در گفت‌وگو با خبرنگار فوتبال فوری: ",
-                RegexOptions.IgnoreCase);
-
-            // ۶. حذف برچسب‌ها و تگ‌ها
-            text = Regex.Replace(text, @"(برچسب|تگ|کلیدواژه)[‌\s]*ها.*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-
-            // ۷. حذف کاراکترهای مخفی و نامرئی (به جز نیم‌فاصله)
-            text = Regex.Replace(text, @"[\u200B\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
-
-            // ۸. تمیز کردن نیم‌فاصله و فاصله‌های اضافی
-            text = Regex.Replace(text, @"(\u200C){2,}", "\u200C"); // نیم‌فاصله تکراری → یکی
-            text = Regex.Replace(text, @"[\u200C\s]{2,}", " ");    // فاصله + نیم‌فاصله اضافی → یک فاصله
-
-            // ۹. حذف خطوط خالی اضافی و ترکیب نهایی
-            var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
-                            .Select(l => l.Trim())
-                            .Where(l => l.Length > 3)
-                            .ToList();
-
-            text = string.Join("\n\n", lines);
-            text = Regex.Replace(text, @"\n{3,}", "\n\n");
-
-            // ۱۰. خط تیره‌ها رو یکسان کن
-            text = Regex.Replace(text, @"[ـ–—‒]", "-");
-
-            return text.Trim();
-        }
+     
         private string CleanTarafdariText(string text)
         {
             if (string.IsNullOrWhiteSpace(text)) return "";
@@ -274,7 +224,8 @@ namespace TelegramAggregator.WebAPI.Services
             text = Regex.Replace(text, @"@\w+|#\w+", " ", RegexOptions.IgnoreCase);
 
             // ۳. حذف آمار مشاهده/دیدگاه/نفر
-            text = Regex.Replace(text, @"\d+\s*(مشاهده|دیدگاه|نفر|بار).*", "", RegexOptions.IgnoreCase);
+            // ۳. حذف آمار مشاهده/دیدگاه/نفر — فقط خطوط کامل آمار (نه وسط جمله)
+            text = Regex.Replace(text, @"^\s*\d+\s*(مشاهده|دیدگاه|نفر|بار|بازدید)[^\n]*$\n?", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
 
             // ۴. حذف بخش‌های منبع و نویسنده (بدون حذف متن اصلی)
             text = Regex.Replace(text, @"^خبرورزشی\s*[\|｜:؛]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
@@ -307,44 +258,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             return text.Trim();
         }
-        private string CleanKhabarVarzeshiTextOld(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
-
-            int moreReadIndex = text.IndexOf("وی افزود متن کامل گفتگو را اینجا بخوانید.");
-            if (moreReadIndex >= 0)
-                text = text.Substring(0, moreReadIndex).Trim();
-
-            var lines = text.Split('\n')
-                            .Select(l => l.Trim())
-                            .Where(l => l.Length > 0)
-                            .ToList();
-
-            var result = new List<string>();
-            bool contentStarted = false;
-
-            foreach (var line in lines)
-            {
-                if (!contentStarted)
-                {
-                    if (Regex.IsMatch(line, @"(نویسنده|خبرنگار|منبع|زمان مطالعه|ارسال شده توسط|گزارش از)", RegexOptions.IgnoreCase))
-                        continue;
-                    if (line.Length < 80 && Regex.IsMatch(line, @"^[آ-ی\s]+\s*[:\-–—]"))
-                        continue;
-                    if (line.Contains("خبر :") || line.Contains("زمان مطالعه :"))
-                        continue;
-                    contentStarted = true;
-                }
-
-                var cleaned = Regex.Replace(line, @"\|.*$|خبر\s*:\s*\d+|زمان مطالعه.*|#\w+|@\w+", "", RegexOptions.IgnoreCase);
-                if (cleaned.Length > 3)
-                    result.Add(cleaned.Trim());
-            }
-
-            var final = string.Join("\n\n", result);
-            final = Regex.Replace(final, @"\n{3,}", "\n\n");
-            return final.Trim();
-        }
+   
     }
 }
  
