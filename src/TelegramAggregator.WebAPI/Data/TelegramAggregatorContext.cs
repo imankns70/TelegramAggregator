@@ -21,8 +21,7 @@ namespace TelegramAggregator.WebAPI.Data
             modelBuilder.Entity<News>(entity =>
             {
                 entity.ToTable(nameof(News));
-                entity.HasKey(e => e.Id);
-                entity.HasIndex(e => e.GlobalKey).IsUnique(); // کلید یکتا برای جلوگیری از تکرار
+                entity.HasKey(e => e.Id);  // کلید یکتا برای جلوگیری از تکرار
                 entity.Property(e => e.Score);
                 entity.Property(e => e.Title).IsRequired().HasMaxLength(1000);
                 entity.Property(e => e.ShortDescription).IsRequired();

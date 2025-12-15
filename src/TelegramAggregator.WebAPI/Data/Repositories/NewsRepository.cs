@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using AngleSharp.Dom;
+using Microsoft.EntityFrameworkCore;
 using TelegramAggregator.WebAPI.Data;
 using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Models.Entities;
@@ -51,23 +52,22 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             news.FullDescription = newsItem.FullDescription;
             news.NewsStatusId = StatusEnumeration.Sent.Id;
             var history = news.Histories.Last();
-            history.NewsStatusId = StatusEnumeration.Sent.Id;           
+            history.NewsStatusId = StatusEnumeration.Sent.Id;
             _context.Update(news);
             await _context.SaveChangesAsync(ct);
         }
         public async Task ReceiveAsync(NewsItem newsItem, CancellationToken ct)
         {
             var now = DateTime.Now;
-            string globalKey = GenerateGlobalKey(newsItem.Link);
+            string cleanLink = GenerateGlobalKey(newsItem.Link);
             int sportSourceId = GetSportSourceId(newsItem.SourceName);
             var news = new News
             {
-                Link = newsItem.Link,
+                Link = cleanLink,
                 InsertDate = now,
                 Title = newsItem.Title,
                 ShortDescription = newsItem.ShortDescription,
                 PubDate = newsItem.PubDate.DateTime,
-                GlobalKey = globalKey,
                 SportSourceId = sportSourceId,
                 NewsStatusId = StatusEnumeration.Receive.Id,
             };
@@ -89,23 +89,32 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             _context.Update(news);
             await _context.SaveChangesAsync(ct);
         }
-        private string GenerateGlobalKey(string link)
+        public void FilterNews(List<NewsItem> news)
         {
-            if (string.IsNullOrWhiteSpace(link))
-                return Guid.NewGuid().ToString(); // fallback
 
-            // فقط قسمت اصلی لینک رو نگه دار (بدون پارامتر و hash)
-            var uri = new Uri(link);
-            var cleanPath = uri.AbsolutePath;
+            List<string> links = news.Select(a => GenerateGlobalKey(a.Link)).ToList();
 
-            // حذف اسلش آخر اگر بود
-            if (cleanPath.EndsWith("/"))
-                cleanPath = cleanPath.TrimEnd('/');
+            List<string> existLinks = GetAll().Where(a => links.Contains(a.Link))
+                  .Select(a => a.Link)
+                  .ToList();
+            news = news.Where(n => !existLinks.Contains(n.Link)).ToList();
 
-            // ترکیب هاست + مسیر تمیز = کلید ۱۰۰٪ یکتا
-            return $"{uri.Host}{cleanPath}".ToLowerInvariant();
+
         }
+        private string GenerateGlobalKey(string url)
+        {
+            var uri = new Uri(url);
 
+            // فقط قسمت قبل از ? (پارامترها حذف)
+            var path = uri.GetLeftPart(UriPartial.Path);
+
+            // حذف اسلش آخر
+            if (path.EndsWith("/"))
+                path = path.TrimEnd('/');
+
+            // ترکیب هاست + مسیر تمیز
+            return $"{uri.Host}{path}".ToLowerInvariant();
+        }
         private int GetSportSourceId(string sourceName)
         {
             if (sourceName == "ورزش سه | آخرین اخبار ورزشی")
