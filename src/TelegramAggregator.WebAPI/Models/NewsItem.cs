@@ -7,6 +7,7 @@ namespace TelegramAggregator.WebAPI.Models;
 /// </summary>
 public class NewsItem
 {
+    public int? Id { get; set; } 
     public int Score { get; set; } = 0;
     /// <summary>عنوان خبر یا پست</summary>
     public string Title { get; set; } = "";
@@ -50,4 +51,5 @@ public class NewsItem
 
     /// <summary>برای HashSet</summary>
     public override int GetHashCode() => UniqueKey.GetHashCode();
+    
 }

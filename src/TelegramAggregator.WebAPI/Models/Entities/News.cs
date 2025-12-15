@@ -11,6 +11,7 @@
         public string FullDescription { get; set; }
         public string Link { get; set; }
         public DateTime PubDate { get; set; }
+        public DateTime InsertDate { get; set; }
         public string ImageUrl { get; set; }
         public int NewsStatusId { get; set; }
         public int SportSourceId { get; set; }
