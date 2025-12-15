@@ -231,7 +231,7 @@ namespace TelegramAggregator.WebAPI.Services
             while (!ct.IsCancellationRequested)
             {
                 var now = DateTime.Now;
-                bool isWorkingHours = now.Hour >= 8 && now.Hour < 3;
+                bool isWorkingHours = now.Hour >= 8 || now.Hour < 3;
 
                 if (!isWorkingHours)
                 {
