@@ -52,8 +52,9 @@ namespace TelegramAggregator.WebAPI.Services
                             continue;
 
                         // اینجا باید از طریق لینک خبر در دیتابیس چک شود اگه وجود داشت، ادامه نده
-                       
+
                         if (!_debugStore.GetAllDebugItems().Any(a => a.Link == item.Link))
+                        //if (!_newsRepository.GetAll().Any(a => a.Link == item.Link))
                         {
                             await EnrichFullNewsAsync(item, ct);
 

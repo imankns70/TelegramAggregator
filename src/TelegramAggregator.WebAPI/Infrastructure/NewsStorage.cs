@@ -40,7 +40,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             };
 
         }
-        private void ClearAllQueues()
+        public void ClearAllQueues()
         {
             foreach (var kvp in _sourceChannels)
             {
@@ -264,6 +264,6 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
         public int GetSeenKeys() => _seenKeys.Count;
 
-
+      
     }
 }
