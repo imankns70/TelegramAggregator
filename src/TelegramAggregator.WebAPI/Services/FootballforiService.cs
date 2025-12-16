@@ -133,7 +133,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             var acceptedItems = new List<NewsItem>();
 
-
+            var rejectedItems = new Dictionary<string,NewsItem>();
             // مرحله ۲: فیلتر اولیه + ثبت در دیباگ (فقط رد شده‌ها و قبول اولیه)
             foreach (var item in allItems)
             {
@@ -142,55 +142,64 @@ namespace TelegramAggregator.WebAPI.Services
                 var otherSport = otherSportsKeywords.FirstOrDefault(k => text.Contains(k.ToLowerInvariant()));
                 if (!string.IsNullOrWhiteSpace(otherSport))
                 {
-                    _debugStore.LogRejected(item, otherSport);
+                    //_debugStore.LogRejected(item, otherSport);
+                    rejectedItems.Add(otherSport,item);
                     continue;
 
                 }
                 else if (videoKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
                 {
-                    _debugStore.LogRejected(item, "عنوان ویدئو");
+                    // _debugStore.LogRejected(item, "عنوان ویدئو");
+                      rejectedItems.Add("عنوان ویدئو",item);
                     continue;
 
                 }
                 else if (womenKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
                 {
-                    _debugStore.LogRejected(item, "فوتبال بانوان");
+                   // _debugStore.LogRejected(item, "فوتبال بانوان");
+                       rejectedItems.Add("فوتبال بانوان",item);
                     continue;
 
                 }
                 else if (text.Contains("ترکیب رسمی"))
                 {
-                    _debugStore.LogRejected(item, "ترکیب رسمی");
+                    //_debugStore.LogRejected(item, "ترکیب رسمی");
+                       rejectedItems.Add("ترکیب رسمی",item);
                     continue;
 
                 }
                 else if (text.Contains("برنده های پیش بینی"))
                 {
-                    _debugStore.LogRejected(item, "پیش بینی");
+                    //_debugStore.LogRejected(item, "پیش بینی");
+                       rejectedItems.Add("برنده های پیش بینی",item);
                     continue;
 
                 }
                 else if (text.Contains("جدول پخش زنده"))
                 {
-                    _debugStore.LogRejected(item, "جدول پخش زنده");
+                   // _debugStore.LogRejected(item, "جدول پخش زنده");
+                      rejectedItems.Add("جدول پخش زنده",item);
                     continue;
 
                 }
                 else if (text.Contains("پخش بازی"))
                 {
-                    _debugStore.LogRejected(item, "ویدئو");
+                    //_debugStore.LogRejected(item, "ویدئو");
+                       rejectedItems.Add("پخش بازی",item);
                     continue;
 
                 }
                 else if (text.Contains("روزنامه خبرورزشی"))
                 {
-                    _debugStore.LogRejected(item, "روزنامه خبرورزشی");
+                    //_debugStore.LogRejected(item, "روزنامه خبرورزشی");
+                       rejectedItems.Add("روزنامه خبرورزشی",item);
                     continue;
 
                 }
                 else if (item.PubDate < cutoff)
                 {
-                    _debugStore.LogRejected(item, "قدیمی‌تر از ۶ ساعت");
+                    //_debugStore.LogRejected(item, "قدیمی‌تر از ۶ ساعت");
+                       rejectedItems.Add( "قدیمی‌تر از ۶ ساعت",item);
                     continue;
                 }
 
@@ -239,7 +248,7 @@ namespace TelegramAggregator.WebAPI.Services
                     if (now.Hour == 3 && now.Minute < 5) // فقط یک بار نزدیک ساعت ۳
                     {
                         _logger.LogInformation("ساعت ۳ شب — خالی کردن همه صف‌ها برای شروع تازه فردا");
-                       _newsStorage.ClearAllQueues();
+                        _newsStorage.ClearAllQueues();
                     }
 
                     // خواب تا صبح (چک هر ۳۰ دقیقه کافیه)

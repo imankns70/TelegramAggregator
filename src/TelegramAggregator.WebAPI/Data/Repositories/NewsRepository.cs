@@ -59,7 +59,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         public async Task ReceiveAsync(NewsItem newsItem, CancellationToken ct)
         {
             var now = DateTime.Now;
-            string cleanLink = GenerateGlobalKey(newsItem.Link);
+            string cleanLink = ClearUrl(newsItem.Link);
             int sportSourceId = GetSportSourceId(newsItem.SourceName);
             var news = new News
             {
@@ -89,19 +89,26 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             _context.Update(news);
             await _context.SaveChangesAsync(ct);
         }
-        public void FilterNews(List<NewsItem> news)
+        public void FilterNews(ref List<NewsItem> news)
         {
+            if (news.Any())
+            {
+                int sportSourceId = GetSportSourceId(news.First().SourceName);
+                HashSet<string> links = new HashSet<string>(news.Select(a => ClearUrl(a.Link)));
+                HashSet<string> existLinks = new HashSet<string>(
+                    GetAll().Where(a => a.SportSourceId == sportSourceId &&
+                                        a.InsertDate > DateTime.Now.AddDays(-3) &&
+                                        links.Contains(a.Link))
+                            .Select(a => a.Link)
+                );
 
-            List<string> links = news.Select(a => GenerateGlobalKey(a.Link)).ToList();
-
-            List<string> existLinks = GetAll().Where(a => links.Contains(a.Link))
-                  .Select(a => a.Link)
-                  .ToList();
-            news = news.Where(n => !existLinks.Contains(n.Link)).ToList();
-
+                // 4. فیلتر کردن اخبار و حذف لینک‌های تکراری
+                news = news.Where(n => !existLinks.Contains(n.Link)).ToList();
+            }
 
         }
-        private string GenerateGlobalKey(string url)
+
+        private string ClearUrl(string url)
         {
             var uri = new Uri(url);
 

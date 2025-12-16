@@ -2,6 +2,7 @@
 using System.Net;
 using System.ServiceModel.Syndication;
 using System.Xml;
+using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 
@@ -14,10 +15,13 @@ public class RssParserService : IRssParserService
 {
     private readonly ILogger<RssParserService> _logger;
     private readonly IDebugStore _debugStore;
-    public RssParserService(ILogger<RssParserService> logger, IDebugStore debugStore)
+    private readonly INewsRepository _newsRepository;
+    public RssParserService(ILogger<RssParserService> logger, IDebugStore debugStore,
+     INewsRepository newsRepository)
     {
         _logger = logger;
         _debugStore = debugStore;
+        _newsRepository = newsRepository;
     }
 
     public IEnumerable<NewsItem> Parse(string xml)
@@ -37,13 +41,13 @@ public class RssParserService : IRssParserService
             var feedTitle = feed.Title?.Text ?? "RSS";
 
 
-            result = feed.Items 
+            result = feed.Items
                 .OrderByDescending(i => i.PublishDate.DateTime)
                 .Take(10)
                 .Reverse()
                 .Select(entry =>
                 {
-                
+
                     return new NewsItem
                     {
                         Title = TextCleaner.CleanTitle(entry.Title?.Text),
@@ -55,23 +59,31 @@ public class RssParserService : IRssParserService
                 }).ToList();
 
 
+
+            _newsRepository.FilterNews(ref result);
             foreach (var item in result)
             {
-                var rawLink = item.Link.Trim();        
-
-                // نرمال‌سازی لینک — این خط همه تکراری‌ها رو میکشه!
-                var normalizedLink = NormalizeLink(rawLink);
-                _debugStore.LogOrUpdate(new DebugFeedItem
-                {
-                    Link = normalizedLink,                    // لینک پاک شده                 
-                    Title = item.Title,
-                    SourceName = feedTitle,
-                    PubDate = item.PubDate.DateTime,
-                    ProcessedAt = DateTime.UtcNow,
-                    PublishStatus = "جدید_واکشی_شده"
-                });
-
+                //await EnrichFullNewsAsync(item, ct);
             }
+
+
+            // foreach (var item in result)
+            // {
+            //     var rawLink = item.Link.Trim();
+
+            //     // نرمال‌سازی لینک — این خط همه تکراری‌ها رو میکشه!
+            //      var normalizedLink = NormalizeLink(rawLink);
+            //     _debugStore.LogOrUpdate(new DebugFeedItem
+            //     {
+            //         Link = normalizedLink,                    // لینک پاک شده                 
+            //         Title = item.Title,
+            //         SourceName = feedTitle,
+            //         PubDate = item.PubDate.DateTime,
+            //         ProcessedAt = DateTime.UtcNow,
+            //         PublishStatus = "جدید_واکشی_شده"
+            //     });
+
+            // }
 
 
         }
@@ -86,37 +98,5 @@ public class RssParserService : IRssParserService
 
         return result;
     }
-    private static string NormalizeLink(string url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return url;
 
-        try
-        {
-            var uri = new Uri(url, UriKind.Absolute);
-
-            // حذف www.
-            var host = uri.Host;
-            if (host.StartsWith("www."))
-                host = host["www.".Length..];
-
-            // ساخت لینک پاک
-            var builder = new UriBuilder
-            {
-                Scheme = uri.Scheme.ToLower(),
-                Host = host,
-                Port = uri.Port == 80 || uri.Port == 443 ? -1 : uri.Port,
-                Path = uri.AbsolutePath.TrimEnd('/'),  // حذف / آخر
-                Query = uri.Query,
-                Fragment = uri.Fragment
-            };
-
-            return builder.Uri.ToString();
-        }
-        catch
-        {
-            // اگه لینک خراب بود، حداقل / آخر رو حذف کن
-            return url.TrimEnd('/').Trim();
-        }
-    }
 }

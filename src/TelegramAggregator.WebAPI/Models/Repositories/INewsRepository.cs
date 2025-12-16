@@ -11,7 +11,7 @@ namespace TelegramAggregator.WebAPI.Data.Repositories
         Task AcceptedAsync(NewsItem newsItem, CancellationToken ct);
         Task PublishedAsync(NewsItem newsItem, CancellationToken ct);
         Task DecayAsync(NewsItem newsItem, string reason, CancellationToken ct);
-        void FilterNews(List<NewsItem> news);
+        void FilterNews(ref List<NewsItem> news);
 
     }
 }

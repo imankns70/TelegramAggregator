@@ -53,27 +53,24 @@ namespace TelegramAggregator.WebAPI.Services
 
                         // اینجا باید از طریق لینک خبر در دیتابیس چک شود اگه وجود داشت، ادامه نده
 
-                        if (!_debugStore.GetAllDebugItems().Any(a => a.Link == item.Link))
+                        // if (!_debugStore.GetAllDebugItems().Any(a => a.Link == item.Link))
 
-                        {
-                            await EnrichFullNewsAsync(item, ct);
+                        // {
+                        //     await EnrichFullNewsAsync(item, ct);
 
-                            _debugStore.LogOrUpdate(new DebugFeedItem
-                            {
-                                Link = item.Link,                    // لینک پاک شده                 
-                                Title = item.Title,
-                                SourceName = item.SourceName,
-                                PubDate = item.PubDate.DateTime,
-                                ProcessedAt = DateTime.UtcNow,
-                                PublishStatus = "جدید_واکشی_شده"
-                            });
+                        //     _debugStore.LogOrUpdate(new DebugFeedItem
+                        //     {
+                        //         Link = item.Link,                    // لینک پاک شده                 
+                        //         Title = item.Title,
+                        //         SourceName = item.SourceName,
+                        //         PubDate = item.PubDate.DateTime,
+                        //         ProcessedAt = DateTime.UtcNow,
+                        //         PublishStatus = "جدید_واکشی_شده"
+                        //     });
 
-                            newsList.Add(item);
-                        }
-                        //if (!_newsRepository.GetAll().Any(a => a.Link == item.Link))
-                        //{
-                        //    await _newsRepository.ReceiveAsync(item, ct);
-                        //}
+                        //     newsList.Add(item);
+                        // }
+                       
 
                     }
 
@@ -83,6 +80,14 @@ namespace TelegramAggregator.WebAPI.Services
                         Console.WriteLine($"[Football360] خطا در پردازش یک خبر: {ex.Message}");
                     }
                 }
+
+
+                _newsRepository.FilterNews(ref newsList);
+                foreach (var item in newsList)
+                {
+                    await EnrichFullNewsAsync(item, ct);
+                }
+
             }
             catch (Exception ex)
             {
@@ -145,7 +150,7 @@ namespace TelegramAggregator.WebAPI.Services
         {
             try
             {
-                var html = await _http.GetStringAsync(item.Link, ct);
+                var html = await _http.GetStringAsync("https://football360.ir/post/20251215151/3-%D9%87%D9%81%D8%AA%D9%87-3-%D8%A7%D9%85%D8%AA%DB%8C%D8%A7%D8%B2-%D8%A8%D8%B1%D8%A7%DB%8C-%D8%A7%D8%B3%D8%AA%D9%82%D9%84%D8%A7%D9%84-%D8%AE%D9%86%D8%AF%D9%87%D9%87%D8%A7%DB%8C-%D9%87%DB%8C%D8%B3%D8%AA%D8%B1%DB%8C%DA%A9-%D8%B1%DB%8C%DA%A9%D8%A7%D8%B1%D8%AF%D9%88", ct);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
@@ -194,12 +199,21 @@ namespace TelegramAggregator.WebAPI.Services
             // ۱. حذف کاراکترهای مخفی و نامرئی (به جز نیم‌فاصله!)
             text = Regex.Replace(text, @"[\u200B\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
 
-            // ۲. تبدیل "به گزارش فوتبال 360 / ۳۶۰" → "به گزارش فوتبال فوری"
+            // ۲-الف. اگر «به گزارش» به جمله قبلی چسبیده، جداش کن
             text = Regex.Replace(
                 text,
-                @"به\s*گزارش\s*فوتبال\s*(?:360|۳۶۰)\s*([,،:؛.]?\s*|$)",
-                "به گزارش فوتبال فوری ",
-                RegexOptions.IgnoreCase);
+                @"([\.!\؟])(?=به\s*گزارش)",
+                "$1 "
+            );
+
+            // ۲. تبدیل "به گزارش فوتبال 360 / ۳۶۰" → "به گزارش فوتبال فوری" (در هر جای متن)
+            text = Regex.Replace(
+                text,
+                @"به\s*گزارش\s*فوتبال\s*(?:360|۳۶۰)",
+                "به گزارش فوتبال فوری",
+                RegexOptions.IgnoreCase
+            );
+
 
 
             // ۳. حذف کامل باقی‌مانده‌های «فوتبال ۳۶۰» (برای موارد خاص)
