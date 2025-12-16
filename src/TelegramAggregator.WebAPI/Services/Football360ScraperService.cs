@@ -50,28 +50,6 @@ namespace TelegramAggregator.WebAPI.Services
                         var item = ExtractNewsItem(node);
                         if (item == null || string.IsNullOrWhiteSpace(item.Title))
                             continue;
-
-                        // اینجا باید از طریق لینک خبر در دیتابیس چک شود اگه وجود داشت، ادامه نده
-
-                        // if (!_debugStore.GetAllDebugItems().Any(a => a.Link == item.Link))
-
-                        // {
-                        //     await EnrichFullNewsAsync(item, ct);
-
-                        //     _debugStore.LogOrUpdate(new DebugFeedItem
-                        //     {
-                        //         Link = item.Link,                    // لینک پاک شده                 
-                        //         Title = item.Title,
-                        //         SourceName = item.SourceName,
-                        //         PubDate = item.PubDate.DateTime,
-                        //         ProcessedAt = DateTime.UtcNow,
-                        //         PublishStatus = "جدید_واکشی_شده"
-                        //     });
-
-                        //     newsList.Add(item);
-                        // }
-                       
-
                     }
 
 
@@ -82,11 +60,13 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
 
-                _newsRepository.FilterNews(ref newsList);
+                _newsRepository.FilterNews(newsList);
                 foreach (var item in newsList)
                 {
                     await EnrichFullNewsAsync(item, ct);
                 }
+
+
 
             }
             catch (Exception ex)

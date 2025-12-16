@@ -45,7 +45,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             foreach (var kvp in _sourceChannels)
             {
                 var channel = kvp.Value;
-                while (channel.Reader.TryRead(out _)) { }  
+                while (channel.Reader.TryRead(out _)) { }
             }
 
             _debugMirror.Clear();
@@ -69,8 +69,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 while (channel.Reader.TryRead(out var n))
                 {
                     temp.Add(n);
-
-
+                     
                     if (n.Score > maxScore)
                     {
                         maxScore = n.Score;
@@ -264,6 +263,6 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
         public int GetSeenKeys() => _seenKeys.Count;
 
-      
+
     }
 }

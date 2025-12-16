@@ -7,6 +7,7 @@ using System.Threading.Channels;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Infrastructure.Storage;
 using TelegramAggregator.WebAPI.Models;
@@ -26,6 +27,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly IFullDecriptionExtractorService _fullDecriptionExtractor;
         private readonly FootbalForiSettings _footbalForiSettings;
         private readonly IFootball360ScraperService _football360ScraperService;
+        private readonly INewsRepository _newsRepository;
         private readonly Random _rnd = Random.Shared;
 
         public FootballforiService(
@@ -39,7 +41,8 @@ namespace TelegramAggregator.WebAPI.Services
             IFullDecriptionExtractorService fullDecriptionExtractor,
             IHostEnvironment environment,
             IDebugStore debugStore,
-            IFootball360ScraperService football360ScraperService)
+            IFootball360ScraperService football360ScraperService,
+            INewsRepository newsRepository)
         {
             _bot = bot;
             _logger = logger;
@@ -51,6 +54,7 @@ namespace TelegramAggregator.WebAPI.Services
             _fullDecriptionExtractor = fullDecriptionExtractor;
             _debugStore = debugStore;
             _football360ScraperService = football360ScraperService;
+            _newsRepository = newsRepository;
         }
 
 
@@ -99,9 +103,6 @@ namespace TelegramAggregator.WebAPI.Services
         private async Task FetchAndFilterNewsAndAddToQueueAsync(List<SourceConfig> sources, CancellationToken ct)
         {
             var allItems = new List<NewsItem>();
-            var cutoff = DateTimeOffset.Now.AddHours(-6);
-
-            // مرحله ۱: واکشی همه RSSها
             foreach (var source in sources)
             {
                 try
@@ -114,6 +115,7 @@ namespace TelegramAggregator.WebAPI.Services
                     }
 
                     var parsed = _rssParser.Parse(rssContent);
+
                     allItems.AddRange(parsed);
                 }
                 catch (Exception ex)
@@ -122,115 +124,12 @@ namespace TelegramAggregator.WebAPI.Services
                 }
             }
 
-
-
             var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
             allItems.AddRange(football360News);
+                      
 
-            var videoKeywords = _footbalForiSettings.VideoKeywords;
-            var otherSportsKeywords = _footbalForiSettings.OtherSportsKeywords;
-            var womenKeywords = _footbalForiSettings.WomenKeywords;
-
-            var acceptedItems = new List<NewsItem>();
-
-            var rejectedItems = new Dictionary<string,NewsItem>();
-            // مرحله ۲: فیلتر اولیه + ثبت در دیباگ (فقط رد شده‌ها و قبول اولیه)
-            foreach (var item in allItems)
-            {
-                var text = $"{item.Title} {item.ShortDescription}".ToLowerInvariant();
-
-                var otherSport = otherSportsKeywords.FirstOrDefault(k => text.Contains(k.ToLowerInvariant()));
-                if (!string.IsNullOrWhiteSpace(otherSport))
-                {
-                    //_debugStore.LogRejected(item, otherSport);
-                    rejectedItems.Add(otherSport,item);
-                    continue;
-
-                }
-                else if (videoKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
-                {
-                    // _debugStore.LogRejected(item, "عنوان ویدئو");
-                      rejectedItems.Add("عنوان ویدئو",item);
-                    continue;
-
-                }
-                else if (womenKeywords.Any(k => text.Contains(k.ToLowerInvariant())))
-                {
-                   // _debugStore.LogRejected(item, "فوتبال بانوان");
-                       rejectedItems.Add("فوتبال بانوان",item);
-                    continue;
-
-                }
-                else if (text.Contains("ترکیب رسمی"))
-                {
-                    //_debugStore.LogRejected(item, "ترکیب رسمی");
-                       rejectedItems.Add("ترکیب رسمی",item);
-                    continue;
-
-                }
-                else if (text.Contains("برنده های پیش بینی"))
-                {
-                    //_debugStore.LogRejected(item, "پیش بینی");
-                       rejectedItems.Add("برنده های پیش بینی",item);
-                    continue;
-
-                }
-                else if (text.Contains("جدول پخش زنده"))
-                {
-                   // _debugStore.LogRejected(item, "جدول پخش زنده");
-                      rejectedItems.Add("جدول پخش زنده",item);
-                    continue;
-
-                }
-                else if (text.Contains("پخش بازی"))
-                {
-                    //_debugStore.LogRejected(item, "ویدئو");
-                       rejectedItems.Add("پخش بازی",item);
-                    continue;
-
-                }
-                else if (text.Contains("روزنامه خبرورزشی"))
-                {
-                    //_debugStore.LogRejected(item, "روزنامه خبرورزشی");
-                       rejectedItems.Add("روزنامه خبرورزشی",item);
-                    continue;
-
-                }
-                else if (item.PubDate < cutoff)
-                {
-                    //_debugStore.LogRejected(item, "قدیمی‌تر از ۶ ساعت");
-                       rejectedItems.Add( "قدیمی‌تر از ۶ ساعت",item);
-                    continue;
-                }
-
-                item.Score = ScoreCalculator.Calculate(item, _footbalForiSettings);
-
-                // خبر قبول شد !
-                _debugStore.LogAccepted(item);
-                _logger.LogInformation("قبول شد ← [{Source}] {Title}", item.SourceName, item.Title.Truncate(80));
-                acceptedItems.Add(item);
-            }
-
-            if (!acceptedItems.Any())
-            {
-                _logger.LogInformation("بعد از فیلتر هیچ خبری برای بالانس باقی نماند.");
-                return;
-            }
-
-
-            foreach (var item in acceptedItems)
-            {
-                (bool, string) result = await _newsStorage.TryAddAsync(item, ct);
-                if (result.Item1)
-                    _debugStore.LogAccepted(item);
-                else
-                    _debugStore.LogRejected(item, result.Item2);
-
-
-                _logger.LogInformation("نهایی و در صف → [{Source}] {Title}", item.SourceName, item.Title.Truncate(80));
-
-            }
-
+            await _newsRepository.ProcessNewsToInQueueOrDecay(allItems,_footbalForiSettings, ct);
+             
 
         }
         private async Task PublishContinuouslyAsync(CancellationToken ct)

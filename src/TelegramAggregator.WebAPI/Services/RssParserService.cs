@@ -60,7 +60,7 @@ public class RssParserService : IRssParserService
 
 
 
-            _newsRepository.FilterNews(ref result);
+            _newsRepository.FilterNews(result);
             foreach (var item in result)
             {
                 //await EnrichFullNewsAsync(item, ct);
