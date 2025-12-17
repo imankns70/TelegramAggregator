@@ -156,17 +156,16 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
                     inQueueList.Add(item);
                 }
 
-                if (decayList.Any())
-                {
-                    await DecayRangeAsync(decayList, ct);
-                }
-
-                if (inQueueList.Any())
-                {
-                    await InQueueRangeAsync(inQueueList, footbalForiSettings, ct);
-                }
+            }
+            if (decayList.Any())
+            {
+                await DecayRangeAsync(decayList, ct);
             }
 
+            if (inQueueList.Any())
+            {
+                await InQueueRangeAsync(inQueueList, footbalForiSettings, ct);
+            }
         }
         public async Task<News> GetBestNews(CancellationToken ct)
         {
@@ -189,14 +188,14 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             news.Histories.Add(new NewsHistory
             {
                 NewsStatusId = StatusEnumeration.Sent.Id,
-                InsertDate = DateTime.Now
+                InsertDate = DateTime.UtcNow
             });
 
             await _context.SaveChangesAsync(ct);
         }
         public async Task<long> ReceiveAsync(NewsItem newsItem, CancellationToken ct)
         {
-            var now = DateTime.Now;
+            var now = DateTime.UtcNow;
             string cleanLink = ClearUrl(newsItem.Link);
             int sportSourceId = GetSportSourceId(newsItem.SourceName);
             var news = new News
@@ -206,7 +205,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
                 Title = newsItem.Title,
                 ShortDescription = newsItem.ShortDescription,
                 InsertDate = now,
-                PubDate = newsItem.PubDate.DateTime,
+                PubDate = newsItem.PubDate.UtcDateTime,
                 SportSourceId = sportSourceId,
                 NewsStatusId = StatusEnumeration.Receive.Id,
             };
@@ -269,7 +268,16 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
                 long id = await ReceiveAsync(news, ct);
                 news.Id = id;
             }
-            await _context.SaveChangesAsync(ct);
+            try
+            {
+                await _context.SaveChangesAsync(ct);
+            }
+            catch (Exception ex)
+            {
+
+                throw;
+            }
+
 
         }
 
@@ -325,7 +333,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
 
         public async Task<IReadOnlyList<News>> GetTodayNews(CancellationToken ct)
-        { 
+        {
             var now = DateTime.Now;
             var startDate = now.Date.AddHours(7);
             var allDate = await GetAll().Include(a => a.SportSource)

@@ -106,7 +106,6 @@ namespace TelegramAggregator.WebAPI.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("Reason")
-                        .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 

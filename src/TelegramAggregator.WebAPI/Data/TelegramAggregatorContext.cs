@@ -54,7 +54,7 @@ namespace TelegramAggregator.WebAPI.Data
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.NewsStatusId);
                 entity.Property(e => e.NewsId);
-                entity.Property(e => e.Reason).IsRequired().HasMaxLength(100);
+                entity.Property(e => e.Reason).IsRequired(false).HasMaxLength(100);
                 entity.Property(e => e.InsertDate);
 
 

@@ -15,7 +15,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly ITelegramBotClient _bot;
         private readonly ILogger<FootballforiService> _logger;
         private readonly IHttpHelperService _httpHelper;
-        private readonly IRssParserService _rssParser; 
+        private readonly IRssParserService _rssParser;
         private readonly IImageExtractorService _imageExtractor;
         private readonly IFullDecriptionExtractorService _fullDecriptionExtractor;
         private readonly FootbalForiSettings _footbalForiSettings;
@@ -27,11 +27,11 @@ namespace TelegramAggregator.WebAPI.Services
             ITelegramBotClient bot,
             ILogger<FootballforiService> logger,
             IHttpHelperService httpHelper,
-            IRssParserService rssParser, 
+            IRssParserService rssParser,
             IOptions<AppSettings> appSettings,
             IImageExtractorService imageExtractor,
             IFullDecriptionExtractorService fullDecriptionExtractor,
-            IHostEnvironment environment, 
+            IHostEnvironment environment,
             IFootball360ScraperService football360ScraperService,
             INewsRepository newsRepository)
         {
@@ -39,60 +39,21 @@ namespace TelegramAggregator.WebAPI.Services
             _logger = logger;
             _footbalForiSettings = appSettings.Value.FootbalForiSettings;
             _httpHelper = httpHelper;
-            _rssParser = rssParser;            
+            _rssParser = rssParser;
             _imageExtractor = imageExtractor;
-            _fullDecriptionExtractor = fullDecriptionExtractor;            
+            _fullDecriptionExtractor = fullDecriptionExtractor;
             _football360ScraperService = football360ScraperService;
             _newsRepository = newsRepository;
         }
 
 
-        public async Task StartAsync(CancellationToken ct)
-        {
-            _logger.LogInformation("FootballforiService استارت شد — پادشاه بیدار شد");
 
 
-            var publishTask = Task.Run(() => PublishContinuouslyAsync(ct), ct);
-            var fetchTask = Task.Run(() => StartFetchingLoopAsync(ct), ct);
 
-            await Task.WhenAll(publishTask, fetchTask);
-        }
-
-        private async Task StartFetchingLoopAsync(CancellationToken ct)
-        {
-            _logger.LogInformation("شروع حلقه واکشی RSS — هر ۳ دقیقه یکبار (شب‌ها ۳۰ دقیقه)");
-
-            while (!ct.IsCancellationRequested)
-            {
-                var now = DateTimeOffset.Now;
-
-                // حالت شبانه: ۱ تا ۸ صبح → هر ۳۰ دقیقه
-                if (now.Hour >= 1 && now.Hour < 8)
-                {
-                    _logger.LogInformation("حالت شبانه فعال — تاخیر ۳۰ دقیقه");
-                    await Task.Delay(TimeSpan.FromMinutes(30), ct);
-                    continue;
-                }
-
-                try
-                {
-                    await FetchAndFilterNewsAndAddToQueueAsync(_footbalForiSettings.Sources, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "خطا در FetchAndFilterNewsAndAddToQueueAsync");
-                }
-
-                // حالت عادی: هر 5 دقیقه
-                await Task.Delay(TimeSpan.FromMinutes(10), ct);
-            }
-
-            _logger.LogWarning("حلقه واکشی RSS خاتمه یافت");
-        }
-        private async Task FetchAndFilterNewsAndAddToQueueAsync(List<SourceConfig> sources, CancellationToken ct)
+        public async Task FetchAndFilterNewsAndAddToQueueAsync(CancellationToken ct)
         {
             var allItems = new List<NewsItem>();
-            foreach (var source in sources)
+            foreach (var source in _footbalForiSettings.Sources)
             {
                 try
                 {
@@ -121,7 +82,7 @@ namespace TelegramAggregator.WebAPI.Services
 
 
         }
-        private async Task PublishContinuouslyAsync(CancellationToken ct)
+        public async Task PublishSingleNewsAsync(CancellationToken ct)
         {
             _logger.LogInformation("PublishContinuouslyAsync شروع شد — تا ابد زنده می‌مونه");
 
