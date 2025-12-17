@@ -1,13 +1,8 @@
-﻿using AngleSharp.Dom;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using System.Net;
 using System.Text;
 using Telegram.Bot;
 using TelegramAggregator.WebAPI.Data;
-using TelegramAggregator.WebAPI.Infrastructure;
-using TelegramAggregator.WebAPI.Infrastructure.Storage;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Services;
 using TelegramAggregator.WebAPI.Services.Dashboard;
@@ -44,23 +39,9 @@ builder.Services.AddCors(options =>
     });
 });
 
-// استاتیک فایل‌ها (برای debug.html)
-  // اختیاری: برای مرور فایل‌ها در wwwroot
+ 
 builder.Logging.AddConsole();
-
-// ------------------- سرویس‌های اصلی -------------------
-
-// NewsStorage با تنظیمات دقیق
-builder.Services.AddSingleton<IDebugStore, DebugStore>();
-
-builder.Services.AddSingleton<INewsStorage, NewsStorage>(sp =>
-{
-    var settings = sp.GetRequiredService<IOptions<AppSettings>>().Value;
-    return new NewsStorage(queueCapacityPerSource: settings.FootbalForiSettings.QueueCapacityPerSource,
-        maxSeenKeys: settings.FootbalForiSettings.MaxSeenKeys
-    );
-});
-
+ 
 
 
 builder.Services.AddHttpClient<IHttpHelperService, HttpHelperService>("RssHttpClient", client =>
@@ -84,9 +65,9 @@ builder.Services.AddHttpClient<IHttpHelperService, HttpHelperService>("RssHttpCl
 });
 
 
-builder.Services.AddSingleton<IDebugStore, DebugStore>();
-builder.Services.AddSingleton<IFootballForiDashboardService, FootballForiDashboardService>();
+
 // سرویس‌های Scoped
+builder.Services.AddScoped<IFootballForiDashboardService, FootballForiDashboardService>();
 builder.Services.AddScoped<IRssParserService, RssParserService>();
 builder.Services.AddScoped<IImageExtractorService, ImageExtractorService>();
 builder.Services.AddScoped<IFullDecriptionExtractorService, FullDecriptionExtractorService>();

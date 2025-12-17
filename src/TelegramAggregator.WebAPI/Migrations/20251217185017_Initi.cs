@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace TelegramAggregator.WebAPI.Migrations
 {
     /// <inheritdoc />
-    public partial class Init : Migration
+    public partial class Initi : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -47,10 +47,13 @@ namespace TelegramAggregator.WebAPI.Migrations
                     GlobalKey = table.Column<string>(type: "text", nullable: true),
                     Score = table.Column<int>(type: "integer", nullable: true),
                     Title = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
-                    ShortDescription = table.Column<string>(type: "text", nullable: false),
-                    FullDescription = table.Column<string>(type: "text", nullable: true),
+                    ShortDescription = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
+                    FullDescription = table.Column<string>(type: "character varying(10000)", maxLength: 10000, nullable: true),
+                    Caption = table.Column<string>(type: "character varying(5000)", maxLength: 5000, nullable: true),
                     Link = table.Column<string>(type: "text", nullable: false),
+                    InsertDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     PubDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    SentDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     ImageUrl = table.Column<string>(type: "text", nullable: true),
                     NewsStatusId = table.Column<int>(type: "integer", nullable: false),
                     SportSourceId = table.Column<int>(type: "integer", nullable: false)

@@ -1,10 +1,9 @@
-﻿using TelegramAggregator.WebAPI.Models;
- 
+﻿using TelegramAggregator.WebAPI.Models.Dashboard;
+
 namespace TelegramAggregator.WebAPI.Services.Dashboard
 {
     public interface IFootballForiDashboardService
     {
-        object GetFeed();
-        DebugSummary GetSummary();
+        Task<FootbalForiDashboardDto> GetDataAsync(CancellationToken ct);
     }
 }

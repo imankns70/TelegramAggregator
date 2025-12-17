@@ -12,8 +12,8 @@ using TelegramAggregator.WebAPI.Data;
 namespace TelegramAggregator.WebAPI.Migrations
 {
     [DbContext(typeof(TelegramAggregatorContext))]
-    [Migration("20251212184426_Init")]
-    partial class Init
+    [Migration("20251217185017_Initi")]
+    partial class Initi
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -33,14 +33,22 @@ namespace TelegramAggregator.WebAPI.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<string>("Caption")
+                        .HasMaxLength(5000)
+                        .HasColumnType("character varying(5000)");
+
                     b.Property<string>("FullDescription")
-                        .HasColumnType("text");
+                        .HasMaxLength(10000)
+                        .HasColumnType("character varying(10000)");
 
                     b.Property<string>("GlobalKey")
                         .HasColumnType("text");
 
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");
+
+                    b.Property<DateTime>("InsertDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Link")
                         .IsRequired()
@@ -55,9 +63,13 @@ namespace TelegramAggregator.WebAPI.Migrations
                     b.Property<int?>("Score")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("SentDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("ShortDescription")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<int>("SportSourceId")
                         .HasColumnType("integer");

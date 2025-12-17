@@ -10,15 +10,13 @@ namespace TelegramAggregator.WebAPI.Services
 {
     public class Football360ScraperService : IFootball360ScraperService
     {
-        private readonly IHttpHelperService _http;
-        private readonly IDebugStore _debugStore;
+        private readonly IHttpHelperService _http;        
         private readonly INewsRepository _newsRepository;
         private const int MaxItems = 10; // افزایش دادم تا بیشتر بگیره
 
-        public Football360ScraperService(IHttpHelperService http, IDebugStore debugStore, INewsRepository newsRepository)
+        public Football360ScraperService(IHttpHelperService http, INewsRepository newsRepository)
         {
-            _http = http;
-            _debugStore = debugStore;
+            _http = http; 
             _newsRepository = newsRepository;
         }
 

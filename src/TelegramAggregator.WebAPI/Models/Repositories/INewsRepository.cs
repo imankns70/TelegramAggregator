@@ -15,5 +15,8 @@ namespace TelegramAggregator.WebAPI.Data.Repositories
         Task ReceiveRangeAsync(List<NewsItem> newsItems, CancellationToken ct);
         Task ProcessNewsAsync(List<NewsItem> newsItems, FootbalForiSettings footbalForiSettings, CancellationToken ct);
         Task<News> GetBestNews(CancellationToken ct);
+        Task ChangeNewsInQueueToExpiredState(CancellationToken ct);
+        Task<IReadOnlyList<News>> GetTodayNews(CancellationToken ct);
+        Task<IReadOnlyList<NewsHistory>> GetTodayNewsHistory(int take, CancellationToken ct);
     }
 }

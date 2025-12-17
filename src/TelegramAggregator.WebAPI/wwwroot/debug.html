@@ -30,7 +30,6 @@
             min-height: 100vh;
         }
 
-        /* عنوان + رفرش — کاملاً ریسپانسیو */
         .top-header {
             text-align: center;
             padding: 16px 12px;
@@ -356,26 +355,21 @@
     </style>
 </head>
 <body>
-
-    <!-- عنوان + رفرش — ریسپانسیو و زیبا -->
     <div class="top-header">
         <span class="main-title">دیباگ زنده ربات فوتبال فوری — نسخه هوشمند</span>
         <span class="refresh-text">رفرش خودکار در <span id="countdown">10</span> ثانیه</span>
     </div>
 
     <div class="main-container">
-        <!-- سطر ۱: آمار -->
         <div class="full-width-block">
             <h2>آمار لحظه‌ای و شفاف</h2>
             <div id="stats" class="stats-grid"></div>
         </div>
 
-        <!-- سطر ۲: صف‌ها -->
         <div class="full-width-block">
             <div id="queues" class="queues-grid"></div>
         </div>
 
-        <!-- سطر ۳: ارسال‌شده‌ها + پردازش‌شده‌ها -->
         <div class="full-width-block">
             <div class="bottom-grid">
                 <div class="queue-box">
@@ -400,23 +394,7 @@
         const publishedEl = document.getElementById('published');
         const logsEl = document.getElementById('logs');
         const countdownEl = document.getElementById('countdown');
-        let countdown = 10; // درست شد!
-
-        const MAIN_SOURCES = [
-            "ورزش سه | آخرین اخبار ورزشی",
-            "طرفداری",
-            "خبرورزشی؛ آخرین اخبار ورزشی ایران و جهان",
-            "فوتبال ۳۶۰"
-        ];
-
-        function cleanSourceName(name) {
-            if (!name) return "نامشخص";
-            if (name.includes("ورزش سه")) return "ورزش سه";
-            if (name.includes("طرفداری")) return "طرفداری";
-            if (name.includes("خبرورزشی")) return "خبرورزشی";
-            if (name.includes("فوتبال ۳۶۰")) return "فوتبال ۳۶۰";
-            return name.split(/[\|؛]/)[0].trim();
-        }
+        let countdown = 10;
 
         function startCountdown() {
             countdown = 10;
@@ -433,58 +411,42 @@
 
         async function load() {
             try {
-                const [feedRes, statsRes] = await Promise.all([
-                    fetch('/api/debug/feed'),
-                    fetch('/api/debug/stats')
-                ]);
-                if (!feedRes.ok || !statsRes.ok) throw new Error("API Error");
+                const response = await fetch('/api/Dashboard/feed'); // فقط یک endpoint جدید
+                if (!response.ok) throw new Error("API Error");
 
-                const data = await feedRes.json();
-                const s = await statsRes.json();
+                const d = await response.json();
 
-                // خبر بعدی
-                const nextBest = data.nextBestItem;
-                if (nextBest) {
-                    document.querySelector('.main-container')?.insertAdjacentHTML('afterbegin', `
-                            <div class="full-width-block" style="border:3px solid var(--gold); background:#221100;">
-                                <h2 class="next-title">خبر بعدی که ارسال میشه!</h2>
-                                <div class="scroll-box scroll-next">
-                                    <table>
-                                        <tr><th>منبع</th><th>عنوان</th><th>امتیاز</th><th>دلیل</th></tr>
-                                        <tr class="best-item">
-                                            <td><strong style="color:#0cf;">${e(cleanSourceName(nextBest.source))}</strong></td>
-                                            <td style="color:#ff0;font-weight:bold;">${e(nextBest.title.substring(0, 80))}...</td>
-                                            <td class="score ${getScoreClass(nextBest.score)}" style="font-size:24px;">${nextBest.score}</td>
-                                            <td style="color:#0f9;">${nextBest.reason || 'بالاترین امتیاز'}</td>
-                                        </tr>
-                                    </table>
-                                </div>
-                            </div>
-                        `);
-                }
+                // آمار
+                const color = d.statusColor === 'red' ? '#f66' : d.statusColor === 'yellow' ? '#ff0' : '#0f9';
+                statsEl.innerHTML = `
+                        <div class="stat-box"><span class="stat-num" style="color:#0f9;">${nf(d.acceptedCount)}</span>قبول شده</div>
+                        <div class="stat-box"><span class="stat-num" style="color:#f66;">${nf(d.rejectedCount)}</span>رد شده</div>
+                        <div class="stat-box"><span class="stat-num" style="color:#0cf;">${nf(d.publishedCount)}</span>ارسال شده</div>
+                        <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(d.inQueueCount)}</span>در صف</div>
+                        <div class="stat-box"><span class="stat-num" style="color:#aaa;">${nf(d.totalProcessed)}</span>کل پردازش</div>
+                        <div class="stat-box"><span class="stat-num" style="color:${color};">${nf(d.acceptanceRate)}%</span>درصد قبولی</div>
+                    `;
 
-                // صف‌ها
-                queuesEl.innerHTML = MAIN_SOURCES.map(sourceName => {
-                    const items = data.queues?.[sourceName] || [];
+                // صف‌ها (در صف)
+                queuesEl.innerHTML = Object.keys(d.queues).map(sourceName => {
+                    const items = d.queues[sourceName] || [];
                     const count = items.length;
                     const color = count > 15 ? '#f66' : count > 8 ? '#ff0' : '#0f9';
                     return `
                             <div class="queue-box" style="border-color:${color};">
-                                <h2 class="queue-title">${e(cleanSourceName(sourceName))} <span style="color:#0f9;font-weight:bold;">${count} خبر</span></h2>
+                                <h2 class="queue-title">${e(sourceName)} <span style="color:#0f9;font-weight:bold;">${count} خبر</span></h2>
                                 <div class="scroll-box scroll-queues">
                                     ${count === 0
-                            ? '<div class="empty">صف خالی — در انتظار خبر جدید</div>'
+                            ? '<div class="empty">صف خالی</div>'
                             : `<table>
                                             <tr><th>#</th><th>عنوان</th><th>امتیاز</th><th>زمان</th></tr>
-                                            ${items.map((item, i) => {
-                                const isBest = nextBest && item.uniqueKey === nextBest.uniqueKey;
-                                return `<tr ${isBest ? 'class="best-item"' : ''}>
+                                            ${items.map((item, i) => `
+                                                <tr>
                                                     <td class="num">${i + 1}</td>
-                                                    <td title="${e(item.title)}">${e((item.title || "بدون عنوان").substring(0, 65))}...</td>
+                                                    <td title="${e(item.title)}">${e(item.title?.substring(0, 65) || "بدون عنوان")}...</td>
                                                     <td class="score ${getScoreClass(item.score || 0)}">${item.score || 0}</td>
                                                     <td>${item.pubDate || ''}</td>
-                                                </tr>`;
-                            }).join('')}
+                                                </tr>`).join('')}
                                         </table>`
                         }
                                 </div>
@@ -492,14 +454,14 @@
                 }).join('');
 
                 // آخرین ارسال‌شده‌ها
-                publishedEl.innerHTML = data.publishedItems?.length
+                publishedEl.innerHTML = d.publishedItems?.length
                     ? `<table>
                             <tr><th>#</th><th>منبع</th><th>عنوان</th><th>امتیاز</th><th>زمان ارسال</th></tr>
-                            ${data.publishedItems.map((i, idx) => `
+                            ${d.publishedItems.map((i, idx) => `
                                 <tr>
                                     <td class="num">${idx + 1}</td>
-                                    <td><span class="status-sent">${e(cleanSourceName(i.source))}</span></td>
-                                    <td title="${e(i.title)}">${e((i.title || "بدون عنوان").substring(0, 70))}...</td>
+                                    <td><span class="status-sent">${e(i.source)}</span></td>
+                                    <td title="${e(i.title)}">${e(i.title?.substring(0, 70) || "بدون عنوان")}...</td>
                                     <td class="score ${getScoreClass(i.score || 0)}">${i.score || 0}</td>
                                     <td>${i.sentAt || ''}</td>
                                 </tr>`).join('')}
@@ -507,48 +469,19 @@
                     : '<div class="empty">هنوز خبری ارسال نشده</div>';
 
                 // آخرین پردازش‌شده‌ها
-                logsEl.innerHTML = data.recentProcessed?.length
+                logsEl.innerHTML = d.recentProcessed?.length
                     ? `<table>
-                            <tr><th>#</th><th>منبع</th><th>عنوان</th><th>وضعیت</th><th>دلیل</th><th>زمان</th><th>لینک</th></tr>
-                            ${data.recentProcessed.map((i, idx) => {
-                        const source = cleanSourceName(i.source) || 'نامشخص';
-                        const title = i.title || 'بدون عنوان';
-                        const link = i.link || null;
-                        const statusText = i.status || 'نامشخص';
-                        const reasonText = i.reason || 'در حال بررسی';
-                        let statusClass = 'status-rejected';
-                        if (statusText === 'ارسال شد') statusClass = 'status-sent';
-                        else if (statusText.includes('در صف')) statusClass = 'status-queued';
-                        else if (statusText === 'قبول شده') statusClass = 'status-accepted';
-                        const linkHtml = link ? `<a href="${e(link)}" target="_blank">Link</a>` : '—';
-                        return `
-                                    <tr>
-                                        <td class="num">${idx + 1}</td>
-                                        <td>${e(source)}</td>
-                                        <td title="${e(title)}">${e(title.substring(0, 55))}...</td>
-                                        <td class="${statusClass}">${statusText}</td>
-                                        <td style="font-size:11px;color:#ff9;" title="${e(reasonText)}">
-                                            ${e(reasonText.substring(0, 45))}${reasonText.length > 45 ? '...' : ''}
-                                        </td>
-                                        <td>${i.time || ''}</td>
-                                        <td class="link-cell">${linkHtml}</td>
-                                    </tr>`;
-                    }).join('')}
+                            <tr><th>#</th><th>منبع</th><th>عنوان</th><th>زمان</th><th>لینک</th></tr>
+                            ${d.recentProcessed.map((i, idx) => `
+                                <tr>
+                                    <td class="num">${idx + 1}</td>
+                                    <td>${e(i.source)}</td>
+                                    <td title="${e(i.title)}">${e(i.title?.substring(0, 55) || "بدون عنوان")}...</td>
+                                    <td>${i.insertTime || ''}</td>
+                                    <td class="link-cell">${i.link ? `<a href="${e(i.link)}" target="_blank">Link</a>` : '—'}</td>
+                                </tr>`).join('')}
                         </table>`
                     : '<div class="empty">هنوز خبری پردازش نشده</div>';
-
-                // آمار
-                const color = s.dashboardStatusColor === 'red' ? '#f66' : s.dashboardStatusColor === 'yellow' ? '#ff0' : '#0f9';
-                statsEl.innerHTML = `
-                        <div class="stat-box"><span class="stat-num" style="color:#0f9;">${nf(s.acceptedCount)}</span>قبول شده</div>
-                        <div class="stat-box"><span class="stat-num" style="color:#f66;">${nf(s.rejectedCount)}</span>رد شده</div>
-                        <div class="stat-box"><span class="stat-num" style="color:#0cf;">${nf(s.publishedCount)}</span>ارسال شده</div>
-                        <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(s.inQueueCount)}</span>در صف</div>
-                        <div class="stat-box"><span class="stat-num" style="color:#aaa;">${nf(s.totalProcessed)}</span>کل پردازش</div>
-                        <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(s.debugItems)}</span>تعداد تاریخچه</div>
-                        <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(s.seenKeys)}</span>تعداد کلید</div>
-                        <div class="stat-box"><span class="stat-num" style="color:${color};">${nf(s.acceptanceRate)}%</span>درصد قبولی</div>
-                    `;
 
                 startCountdown();
             } catch (err) {
@@ -556,6 +489,7 @@
                 startCountdown();
             }
         }
+
         load();
     </script>
 </body>

@@ -22,14 +22,16 @@ namespace TelegramAggregator.WebAPI.Data
             {
                 entity.ToTable(nameof(News));
                 entity.HasKey(e => e.Id);  // کلید یکتا برای جلوگیری از تکرار
-                entity.HasIndex(e => e.GlobalUniqueKey).IsUnique();
-                entity.Property(e => e.Score);
+                entity.HasIndex(e => e.GlobalKey).IsUnique();
+                entity.Property(e => e.Score).IsRequired(false);
                 entity.Property(e => e.Title).IsRequired().HasMaxLength(1000);
                 entity.Property(e => e.ShortDescription).IsRequired().HasMaxLength(2000);
-                entity.Property(e => e.FullDescription).HasMaxLength(10000);
-                entity.Property(e => e.Caption).IsRequired().HasMaxLength(5000);
+                entity.Property(e => e.FullDescription).IsRequired(false).HasMaxLength(10000);
+                entity.Property(e => e.Caption).IsRequired(false).HasMaxLength(5000);
                 entity.Property(e => e.Link).IsRequired().IsRequired();
+                entity.Property(e => e.InsertDate).IsRequired();
                 entity.Property(e => e.PubDate).IsRequired();
+                entity.Property(e => e.SentDate).IsRequired(false);
                 entity.Property(e => e.SportSourceId).IsRequired();
 
                 // رابطه یک به چند با History

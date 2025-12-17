@@ -14,13 +14,10 @@ namespace TelegramAggregator.WebAPI.Services;
 public class RssParserService : IRssParserService
 {
     private readonly ILogger<RssParserService> _logger;
-    private readonly IDebugStore _debugStore;
     private readonly INewsRepository _newsRepository;
-    public RssParserService(ILogger<RssParserService> logger, IDebugStore debugStore,
-     INewsRepository newsRepository)
+    public RssParserService(ILogger<RssParserService> logger, INewsRepository newsRepository)
     {
-        _logger = logger;
-        _debugStore = debugStore;
+        _logger = logger; 
         _newsRepository = newsRepository;
     }
 
@@ -57,7 +54,7 @@ public class RssParserService : IRssParserService
                 }).ToList();
 
             _newsRepository.FilterNews(result);
-           
+
         }
         catch (Exception ex)
         {

@@ -1,15 +1,9 @@
-﻿using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using System.Collections.Concurrent;
-using System.Runtime;
-using System.Text.RegularExpressions;
-using System.Threading.Channels;
+﻿using Microsoft.Extensions.Options;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Infrastructure;
-using TelegramAggregator.WebAPI.Infrastructure.Storage;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Models.Entities;
 using TelegramAggregator.WebAPI.Models.FootbalSettings;
@@ -21,9 +15,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly ITelegramBotClient _bot;
         private readonly ILogger<FootballforiService> _logger;
         private readonly IHttpHelperService _httpHelper;
-        private readonly IRssParserService _rssParser;
-        private readonly INewsStorage _newsStorage;
-        private readonly IDebugStore _debugStore;
+        private readonly IRssParserService _rssParser; 
         private readonly IImageExtractorService _imageExtractor;
         private readonly IFullDecriptionExtractorService _fullDecriptionExtractor;
         private readonly FootbalForiSettings _footbalForiSettings;
@@ -35,13 +27,11 @@ namespace TelegramAggregator.WebAPI.Services
             ITelegramBotClient bot,
             ILogger<FootballforiService> logger,
             IHttpHelperService httpHelper,
-            IRssParserService rssParser,
-            INewsStorage newsStorage,
+            IRssParserService rssParser, 
             IOptions<AppSettings> appSettings,
             IImageExtractorService imageExtractor,
             IFullDecriptionExtractorService fullDecriptionExtractor,
-            IHostEnvironment environment,
-            IDebugStore debugStore,
+            IHostEnvironment environment, 
             IFootball360ScraperService football360ScraperService,
             INewsRepository newsRepository)
         {
@@ -49,11 +39,9 @@ namespace TelegramAggregator.WebAPI.Services
             _logger = logger;
             _footbalForiSettings = appSettings.Value.FootbalForiSettings;
             _httpHelper = httpHelper;
-            _rssParser = rssParser;
-            _newsStorage = newsStorage;
+            _rssParser = rssParser;            
             _imageExtractor = imageExtractor;
-            _fullDecriptionExtractor = fullDecriptionExtractor;
-            _debugStore = debugStore;
+            _fullDecriptionExtractor = fullDecriptionExtractor;            
             _football360ScraperService = football360ScraperService;
             _newsRepository = newsRepository;
         }
@@ -144,11 +132,12 @@ namespace TelegramAggregator.WebAPI.Services
 
                 if (!isWorkingHours)
                 {
-                    // خارج از ساعت کاری — صف‌ها رو خالی کن (فقط یک بار در شب)
+
                     if (now.Hour == 3 && now.Minute < 5) // فقط یک بار نزدیک ساعت ۳
                     {
                         _logger.LogInformation("ساعت ۳ شب — خالی کردن همه صف‌ها برای شروع تازه فردا");
-                        _newsStorage.ClearAllQueues();
+
+                        await _newsRepository.ChangeNewsInQueueToExpiredState(ct);
                     }
 
                     // خواب تا صبح (چک هر ۳۰ دقیقه کافیه)
@@ -164,7 +153,7 @@ namespace TelegramAggregator.WebAPI.Services
 
                 try
                 {
-                    // وقتی آماده شدی اینو فعال کن:
+
                     await SendToTelegramAsync(news, _footbalForiSettings.ChannelId, ct);
                 }
                 catch (Exception ex)
@@ -206,7 +195,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             if (string.IsNullOrEmpty(item.ImageUrl))
             {
-                  await _newsRepository.DecayAsync(item, "خبر بدون عکس", ct);
+                await _newsRepository.DecayAsync(item, "خبر بدون عکس", ct);
                 await Task.Delay(3000, ct);
             }
 
