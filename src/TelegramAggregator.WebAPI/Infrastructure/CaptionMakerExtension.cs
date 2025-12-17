@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.Text.RegularExpressions;
 using TelegramAggregator.WebAPI.Models;
+using TelegramAggregator.WebAPI.Models.Entities;
 
 namespace TelegramAggregator.WebAPI.Infrastructure
 {
@@ -10,7 +11,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         private const string Admin = "#iman";
         private const int MaxCaptionLength = 1024;
 
-        public static string GetCaption(NewsItem item)
+        public static string GetCaption(News item)
         {
             // تمیز کردن عنوان و شرح کوتاه
             var title = CleanText(item.Title ?? "خبر فوری");

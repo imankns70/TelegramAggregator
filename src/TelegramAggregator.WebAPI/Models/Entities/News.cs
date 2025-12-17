@@ -4,10 +4,12 @@
     {
 
         public long Id { get; set; }
+        public string GlobalUniqueKey { get; set; }
         public int? Score { get; set; }
         public string Title { get; set; }
         public string ShortDescription { get; set; }
         public string FullDescription { get; set; }
+        public string Caption { get; set; }
         public string Link { get; set; }
         public DateTime PubDate { get; set; }
         public DateTime InsertDate { get; set; }

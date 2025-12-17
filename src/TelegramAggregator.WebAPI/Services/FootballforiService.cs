@@ -11,6 +11,7 @@ using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Infrastructure.Storage;
 using TelegramAggregator.WebAPI.Models;
+using TelegramAggregator.WebAPI.Models.Entities;
 using TelegramAggregator.WebAPI.Models.FootbalSettings;
 
 namespace TelegramAggregator.WebAPI.Services
@@ -126,10 +127,10 @@ namespace TelegramAggregator.WebAPI.Services
 
             var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
             allItems.AddRange(football360News);
-                      
 
-            await _newsRepository.ProcessNewsToInQueueOrDecay(allItems,_footbalForiSettings, ct);
-             
+
+            await _newsRepository.ProcessNewsAsync(allItems, _footbalForiSettings, ct);
+
 
         }
         private async Task PublishContinuouslyAsync(CancellationToken ct)
@@ -154,8 +155,8 @@ namespace TelegramAggregator.WebAPI.Services
                     await Task.Delay(TimeSpan.FromMinutes(30), ct);
                     continue;
                 }
-
-                if (!_newsStorage.TryDequeueAny(out var item))
+                News news = await _newsRepository.GetBestNews(ct);
+                if (news is null)
                 {
                     await Task.Delay(3000, ct);
                     continue;
@@ -164,17 +165,11 @@ namespace TelegramAggregator.WebAPI.Services
                 try
                 {
                     // وقتی آماده شدی اینو فعال کن:
-                    await SendToTelegramAsync(item, _footbalForiSettings.ChannelId, ct);
-
-                    // تست: فرض می‌کنیم ارسال موفق بود
-                    _logger.LogInformation("ارسال شد → [{Source}] {Title}", item.SourceName, item.Title.Truncate(60));
-
-
-
+                    await SendToTelegramAsync(news, _footbalForiSettings.ChannelId, ct);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "خطا در ارسال خبر به تلگرام: {Title}", item?.Title);
+                    _logger.LogError(ex, "خطا در ارسال خبر به تلگرام: {Title}", news?.Title);
                     await Task.Delay(5000, ct);
                 }
 
@@ -182,7 +177,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             }
         }
-        private async Task SendToTelegramAsync(NewsItem item, long channelId, CancellationToken ct)
+        private async Task SendToTelegramAsync(News item, long channelId, CancellationToken ct)
         {
             bool hasVideo = false;
 
@@ -192,7 +187,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             Task<string> fullDescTask = null;
 
-            if (!item.SourceName.Contains("360"))
+            if (item.SportSourceId != SportSourceEnumeration.Football360.Id)
             {
                 // فقط برای منابع غیر 360
                 fullDescTask = _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link);
@@ -211,28 +206,28 @@ namespace TelegramAggregator.WebAPI.Services
 
             if (string.IsNullOrEmpty(item.ImageUrl))
             {
-                _debugStore.LogRejected(item, "خبر بدون عکس");
+                  await _newsRepository.DecayAsync(item, "خبر بدون عکس", ct);
                 await Task.Delay(3000, ct);
             }
 
             else if (hasVideo)
             {
-                _debugStore.LogRejected(item, "حاوی تگ ویدئو");
+
+                await _newsRepository.DecayAsync(item, "حاوی تگ ویدئو", ct);
                 await Task.Delay(3000, ct);
 
             }
             else if (item.FullDescription.Contains("خطا در دریافت محتوا"))
             {
-                _debugStore.LogRejected(item, "خطا در واکشی شرح کامل");
+                await _newsRepository.DecayAsync(item, "خطا در واکشی شرح کامل", ct);
                 await Task.Delay(3000, ct);
             }
             else
             {
 
-                _debugStore.LogPublished(item);
-
                 var caption = CaptionMakerExtension.GetCaption(item);
-
+                item.Caption = caption;
+                await _newsRepository.PublishedAsync(item, ct);
                 Message sentMessage;
 
                 if (!string.IsNullOrEmpty(item.ImageUrl))

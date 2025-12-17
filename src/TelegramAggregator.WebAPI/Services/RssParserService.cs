@@ -40,14 +40,12 @@ public class RssParserService : IRssParserService
             var cutoff = DateTimeOffset.Now.AddHours(-6);
             var feedTitle = feed.Title?.Text ?? "RSS";
 
-
             result = feed.Items
                 .OrderByDescending(i => i.PublishDate.DateTime)
                 .Take(10)
                 .Reverse()
                 .Select(entry =>
                 {
-
                     return new NewsItem
                     {
                         Title = TextCleaner.CleanTitle(entry.Title?.Text),
@@ -58,34 +56,8 @@ public class RssParserService : IRssParserService
                     };
                 }).ToList();
 
-
-
             _newsRepository.FilterNews(result);
-            foreach (var item in result)
-            {
-                //await EnrichFullNewsAsync(item, ct);
-            }
-
-
-            // foreach (var item in result)
-            // {
-            //     var rawLink = item.Link.Trim();
-
-            //     // نرمال‌سازی لینک — این خط همه تکراری‌ها رو میکشه!
-            //      var normalizedLink = NormalizeLink(rawLink);
-            //     _debugStore.LogOrUpdate(new DebugFeedItem
-            //     {
-            //         Link = normalizedLink,                    // لینک پاک شده                 
-            //         Title = item.Title,
-            //         SourceName = feedTitle,
-            //         PubDate = item.PubDate.DateTime,
-            //         ProcessedAt = DateTime.UtcNow,
-            //         PublishStatus = "جدید_واکشی_شده"
-            //     });
-
-            // }
-
-
+           
         }
         catch (Exception ex)
         {

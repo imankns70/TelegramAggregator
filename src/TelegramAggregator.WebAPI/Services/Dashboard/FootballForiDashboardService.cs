@@ -15,7 +15,37 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
             _debugStore = debugStore;
             _newsStorage = newsStorage;
         }
+        public DebugSummary getsss()
+        {
+            var accepted = allDate.Count(a => a.NewsStatusId == StatusEnumeration.Receive.Id || a.NewsStatusId == StatusEnumeration.InQueue.Id ||
+                       a.NewsStatusId == StatusEnumeration.Sent.Id);
 
+            var rejected = allDate.Count(a => a.NewsStatusId == StatusEnumeration.Decay.Id);
+            var published = allDate.Count(a => a.NewsStatusId == StatusEnumeration.Sent.Id);
+            var inQueue = allDate.Count(a => a.NewsStatusId == StatusEnumeration.InQueue.Id);
+
+
+            var acceptanceRate = allDate.Count > 0
+            ? Math.Round((double)accepted / allDate.Count * 100, 1)
+            : 0;
+
+            var statusColor = inQueue > 50 ? "red" :
+                              inQueue > 20 ? "yellow" :
+                              acceptanceRate < 80 ? "yellow" : "green";
+
+            var debugSummary = new DebugSummary
+            {
+                TotalProcessed = allDate.Count,
+                AcceptedCount = accepted,
+                RejectedCount = rejected,
+                PublishedCount = published,
+                InQueueCount = inQueue,
+                AcceptanceRate = acceptanceRate,
+                SystemStatus = acceptanceRate >= 90 ? "عالی" : "خوب",
+                StatusColor = statusColor,
+
+            };
+        }
         public DebugSummary GetSummary()
         {
             var all = _debugStore.GetAllDebugItems();
@@ -95,21 +125,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                 AcceptanceRate = acceptanceRate,
                 SystemStatus = acceptanceRate >= 90 ? "عالی" : "خوب",
                 StatusColor = statusColor,
-                QueueDetails = queueDetails,
-                SeenKeys = _newsStorage.GetSeenKeys(),
-                DebugItems = all.Count,
-                //LastHourItemsTotal= lastHour.Total,
-                //LastHourAccepted= lastHour.Accepted,
-                //LastHourRejected= lastHour.Rejected,
-                //LastHourAcceptanceRate= lastHour.AcceptanceRate,
-
-                //TodayItemsTotal= today.Total,
-                //TodayAccepted= today.Accepted,
-                //TodayRejected= today.Rejected,
-                //TodayAcceptanceRate= today.AcceptanceRate, 
-
-
-                DashboardStatusColor= dashboardStatusColor
+                QueueDetails = queueDetails
             };
         }
         private string CleanSourceName(string source)
@@ -179,8 +195,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
          time = x.ProcessedAt.ToString("HH:mm:ss"),
 
          // این دو خط کلید پیروزی هستن!
-         status = GetItemStatus(x),      // درست و منطقی
-         reason = GetItemReason(x),      // درست و صادقانه
+         //       // درست و صادقانه
      })
 
      .Take(60)
@@ -188,28 +203,6 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
             };
         }
 
-        private static string GetItemStatus(DebugFeedItem x)
-        {
-            // اولویت مطلق: PublishStatus
-            return x.PublishStatus switch
-            {
-                "ارسال شد" => "ارسال شد",
-                "در صف انتشار" => "قبول شده",
-                "جدید_واکشی_شده" => "قبول شده",  // این مهمه!
-                _ when x.IsAccepted => "قبول شده",
-                _ => "رد شد"
-            };
-        }
 
-        private static string GetItemReason(DebugFeedItem x)
-        {
-            return x.PublishStatus switch
-            {
-                "جدید_واکشی_شده" => "در حال پردازش — تازه رسید",
-                "در صف انتشار" => "در صف ارسال",
-                "ارسال شد" => "ارسال موفق",
-                _ => x.RejectReason ?? "در حال بررسی"
-            };
-        }
     }
 }
