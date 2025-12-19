@@ -48,6 +48,8 @@ namespace TelegramAggregator.WebAPI.Services
                         var item = ExtractNewsItem(node);
                         if (item == null || string.IsNullOrWhiteSpace(item.Title))
                             continue;
+
+                        newsList.Add(item);
                     }
 
 
@@ -58,6 +60,8 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
 
+                
+                
                 _newsRepository.FilterNews(newsList);
                 foreach (var item in newsList)
                 {
@@ -79,7 +83,7 @@ namespace TelegramAggregator.WebAPI.Services
         {
             var item = new NewsItem
             {
-                SourceName = "فوتبال ۳۶۰",
+                SourceName = "فوتبال 360",
                 PubDate = DateTimeOffset.UtcNow
             };
 
@@ -139,7 +143,6 @@ namespace TelegramAggregator.WebAPI.Services
                     item.ShortDescription = CleanDescription(item.ShortDescription);
 
                 }
-
 
 
                 // شرح کامل — سلکتورهای گسترده و بهبودیافته

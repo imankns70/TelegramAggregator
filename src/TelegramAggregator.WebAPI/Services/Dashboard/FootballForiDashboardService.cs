@@ -48,6 +48,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                       );
 
             var publishedItems = allDate.Where(a => a.NewsStatusId == StatusEnumeration.Sent.Id)
+               .OrderByDescending(a => a.SentDate)
                .Select((x, i) => new QueueFootbalForiDashboardDto
                {
                    Score = x.Score,
@@ -61,11 +62,15 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
             var todayNewsHistoryData = await _newsRepository.GetTodayNewsHistory(take: 60, ct);
 
 
-            var recentProcessed = todayNewsHistoryData.Select((x, i) => new QueueFootbalForiDashboardDto
+            var recentProcessed = todayNewsHistoryData
+                .OrderByDescending(a => a.InsertDate)
+                .Select((x, i) => new QueueFootbalForiDashboardDto
             {
                 Source = x.News.SportSource.Title,
                 Title = x.News.Title?.Truncate(80),
                 Link = x.News.Link,
+                Status= x.NewsStatus.Title,
+                Reason= x.Reason,
                 InsertTime = x.InsertDate.ToString("HH:mm:ss"),
 
             }).ToList();

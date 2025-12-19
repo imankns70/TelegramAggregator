@@ -57,7 +57,7 @@ public class FootballforiBackgroundService : BackgroundService
     private async Task PublishLoopAsync(CancellationToken ct)
     {
         _logger.LogInformation("شروع حلقه انتشار خبر");
-        await Task.Delay(300000000, ct);
+       
         while (!ct.IsCancellationRequested)
         {
             var now = DateTime.Now;

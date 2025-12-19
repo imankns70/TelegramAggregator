@@ -38,9 +38,6 @@ namespace TelegramAggregator.WebAPI.Migrations
                         .HasMaxLength(10000)
                         .HasColumnType("character varying(10000)");
 
-                    b.Property<string>("GlobalKey")
-                        .HasColumnType("text");
-
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");
 
@@ -78,9 +75,6 @@ namespace TelegramAggregator.WebAPI.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GlobalKey")
-                        .IsUnique();
-
                     b.HasIndex("NewsStatusId");
 
                     b.HasIndex("SportSourceId");
@@ -96,7 +90,7 @@ namespace TelegramAggregator.WebAPI.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<DateTime>("InsertDate")
+                    b.Property<DateTimeOffset>("InsertDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<long>("NewsId")

@@ -10,6 +10,8 @@
         public string SentAt { get; set; }
         public string InsertTime { get; set; }
         public string Source { get; set; }
+        public string Status { get; set; }
+        public string Reason { get; set; }
 
     }
 }

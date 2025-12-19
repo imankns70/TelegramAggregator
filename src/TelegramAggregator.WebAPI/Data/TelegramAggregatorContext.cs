@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using TelegramAggregator.WebAPI.Models.Entities;
 
 namespace TelegramAggregator.WebAPI.Data
@@ -16,13 +17,12 @@ namespace TelegramAggregator.WebAPI.Data
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
-
+          
             // News
             modelBuilder.Entity<News>(entity =>
             {
                 entity.ToTable(nameof(News));
-                entity.HasKey(e => e.Id);  // کلید یکتا برای جلوگیری از تکرار
-                entity.HasIndex(e => e.GlobalKey).IsUnique();
+                entity.HasKey(e => e.Id);   
                 entity.Property(e => e.Score).IsRequired(false);
                 entity.Property(e => e.Title).IsRequired().HasMaxLength(1000);
                 entity.Property(e => e.ShortDescription).IsRequired().HasMaxLength(2000);
@@ -55,7 +55,7 @@ namespace TelegramAggregator.WebAPI.Data
                 entity.Property(e => e.NewsStatusId);
                 entity.Property(e => e.NewsId);
                 entity.Property(e => e.Reason).IsRequired(false).HasMaxLength(100);
-                entity.Property(e => e.InsertDate);
+                entity.Property(e => e.InsertDate).IsRequired();
 
 
                 entity.HasOne(n => n.NewsStatus)

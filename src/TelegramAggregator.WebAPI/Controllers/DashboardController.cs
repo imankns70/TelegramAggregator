@@ -1,12 +1,13 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
 using TelegramAggregator.WebAPI.Services.Dashboard;
 
 namespace TelegramAggregator.WebAPI.Controllers
 {
     [ApiController]
-    [Route("api/debug")]
+    [Route("api/Dashboard")]
     public class DashboardController : ControllerBase
-    { 
+    {
         private readonly IFootballForiDashboardService _footballforiDashboardService;
 
         public DashboardController(IFootballForiDashboardService footballforiDashboardService)
@@ -14,16 +15,17 @@ namespace TelegramAggregator.WebAPI.Controllers
             _footballforiDashboardService = footballforiDashboardService;
         }
 
-        
+
         [HttpGet("feed")]
-        public IActionResult Feed(CancellationToken ct)
-        {
-            var result = _footballforiDashboardService.GetDataAsync(ct);
+        public async Task<IActionResult> Feed(CancellationToken ct)
+        { 
+            var result = await _footballforiDashboardService.GetDataAsync(ct);
             return Ok(result);
         }
 
- 
 
+ 
+      
 
     }
 }

@@ -7,7 +7,7 @@
         public long NewsId { get; set; }  
         public int NewsStatusId { get; set; }     
         public string Reason { get; set; }
-        public DateTime InsertDate { get; set; } 
+        public DateTimeOffset InsertDate { get; set; } 
         public NewsStatus NewsStatus { get; set; }
         public News News { get; set; }
 
