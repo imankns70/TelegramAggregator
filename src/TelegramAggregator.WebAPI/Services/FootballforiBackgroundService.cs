@@ -50,7 +50,7 @@ public class FootballforiBackgroundService : BackgroundService
                 _logger.LogError(ex, "خطا در واکشی RSS");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(10), ct);
+            await Task.Delay(TimeSpan.FromMinutes(20), ct);
         }
     }
 

@@ -271,42 +271,38 @@
         }
 
         /* === رنگ‌بندی کامل وضعیت‌ها === */
-        .status-در-صف {
+        .status-3 {
             color: var(--yellow);
             font-weight: bold;
             text-align: center;
         }
 
-        .status-دریافت {
+        .status-1 {
             color: var(--green);
             font-weight: bold;
             text-align: center;
         }
 
-        .status-رد-شده {
+        .status-2 {
             color: var(--red);
             font-weight: bold;
             text-align: center;
         }
 
-        .status-منقضی-شده {
+        .status-5 {
             color: #aaa;
             font-weight: bold;
             font-style: italic;
             text-align: center;
         }
 
-        .status-ارسال-شد {
+        .status-4 {
             color: var(--cyan);
             font-weight: bold;
             text-align: center;
         }
 
-        .status-نامشخص, .status- {
-            color: #aaa;
-            font-style: italic;
-            text-align: center;
-        }
+     
 
         @media (max-width:1400px) {
             .stats-grid {
@@ -378,6 +374,12 @@
             "فوتبال 360"
         ];
 
+        var sportSourceNames = {
+            "ورزش سه | آخرین اخبار ورزشی": "ورزش سه",
+            "طرفداری": "طرفداری",
+            "خبرورزشی؛ آخرین اخبار ورزشی ایران و جهان": "خبرورزشی",
+            "فوتبال 360": "فوتبال 360"
+        }
         const statsEl = document.getElementById('stats');
         const queuesEl = document.getElementById('queues');
         const publishedEl = document.getElementById('published');
@@ -397,7 +399,7 @@
                 }
             }, 1000);
         }
-
+       
         async function load() {
             try {
                 const response = await fetch('/api/Dashboard/feed');
@@ -415,13 +417,15 @@
                     `;
 
                 queuesEl.innerHTML = ALL_SOURCES.map(sourceName => {
+                    debugger
                     const items = d.queues[sourceName] || [];
                     const count = items.length;
                     const borderColor = count > 15 ? '#f66' : count > 8 ? '#ff0' : '#0f9';
 
+                    sourceName = sportSourceNames[sourceName];
                     return `
                             <div class="queue-box" style="border-color:${borderColor};">
-                                <h2 class="queue-title">${e(sourceName)} <span style="color:#0f9;font-weight:bold;">${count} خبر</span></h2>
+                                <h2 class="queue-title">${e(sourceName)} <span style="color:#0f9;font-weight:bold;">تعداد ${count} خبر</span></h2>
                                 <div class="scroll-box scroll-queues">
                                     <table>
                                         <thead>
@@ -480,10 +484,9 @@
                             </thead>
                             <tbody>
                                 ${d.recentProcessed?.length
-                        ? d.recentProcessed.map((i, idx) => {
-                            const statusClass = i.status
-                                ? 'status-' + i.status.replace(/ /g, '-')
-                                : 'status-نامشخص';
+                    ? d.recentProcessed.map((i, idx) => {
+                       
+                        const statusClass = `status-${i.statusId}`
 
                             const reasonCell = i.reason && i.reason.trim()
                                 ? `<td title="${e(i.reason)}">${e(i.reason.substring(0, 40))}...</td>`

@@ -27,6 +27,7 @@ namespace TelegramAggregator.WebAPI.Models.FootbalSettings
         public Dictionary<string, List<ScoredItem>> Celebrities { get; set; } = new();
         public Dictionary<string, List<ScoredItem>> Coaches { get; set; } = new();
         public List<ScoredItem> Commentators { get; set; } = new();
+        public List<string> AgencyKeywords { get; set; } = new();
         public List<string> TransferKeywords { get; set; } = new();
         public List<string> SevereInjuryKeywords { get; set; } = new();
         public List<string> ExclusiveTags { get; set; } = new(); 

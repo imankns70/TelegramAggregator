@@ -54,6 +54,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                    Score = x.Score,
                    Position = i + 1,
                    Source = x.SportSource.Title,
+                   
                    Title = x.Title?.Truncate(80),
                    Link = x.Link,
                    SentAt = x.SentDate.Value.ToString("HH:mm:ss")
@@ -70,6 +71,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                 Title = x.News.Title?.Truncate(80),
                 Link = x.News.Link,
                 Status= x.NewsStatus.Title,
+                StatusId= x.NewsStatusId,
                 Reason= x.Reason,
                 InsertTime = x.InsertDate.ToString("HH:mm:ss"),
 

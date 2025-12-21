@@ -39,9 +39,9 @@ builder.Services.AddCors(options =>
     });
 });
 
- 
+
 builder.Logging.AddConsole();
- 
+
 
 
 builder.Services.AddHttpClient<IHttpHelperService, HttpHelperService>("RssHttpClient", client =>
@@ -118,5 +118,13 @@ app.Lifetime.ApplicationStarted.Register(() =>
     Console.WriteLine($"محیط: {app.Environment.EnvironmentName}");
     Console.WriteLine($"دسترسی به داشبورد: http://localhost:5000/debug.html");
 });
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<TelegramAggregatorContext>();
+    db.Database.Migrate();
+}
+
+
 
 app.Run();

@@ -2,6 +2,7 @@
   "FootbalForiSettings": {
     "Scoring": {
       "Weights": {
+        "Agencies": 42,
         "Conferences": 38,
         "TeamName": 34,
         "CoachName": 25,
@@ -16,6 +17,7 @@
         "DerbyMatch": 60
       }
     },
+
     "Conferences": {
       "S+": [
         {
@@ -447,6 +449,11 @@
         "Name": "محمدحسین میثاقی",
         "Score": 26
       }
+    ],
+
+    "AgencyKeywords": [
+      "خبر رسمی",
+      "خبر فوری و رسمی"      
     ],
 
     "TransferKeywords": [

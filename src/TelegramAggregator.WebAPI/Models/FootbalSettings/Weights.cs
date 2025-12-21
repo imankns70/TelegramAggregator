@@ -2,6 +2,7 @@
 {
     public class Weights
     {
+        public int Agencies { get; set; } 
         public int TeamName { get; set; } 
         public int CoachName { get; set; } 
         public int CelebrityName { get; set; } 

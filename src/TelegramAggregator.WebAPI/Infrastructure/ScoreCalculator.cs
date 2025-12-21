@@ -12,14 +12,13 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 
             int score = 0;
 
-            // ۱. Conferences
+       
+
             score += GetMaxScore(settings.Conferences, text);
 
             // ۱. تیم‌ها
             score += GetMaxScore(settings.Teams, text);
-
             // ۲. مربیان
-            score += GetMaxScore(settings.Coaches, text);
 
             // ۳. سلبریتی‌های جهانی (مسی، رونالدو، هالند، عادل و …)
             score += GetMaxScore(settings.Celebrities, text);
@@ -27,9 +26,14 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             // ۴. بازیکنان پرسپولیس و استقلال — وزن جدا و منطقی
             score += GetMaxScore(settings.PerspolisPlayers, text);
             score += GetMaxScore(settings.EsteghlalPlayers, text);
+            score += GetMaxScore(settings.Coaches, text);
 
             // ۵. گزارشگران (عادل، پیمان یوسفی و …)
             score += GetCommentatorScore(text, settings.Commentators);
+
+            
+            if (ContainsAny(text, settings.AgencyKeywords))
+                score += settings.Scoring.Weights.Agencies;
 
             // ۶. نقل و انتقالات — یکی از مهم‌ترین موضوعات ایران!
             if (ContainsAny(text, settings.TransferKeywords))
@@ -51,8 +55,8 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 score += settings.Scoring.Weights.FreshnessBonus / 2; // +7.5 → 8
 
             // ۱۰. بازی زنده
-            if (IsLiveMatch(text))
-                score += settings.Scoring.Weights.LiveMatch;
+            //if (IsLiveMatch(text))
+            //    score += settings.Scoring.Weights.LiveMatch;
 
             // ۱۱. دربی یا ال‌کلاسیکو
             if (IsDerbyMatch(text))

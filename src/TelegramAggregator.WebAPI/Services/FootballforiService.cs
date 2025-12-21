@@ -47,9 +47,6 @@ namespace TelegramAggregator.WebAPI.Services
         }
 
 
-
-
-
         public async Task FetchAndFilterNewsAndAddToQueueAsync(CancellationToken ct)
         {
             var allItems = new List<NewsItem>();
@@ -131,8 +128,7 @@ namespace TelegramAggregator.WebAPI.Services
         private async Task SendToTelegramAsync(News item, long channelId, CancellationToken ct)
         {
             bool hasVideo = false;
-
-            // همیشه این دو Task مشترک هستند
+            
             var imageTask = _imageExtractor.ExtractMainImageAsync(item.Link, ct);
             var hasVideoTask = _imageExtractor.HasVideoAsync(item.Link, ct);
 
@@ -140,7 +136,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             if (item.SportSourceId != SportSourceEnumeration.Football360.Id)
             {
-                // فقط برای منابع غیر 360
+               
                 fullDescTask = _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link);
                 await Task.WhenAll(imageTask, hasVideoTask, fullDescTask);
             }
@@ -181,27 +177,27 @@ namespace TelegramAggregator.WebAPI.Services
                 await _newsRepository.PublishedAsync(item, ct);
                 Message sentMessage;
 
-                //if (!string.IsNullOrEmpty(item.ImageUrl))
-                //{
-                //    sentMessage = await _bot.SendPhoto(
-                //        chatId: channelId, // 👈 مستقیماً کانال
-                //        photo: new InputFileUrl(item.ImageUrl),
-                //        caption: caption,
-                //        parseMode: ParseMode.Html,
-                //        cancellationToken: ct);
-                //}
-                //else
-                //{
-                //    sentMessage = await _bot.SendMessage(
-                //        chatId: channelId, // 👈 مستقیماً کانال
-                //        text: caption,
-                //        parseMode: ParseMode.Html,
-                //        cancellationToken: ct);
-                //}
+                if (!string.IsNullOrEmpty(item.ImageUrl))
+                {
+                    sentMessage = await _bot.SendPhoto(
+                        chatId: channelId, // 👈 مستقیماً کانال
+                        photo: new InputFileUrl(item.ImageUrl),
+                        caption: caption,
+                        parseMode: ParseMode.Html,
+                        cancellationToken: ct);
+                }
+                else
+                {
+                    sentMessage = await _bot.SendMessage(
+                        chatId: channelId, // 👈 مستقیماً کانال
+                        text: caption,
+                        parseMode: ParseMode.Html,
+                        cancellationToken: ct);
+                }
 
 
-                await Task.Delay(TimeSpan.FromSeconds(15), ct);
-                //await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(7, 38)), ct);
+         
+             await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
 
             }
 
