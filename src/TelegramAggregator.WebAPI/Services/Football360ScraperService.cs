@@ -132,7 +132,7 @@ namespace TelegramAggregator.WebAPI.Services
         {
             try
             {
-                var html = await _http.GetStringAsync("https://football360.ir/post/20251215151/3-%D9%87%D9%81%D8%AA%D9%87-3-%D8%A7%D9%85%D8%AA%DB%8C%D8%A7%D8%B2-%D8%A8%D8%B1%D8%A7%DB%8C-%D8%A7%D8%B3%D8%AA%D9%82%D9%84%D8%A7%D9%84-%D8%AE%D9%86%D8%AF%D9%87%D9%87%D8%A7%DB%8C-%D9%87%DB%8C%D8%B3%D8%AA%D8%B1%DB%8C%DA%A9-%D8%B1%DB%8C%DA%A9%D8%A7%D8%B1%D8%AF%D9%88", ct);
+                var html = await _http.GetStringAsync(item.Link, ct);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
