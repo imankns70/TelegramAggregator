@@ -25,19 +25,19 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
         public async Task<News> GetByIdAsync(long id, CancellationToken ct)
         {
-            return await _context.News
+            return await GetAll()
             .Include(a => a.Histories).FirstOrDefaultAsync(ct);
         }
 
         public async Task InQueueAsync(NewsItem newsItem, FootbalForiSettings footbalForiSettings, CancellationToken ct)
         {
             var link = ClearUrl(newsItem.Link);
-            var news = await _context.News.FirstAsync(a => a.Link == link, ct);
+            var news = await GetAll().FirstAsync(a => a.Link == link, ct);
             news.Score = ScoreCalculator.Calculate(newsItem, footbalForiSettings);
             news.NewsStatusId = StatusEnumeration.InQueue.Id;
             news.Histories.Add(new NewsHistory
             {
-                NewsStatusId = StatusEnumeration.Expired.Id,
+                NewsStatusId = StatusEnumeration.InQueue.Id,
                 InsertDate = DateTimeOffset.UtcNow
             });
         
@@ -75,7 +75,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         public async Task DecayRangeAsync(List<(string Reason, NewsItem Item)> newsItems, CancellationToken ct)
         {
             var links = newsItems.Select(a => ClearUrl(a.Item.Link)).ToHashSet();
-            var newsInDb = await _context.News.Where(a => links.Contains(a.Link)).ToListAsync(ct);
+            var newsInDb = await GetAll().Where(a => links.Contains(a.Link)).ToListAsync(ct);
             var newsDict = newsInDb.ToDictionary(n => n.Link);
 
             foreach (var item in newsItems)
@@ -104,7 +104,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             List<NewsItem> inQueueList = new List<NewsItem>();
 
             var eightHoursAgo = DateTimeOffset.UtcNow.AddHours(-8);
-            var dbCandidates = _context.News
+            var dbCandidates = GetAll()
                 .Where(n => n.InsertDate >= eightHoursAgo)
                 .ToList();
 
@@ -180,7 +180,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         }
         public async Task<News> GetBestNews(CancellationToken ct)
         {
-            var item = await _context.News
+            var item = await GetAll()
                 .Where(n => n.NewsStatusId == StatusEnumeration.InQueue.Id)
                 .OrderByDescending(n => n.Score)
                 .ThenBy(n => n.PubDate)
@@ -283,7 +283,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
         public async Task ChangeNewsInQueueToExpiredState(CancellationToken ct)
         {
-            var inQueueNews = await _context.News
+            var inQueueNews = await GetAll()
                                          .Include(n => n.Histories)
                                          .Where(n => n.NewsStatusId == StatusEnumeration.InQueue.Id)
                                          .ToListAsync(ct);
@@ -333,7 +333,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         {
             var startDate = GetTodayStartUtcOffset();
 
-            var allDate = await _context.News.Include(a => a.SportSource)
+            var allDate = await GetAll().Include(a => a.SportSource)
                                          .Where(a => a.InsertDate >= startDate)
                                          .AsNoTracking()
                                          .ToListAsync(ct);
