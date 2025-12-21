@@ -46,7 +46,7 @@ namespace TelegramAggregator.WebAPI.Services
                     try
                     {
                         var item = ExtractNewsItem(node);
-                        if (item == null || string.IsNullOrWhiteSpace(item.Title))
+                        if (item == null || string.IsNullOrWhiteSpace(item.Title) || string.IsNullOrWhiteSpace(item.ShortDescription))
                             continue;
 
                         newsList.Add(item);

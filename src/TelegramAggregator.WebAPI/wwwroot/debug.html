@@ -417,7 +417,7 @@
                     `;
 
                 queuesEl.innerHTML = ALL_SOURCES.map(sourceName => {
-                    debugger
+               
                     const items = d.queues[sourceName] || [];
                     const count = items.length;
                     const borderColor = count > 15 ? '#f66' : count > 8 ? '#ff0' : '#0f9';
@@ -425,7 +425,7 @@
                     sourceName = sportSourceNames[sourceName];
                     return `
                             <div class="queue-box" style="border-color:${borderColor};">
-                                <h2 class="queue-title">${e(sourceName)} <span style="color:#0f9;font-weight:bold;">تعداد ${count} خبر</span></h2>
+                                <h2 class="queue-title">${e(sourceName)} <span style="color:#0f9;font-weight:bold;">تعداد خبر ${count}</span></h2>
                                 <div class="scroll-box scroll-queues">
                                     <table>
                                         <thead>

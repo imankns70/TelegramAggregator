@@ -111,19 +111,13 @@ if (app.Environment.IsProduction())
     app.Urls.Add("http://0.0.0.0:5000");
 }
 
-// ------------------- استارت -------------------
-app.Lifetime.ApplicationStarted.Register(() =>
-{
-    Console.WriteLine("ربات فوتبالفوری با موفقیت استارت شد!");
-    Console.WriteLine($"محیط: {app.Environment.EnvironmentName}");
-    Console.WriteLine($"دسترسی به داشبورد: http://localhost:5000/debug.html");
-});
+ 
 
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<TelegramAggregatorContext>();
-    db.Database.Migrate();
-}
+//using (var scope = app.Services.CreateScope())
+//{
+//    var db = scope.ServiceProvider.GetRequiredService<TelegramAggregatorContext>();
+//    db.Database.Migrate();
+//}
 
 
 
