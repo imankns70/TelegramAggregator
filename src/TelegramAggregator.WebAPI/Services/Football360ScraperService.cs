@@ -10,13 +10,13 @@ namespace TelegramAggregator.WebAPI.Services
 {
     public class Football360ScraperService : IFootball360ScraperService
     {
-        private readonly IHttpHelperService _http;        
+        private readonly IHttpHelperService _http;
         private readonly INewsRepository _newsRepository;
         private const int MaxItems = 10; // افزایش دادم تا بیشتر بگیره
 
         public Football360ScraperService(IHttpHelperService http, INewsRepository newsRepository)
         {
-            _http = http; 
+            _http = http;
             _newsRepository = newsRepository;
         }
 
@@ -30,26 +30,40 @@ namespace TelegramAggregator.WebAPI.Services
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 
-                // سلکتورهای جدید و گسترده — بر اساس ساختار واقعی سایت (دسامبر ۲۰۲۵)
-                var newsNodes = doc.DocumentNode.SelectNodes(
-                    "//li[contains(@class, 'post') or contains(@class, 'news-item') or contains(@class, 'card')] | " +
-                    "//div[contains(@class, 'post') or contains(@class, 'news-item') or contains(@class, 'card') or contains(@class, 'item')] | " +
-                    "//article | " +
-                    "//section[contains(@class, 'posts') or contains(@class, 'news')]//li | " +
-                    "//ul[contains(@class, 'posts') or contains(@class, 'news')]//li"  // لیست‌های خبر
-                ) ?? Enumerable.Empty<HtmlNode>();
+                // سلکتور اصلی و دقیق (این باید حداقل ۱۰-۱۵ تا برگردونه)
+                // سلکتور اصلی: همه لینک‌های خبری
+                var newsNodes = doc.DocumentNode.SelectNodes("//a[contains(@href, '/post/')]");
 
+                if (newsNodes == null || !newsNodes.Any())
+                {
+                    Console.WriteLine("[Football360] هیچ خبری پیدا نشد – سایت ممکنه تغییر کرده باشه.");
+                    return newsList;
+                }
 
-                newsNodes = newsNodes.Take(MaxItems);
+                // حذف تکراری و محدود کردن تعداد
+                var uniqueNodes = newsNodes
+                    .GroupBy(n => n.GetAttributeValue("href", "").Trim())
+                    .Select(g => g.First())
+                    .Take(MaxItems);
                 foreach (var node in newsNodes)
                 {
                     try
                     {
-                        var item = ExtractNewsItem(node);
-                        if (item == null || string.IsNullOrWhiteSpace(item.Title) || string.IsNullOrWhiteSpace(item.ShortDescription))
-                            continue;
+                        var item = await ExtractNewsItem(node, ct);
+                        if (item != null)
+                        {
+                            if (!string.IsNullOrWhiteSpace(item.Title))
+                            {
+                                if (!string.IsNullOrWhiteSpace(item.ShortDescription))
+                                {
+                                    newsList.Add(item);
+                                }
 
-                        newsList.Add(item);
+                            }
+
+                        }
+
+
                     }
 
 
@@ -60,13 +74,13 @@ namespace TelegramAggregator.WebAPI.Services
                 }
 
 
-                
-                
+
+
                 _newsRepository.FilterNews(newsList);
-                foreach (var item in newsList)
-                {
-                    await EnrichFullNewsAsync(item, ct);
-                }
+                //foreach (var item in newsList)
+                //{
+                //    await EnrichFullNewsAsync(item, ct);
+                //}
 
 
 
@@ -79,7 +93,7 @@ namespace TelegramAggregator.WebAPI.Services
             return newsList;
         }
 
-        private NewsItem ExtractNewsItem(HtmlNode node)
+        private async Task<NewsItem> ExtractNewsItem(HtmlNode node, CancellationToken ct) // node = <a href="/post/...">
         {
             var item = new NewsItem
             {
@@ -87,46 +101,53 @@ namespace TelegramAggregator.WebAPI.Services
                 PubDate = DateTimeOffset.UtcNow
             };
 
-            // لینک خبر — سلکتورهای گسترده و fallback
-            var linkNode = node.SelectSingleNode(".//a[contains(@href, '/news/') or contains(@href, '/post/') or contains(@href, '/article/')]");
-            if (linkNode == null)
-            {
-                linkNode = node.SelectSingleNode(".//a[.//h3 or .//h2 or .//img or .//div[contains(@class,'title')]]");
-            }
-            if (linkNode == null)
-            {
-                linkNode = node.SelectSingleNode(".//a"); // آخرین fallback
-            }
-            if (linkNode == null) return null;
-
-            var href = linkNode.GetAttributeValue("href", "").Trim();
+            var href = node.GetAttributeValue("href", "").Trim();
             if (string.IsNullOrWhiteSpace(href)) return null;
 
-            item.Link = href.StartsWith("http")
-                ? href
-                : "https://football360.ir" + (href.StartsWith("/") ? href : "/" + href);
+            item.Link = "https://football360.ir" + (href.StartsWith("/") ? href : "/" + href);
 
-            // عنوان — از لینک یا والد
-            var titleNode = linkNode.SelectSingleNode(".//h3 | .//h2 | .//strong")
-                          ?? node.SelectSingleNode(".//h3 | .//h2 | .//strong");
-            item.Title = HttpUtility.HtmlDecode(titleNode?.InnerText.Trim() ?? linkNode.InnerText.Trim() ?? "").Trim();
-            if (string.IsNullOrWhiteSpace(item.Title)) return null;
-            if (item.Title.Contains("لایو")) return null;
+            var html = await _http.GetStringAsync(item.Link, ct);
+            var doc = new HtmlDocument();
+            doc.LoadHtml(html);
+            // Title
+            var titleNode = node.SelectSingleNode(".//h2");
+            item.Title = CleanDescription(HttpUtility.HtmlDecode(titleNode?.InnerText));
 
 
-            item.Title = CleanDescription(item.Title);
+            var subtitleNode = doc.DocumentNode.SelectSingleNode("//div[contains(@class,'__subTitle')]");
+
+            if (subtitleNode != null)
+            {
+                item.ShortDescription = CleanDescription(
+                    HttpUtility.HtmlDecode(subtitleNode.InnerText.Trim())
+                );
+            }
 
 
+            var paragraphNodes = doc.DocumentNode
+            .SelectNodes("//div[contains(@class,'__content')]//p");
 
-            // شرح کوتاه — از p یا div.summary
-            var leadNode = node.SelectSingleNode(".//p[contains(@class,'lead') or contains(@class,'excerpt') or contains(@class,'summary')] | .//div[contains(@class,'excerpt')] | .//p[not(preceding-sibling::h2)]");
-            item.ShortDescription = HttpUtility.HtmlDecode(leadNode?.InnerText.Trim() ?? "");
+            if (paragraphNodes != null && paragraphNodes.Count > 0)
+            {
+                var sb = new StringBuilder();
+
+                foreach (var p in paragraphNodes)
+                {
+                    var text = NormalizeText(p.InnerText);
+                    if (text.Length < 20)
+                        continue;
+
+                    sb.AppendLine(text);
+                    sb.AppendLine(); // فاصله بین پاراگراف‌ها
+                }
 
 
+                item.FullDescription = CleanDescription(
+                 HttpUtility.HtmlDecode(sb.ToString().Trim()));
+            }
 
             return item;
         }
-
 
         private async Task EnrichFullNewsAsync(NewsItem item, CancellationToken ct)
         {
@@ -170,7 +191,26 @@ namespace TelegramAggregator.WebAPI.Services
                 item.FullDescription ??= item.ShortDescription ?? "توضیحی موجود نیست.";
             }
         }
+        private string NormalizeText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
 
+            text = HtmlEntity.DeEntitize(text)
+                             .Replace("\t", " ")
+                             .Replace("\u200C", " ")
+                             .Replace("\u200B", "")
+                             .Replace(" ", " ")
+                             .Trim();
+
+            text = Regex.Replace(text, @"^\|+\s*", "");
+            text = Regex.Replace(text, @"\s{2,}", " ");
+
+            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                            .Select(l => l.Trim())
+                            .Where(l => l.Length > 3 && !l.StartsWith("خبرنگار") && !l.StartsWith("منبع"));
+
+            return string.Join("\n\n", lines).Trim();
+        }
 
         private static string CleanDescription(string text)
         {

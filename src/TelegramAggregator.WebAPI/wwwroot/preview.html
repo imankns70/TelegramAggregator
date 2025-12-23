@@ -7,83 +7,85 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
 
+        * {
+            box-sizing: border-box; /* مهم‌ترین فیکس برای جلوگیری از اسکرول افقی */
+        }
+
         body {
             font-family: 'Vazirmatn', Tahoma, sans-serif;
-            background: linear-gradient(135deg, #0f0f0f, #1a1a1a);
+            background: #000;
             color: #e0e0e0;
             margin: 0;
-            padding: 20px;
-            line-height: 1.8;
+            padding: 10px;
+            overflow-x: hidden; /* جلوگیری از اسکرول افقی بدن */
         }
 
         .container {
-            max-width: 480px;
-            margin: 40px auto;
-            background: #111;
-            border-radius: 20px;
+            width: 100%;
+            max-width: 60%; /* اندازه مناسب پست تلگرام */
+            margin: 20px auto;
+            background: #0f0f0f;
+            border-radius: 18px;
             overflow: hidden;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.8);
-            border: 1px solid #333;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.8);
+            border: 1px solid #222;
         }
 
         .post {
-            background: #1a1a1a;
-            padding: 22px;
+            background: #111;
+            padding: 16px;
         }
 
-        .title {
-            font-size: 18px;
-            font-weight: 700;
-            color: #fff;
-            margin: 0 0 16px 0;
-            line-height: 1.5;
+        .post-image {
+            width: 100%;
+            height: auto;
+            max-height: 350px;
+            object-fit: contain;
+            border-radius: 14px;
+            margin-bottom: 14px;
+            display: block;
+            background: #222;
         }
 
-        .text {
+        .placeholder-image {
+            width: 100%;
+            height: 280px;
+            background: linear-gradient(135deg, #222, #333);
+            border-radius: 14px;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 17px;
+            font-weight: 500;
+            text-align: center;
+            border: 1px dashed #444;
+        }
+
+        .caption {
             font-size: 15px;
             color: #ddd;
             white-space: pre-line;
+            line-height: 1.65;
+            margin: 0;
+            word-wrap: break-word; /* جلوگیری از خروج متن از مرز */
         }
-
-        .footer {
-            margin-top: 24px;
-            font-weight: 700;
-            color: #00d4ff;
-            font-size: 16px;
-        }
-
-        .button {
-            display: block;
-            margin: 20px auto 0;
-            padding: 14px 32px;
-            background: linear-gradient(90deg, #e74c3c, #c0392b);
-            color: white;
-            text-align: center;
-            text-decoration: none;
-            border-radius: 12px;
-            font-weight: bold;
-            font-size: 15px;
-            box-shadow: 0 6px 15px rgba(231,76,60,0.4);
-            max-width: 240px;
-        }
-
-            .button:hover {
-                background: #c0392b;
-                transform: translateY(-2px);
-            }
 
         .refresh {
             text-align: center;
-            margin: 30px 0;
-            color: #666;
+            margin: 18px 0 8px;
+            color: #00d4ff;
             font-size: 14px;
+            font-weight: 500;
         }
 
         .loading {
             text-align: center;
-            padding: 60px;
+            padding: 70px 20px;
             color: #0f0;
             font-size: 18px;
+            font-weight: 500;
         }
     </style>
 </head>
@@ -92,28 +94,78 @@
         <div class="post" id="preview">
             <div class="loading">در حال دریافت آخرین خبر...</div>
         </div>
-        <div class="refresh">رفرش خودکار هر ۸ ثانیه</div>
+        <div class="refresh" id="refresh-timer">رفرش خودکار در <span id="countdown">60</span> ثانیه</div>
     </div>
 
     <script>
+        const REFRESH_INTERVAL = 60000;
+        let countdown = REFRESH_INTERVAL / 1000;
+
+        function cleanCaption(rawCaption) {
+            if (!rawCaption) return "در حال بارگذاری کپشن...";
+
+            let cleaned = rawCaption.trim();
+            cleaned = cleaned.replace(/\n/g, '<br>');
+
+            cleaned = cleaned.replace(/^(<br\s*\/?\s*>)*/gi, '');
+            cleaned = cleaned.replace(/(<br\s*\/?\s*>)*/gi, '');
+
+            cleaned = cleaned.replace(/(<br\s*\/?\s*>{3,})/gi, '<br><br>');
+
+            cleaned = cleaned.replace(/<\/b>(?!<br>)/gi, '</b><br><br>');
+
+            cleaned = cleaned.replace(/([^<br>])(@FOOTBALFORI|#iman)/gi, '$1<br><br>$2');
+
+            return cleaned;
+        }
+
         async function loadPreview() {
             try {
-                const res = await fetch('/api/debug/latest-preview');
-                const item = await res.json();
+                const res = await fetch('/api/dashboard/latest-preview');
+                const data = await res.json();
 
-                document.getElementById('preview').innerHTML = `
-                        <div class="title">${item.title || 'بدون عنوان'}</div>
-                        <div class="text">${(item.previewHtml || '').replace(/<br>/g, '<br>')}</div>
-                        <div class="footer">@FOOTBALFORI #iman</div>
-                        ${item.link ? `<a href="${item.link}" target="_blank" class="button">مشاهده خبر کامل</a>` : ''}
-                    `;
+                let content = '';
+
+                if (data.imageUrl && data.imageUrl.trim() !== '') {
+                    content += `
+                            <img src="${data.imageUrl.trim()}"
+                                 class="post-image"
+                                 alt="خبر"
+                                 loading="eager"
+                                 referrerPolicy="no-referrer"
+                                 onerror="this.onerror=null; this.outerHTML='<div class=\\'placeholder-image\\'>تصویر خبر<br><small>بارگذاری نشد</small></div>';">
+                        `;
+                } else {
+                    content += `<div class="placeholder-image">تصویر خبر<br><small>در دسترس نیست</small></div>`;
+                }
+
+                content += `<div class="caption">${cleanCaption(data.caption)}</div>`;
+
+                document.getElementById('preview').innerHTML = content;
+
             } catch (e) {
-                document.getElementById('preview').innerHTML = '<div class="loading" style="color:#f44;">خطا در دریافت خبر</div>';
+                document.getElementById('preview').innerHTML = `
+                        <div class="loading" style="color:#f44;">خطا در دریافت خبر<br><br>لطفاً صفحه را رفرش کنید</div>
+                    `;
             }
+
+            countdown = REFRESH_INTERVAL / 1000;
+            updateCountdown();
+        }
+
+        function updateCountdown() {
+            const timerElement = document.getElementById('countdown');
+            if (timerElement) {
+                timerElement.textContent = countdown;
+            }
+            countdown--;
+            if (countdown < 0) countdown = REFRESH_INTERVAL / 1000;
         }
 
         loadPreview();
-        setInterval(loadPreview, 8000);
+        setInterval(loadPreview, REFRESH_INTERVAL);
+        setInterval(updateCountdown, 1000);
+        updateCountdown();
     </script>
 </body>
 </html>

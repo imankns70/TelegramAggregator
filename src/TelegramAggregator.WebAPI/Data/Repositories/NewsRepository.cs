@@ -384,5 +384,15 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             return startIran.ToUniversalTime();
         }
 
+        public async Task<News> GetLastNews(CancellationToken ct)
+        {
+            var item = await GetAll()
+                .Where(n => n.NewsStatusId == StatusEnumeration.Sent.Id)
+                .OrderByDescending(n => n.Id)                
+                .FirstOrDefaultAsync(ct);
+
+            return item;
+        }
+
     }
 }

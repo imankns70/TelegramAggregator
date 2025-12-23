@@ -177,28 +177,28 @@ namespace TelegramAggregator.WebAPI.Services
                 await _newsRepository.PublishedAsync(item, ct);
                 Message sentMessage;
 
-                //if (!string.IsNullOrEmpty(item.ImageUrl))
-                //{
-                //    sentMessage = await _bot.SendPhoto(
-                //        chatId: channelId, // 👈 مستقیماً کانال
-                //        photo: new InputFileUrl(item.ImageUrl),
-                //        caption: caption,
-                //        parseMode: ParseMode.Html,
-                //        cancellationToken: ct);
-                //}
-                //else
-                //{
-                //    sentMessage = await _bot.SendMessage(
-                //        chatId: channelId, // 👈 مستقیماً کانال
-                //        text: caption,
-                //        parseMode: ParseMode.Html,
-                //        cancellationToken: ct);
-                //}
+                if (!string.IsNullOrEmpty(item.ImageUrl))
+                {
+                    sentMessage = await _bot.SendPhoto(
+                        chatId: channelId, // 👈 مستقیماً کانال
+                        photo: new InputFileUrl(item.ImageUrl),
+                        caption: caption,
+                        parseMode: ParseMode.Html,
+                        cancellationToken: ct);
+                }
+                else
+                {
+                    sentMessage = await _bot.SendMessage(
+                        chatId: channelId, // 👈 مستقیماً کانال
+                        text: caption,
+                        parseMode: ParseMode.Html,
+                        cancellationToken: ct);
+                }
 
 
-         
-              await Task.Delay(TimeSpan.FromSeconds(15), ct);
-             //await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
+
+                //await Task.Delay(TimeSpan.FromSeconds(20), ct);
+                await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
 
             }
 

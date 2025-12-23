@@ -1,6 +1,8 @@
-﻿using TelegramAggregator.WebAPI.Data.Repositories;
+﻿using System;
+using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models.Dashboard;
+using TelegramAggregator.WebAPI.Models.Entities;
 
 namespace TelegramAggregator.WebAPI.Services.Dashboard
 {
@@ -54,7 +56,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                    Score = x.Score,
                    Position = i + 1,
                    Source = x.SportSource.Title,
-                   
+
                    Title = x.Title?.Truncate(80),
                    Link = x.Link,
                    SentAt = x.SentDate.Value.ToString("HH:mm:ss")
@@ -66,16 +68,16 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
             var recentProcessed = todayNewsHistoryData
                 .OrderByDescending(a => a.InsertDate)
                 .Select((x, i) => new QueueFootbalForiDashboardDto
-            {
-                Source = x.News.SportSource.Title,
-                Title = x.News.Title?.Truncate(80),
-                Link = x.News.Link,
-                Status= x.NewsStatus.Title,
-                StatusId= x.NewsStatusId,
-                Reason= x.Reason,
-                InsertTime = x.InsertDate.ToString("HH:mm:ss"),
+                {
+                    Source = x.News.SportSource.Title,
+                    Title = x.News.Title?.Truncate(80),
+                    Link = x.News.Link,
+                    Status = x.NewsStatus.Title,
+                    StatusId = x.NewsStatusId,
+                    Reason = x.Reason,
+                    InsertTime = x.InsertDate.ToString("HH:mm:ss"),
 
-            }).ToList();
+                }).ToList();
 
             var viewModel = new FootbalForiDashboardDto
             {
@@ -94,6 +96,18 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
             };
 
             return viewModel;
+        }
+
+        public async Task<(string imageurl, string caption)> GetLastNews(CancellationToken ct)
+        {
+            var item = await _newsRepository.GetLastNews(ct);
+            if (item != null)
+            {
+                var caption = CaptionMakerExtension.GetCaption(item);
+                return (imageurl: item.ImageUrl, caption: caption);
+            }
+
+            return (imageurl: "", caption: "");
         }
 
     }

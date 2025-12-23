@@ -18,5 +18,7 @@ namespace TelegramAggregator.WebAPI.Data.Repositories
         Task ChangeNewsInQueueToExpiredState(CancellationToken ct);
         Task<IReadOnlyList<News>> GetTodayNews(CancellationToken ct);
         Task<IReadOnlyList<NewsHistory>> GetTodayNewsHistory(int take, CancellationToken ct);
+        Task<News> GetLastNews(CancellationToken ct);
+
     }
 }
