@@ -21,7 +21,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly FootbalForiSettings _footbalForiSettings;
         private readonly IFootball360ScraperService _football360ScraperService;
         private readonly INewsRepository _newsRepository;
-        private readonly Random _rnd = Random.Shared;
+     
 
         public FootballforiService(
             ITelegramBotClient bot,
@@ -79,66 +79,40 @@ namespace TelegramAggregator.WebAPI.Services
 
 
         }
-        public async Task PublishSingleNewsAsync(CancellationToken ct)
+        public async Task<bool> PublishSingleNewsAsync(CancellationToken ct)
         {
-            _logger.LogInformation("PublishContinuouslyAsync شروع شد — تا ابد زنده می‌مونه");
-
-            while (!ct.IsCancellationRequested)
+            News news = await _newsRepository.GetBestNews(ct);
+            if (news == null)
             {
-                var now = DateTime.Now;
-                bool isWorkingHours = now.Hour >= 8 || now.Hour < 3;
+                _logger.LogInformation("هیچ خبری برای انتشار آماده نیست.");
+                return false;
+            }
 
-                if (!isWorkingHours)
-                {
-
-                    if (now.Hour == 3 && now.Minute < 5) // فقط یک بار نزدیک ساعت ۳
-                    {
-                        _logger.LogInformation("ساعت ۳ شب — خالی کردن همه صف‌ها برای شروع تازه فردا");
-
-                        await _newsRepository.ChangeNewsInQueueToExpiredState(ct);
-                    }
-
-                    // خواب تا صبح (چک هر ۳۰ دقیقه کافیه)
-                    await Task.Delay(TimeSpan.FromMinutes(30), ct);
-                    continue;
-                }
-                News news = await _newsRepository.GetBestNews(ct);
-                if (news is null)
-                {
-                    await Task.Delay(3000, ct);
-                    continue;
-                }
-
-                try
-                {
-
-                    
-                    await SendToTelegramAsync(news, _footbalForiSettings.ChannelId, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "خطا در ارسال خبر به تلگرام: {Title}", news?.Title);
-                    await Task.Delay(5000, ct);
-                }
-
-                _logger.LogWarning("PublishContinuouslyAsync خاتمه یافت");
-
+            try
+            {
+                await SendToTelegramAsync(news, _footbalForiSettings.ChannelId, ct);
+                _logger.LogInformation("خبر با موفقیت منتشر شد: {Title}", news.Title);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "خطا در انتشار خبر: {Title}", news.Title);
+                // در صورت خطا، خبر رو decay نکن — شاید بعداً دوباره امتحان بشه
+                return false;
             }
         }
+
         private async Task SendToTelegramAsync(News item, long channelId, CancellationToken ct)
         {
-            bool hasVideo = false;
-            
             var imageTask = _imageExtractor.ExtractMainImageAsync(item.Link, ct);
             var hasVideoTask = _imageExtractor.HasVideoAsync(item.Link, ct);
-
             Task<string> fullDescTask = null;
 
             if (item.SportSourceId != SportSourceEnumeration.Football360.Id)
             {
-               
                 fullDescTask = _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link);
                 await Task.WhenAll(imageTask, hasVideoTask, fullDescTask);
+                item.FullDescription = await fullDescTask;
             }
             else
             {
@@ -146,62 +120,53 @@ namespace TelegramAggregator.WebAPI.Services
             }
 
             item.ImageUrl = await imageTask;
-            hasVideo = await hasVideoTask;
+            bool hasVideo = await hasVideoTask;
 
-            if (fullDescTask != null)
-                item.FullDescription = await fullDescTask;
-
+            // فیلترهای رد خبر
             if (string.IsNullOrEmpty(item.ImageUrl))
             {
                 await _newsRepository.DecayAsync(item, "خبر بدون عکس", ct, saveNow: true);
-                await Task.Delay(3000, ct);
+                return;
             }
 
-            else if (hasVideo)
+            if (hasVideo)
             {
-
                 await _newsRepository.DecayAsync(item, "حاوی تگ ویدئو", ct, saveNow: true);
-                await Task.Delay(3000, ct);
-
+                return;
             }
-            else if (item.FullDescription.Contains("خطا در دریافت محتوا"))
+
+            if (item.FullDescription?.Contains("خطا در دریافت محتوا") == true)
             {
                 await _newsRepository.DecayAsync(item, "خطا در واکشی شرح کامل", ct, saveNow: true);
-                await Task.Delay(3000, ct);
+                return;
+            }
+
+            // ارسال موفق
+            var caption = CaptionMakerExtension.GetCaption(item);
+            item.Caption = caption;
+            await _newsRepository.PublishedAsync(item, ct);
+
+            Message sentMessage;
+            if (!string.IsNullOrEmpty(item.ImageUrl))
+            {
+                sentMessage = await _bot.SendPhoto(
+                    chatId: channelId,
+                    photo: new InputFileUrl(item.ImageUrl),
+                    caption: caption,
+                    parseMode: ParseMode.Html,
+                    cancellationToken: ct);
             }
             else
             {
-
-                var caption = CaptionMakerExtension.GetCaption(item);
-                item.Caption = caption;
-                await _newsRepository.PublishedAsync(item, ct);
-                Message sentMessage;
-
-                if (!string.IsNullOrEmpty(item.ImageUrl))
-                {
-                    sentMessage = await _bot.SendPhoto(
-                        chatId: channelId, // 👈 مستقیماً کانال
-                        photo: new InputFileUrl(item.ImageUrl),
-                        caption: caption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
-                }
-                else
-                {
-                    sentMessage = await _bot.SendMessage(
-                        chatId: channelId, // 👈 مستقیماً کانال
-                        text: caption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
-                }
-
-
-
-                //await Task.Delay(TimeSpan.FromSeconds(20), ct);
-                await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
-
+                sentMessage = await _bot.SendMessage(
+                    chatId: channelId,
+                    text: caption,
+                    parseMode: ParseMode.Html,
+                    cancellationToken: ct);
             }
 
+            _logger.LogInformation("خبر ارسال شد به کانال | MessageId: {MessageId} | عنوان: {Title}",
+                sentMessage.MessageId, item.Title);
         }
     }
 }

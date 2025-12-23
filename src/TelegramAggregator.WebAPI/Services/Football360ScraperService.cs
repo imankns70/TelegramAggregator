@@ -105,12 +105,14 @@ namespace TelegramAggregator.WebAPI.Services
             if (string.IsNullOrWhiteSpace(href)) return null;
 
             item.Link = "https://football360.ir" + (href.StartsWith("/") ? href : "/" + href);
-
+           
             var html = await _http.GetStringAsync(item.Link, ct);
             var doc = new HtmlDocument();
             doc.LoadHtml(html);
-            // Title
-            var titleNode = node.SelectSingleNode(".//h2");
+
+            var titleNode = doc.DocumentNode
+           .SelectSingleNode("//h1[contains(@class,'__title')]");
+
             item.Title = CleanDescription(HttpUtility.HtmlDecode(titleNode?.InnerText));
 
 

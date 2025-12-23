@@ -78,7 +78,12 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                     InsertTime = x.InsertDate.ToString("HH:mm:ss"),
 
                 }).ToList();
+            var iranTimeZone = TimeZoneInfo.FindSystemTimeZoneById(
+           OperatingSystem.IsWindows() ? "Iran Standard Time" : "Asia/Tehran");
 
+            // زمان فعلی ایران به صورت DateTimeOffset
+            var iranNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, iranTimeZone);
+            var utcNow = DateTimeOffset.UtcNow;
             var viewModel = new FootbalForiDashboardDto
             {
                 TotalProcessed = allDate.Count,
@@ -92,7 +97,9 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                 Queues = queues,
                 PublishedItems = publishedItems,
                 RecentProcessed = recentProcessed,
-
+                UtcNow= utcNow.ToString("yyyy-MM-dd HH:mm:ss 'UTC'"),
+                IranNow = iranNow.ToString("yyyy-MM-dd HH:mm:ss zzz"),
+                ServerLocal = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz") // زمان محلی سرور (اگر سرور در ایران نیست)
             };
 
             return viewModel;

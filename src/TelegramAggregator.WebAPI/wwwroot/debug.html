@@ -41,7 +41,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
         }
 
         .main-title {
@@ -52,6 +52,24 @@
             -webkit-text-fill-color: transparent;
             text-shadow: 0 0 30px var(--cyan);
         }
+
+        .debug-times {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 15px;
+            font-size: clamp(14px, 3.5vw, 18px);
+            color: var(--cyan);
+        }
+
+            .debug-times span {
+                background: rgba(0,204,255,0.1);
+                padding: 6px 14px;
+                border-radius: 10px;
+                min-width: 200px;
+                text-align: center;
+                border: 1px solid var(--cyan);
+            }
 
         .refresh-text {
             font-size: clamp(17px, 4vw, 22px);
@@ -76,6 +94,10 @@
                 flex-direction: row;
                 justify-content: center;
                 gap: 40px;
+            }
+
+            .debug-times {
+                gap: 30px;
             }
         }
 
@@ -269,8 +291,7 @@
             font-weight: bold;
             opacity: 0.8;
         }
-
-        /* === رنگ‌بندی کامل وضعیت‌ها === */
+        /* رنگ‌بندی وضعیت‌ها */
         .status-3 {
             color: var(--yellow);
             font-weight: bold;
@@ -301,8 +322,6 @@
             font-weight: bold;
             text-align: center;
         }
-
-     
 
         @media (max-width:1400px) {
             .stats-grid {
@@ -338,6 +357,9 @@
 <body>
     <div class="top-header">
         <span class="main-title">دیباگ زنده ربات فوتبال فوری — نسخه هوشمند</span>
+        <div class="debug-times" id="debug-times">
+            در حال بارگذاری زمان‌ها...
+        </div>
         <span class="refresh-text">رفرش خودکار در <span id="countdown">10</span> ثانیه</span>
     </div>
     <div class="main-container">
@@ -361,34 +383,32 @@
             </div>
         </div>
     </div>
-
     <script>
         const e = t => t ? String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : '';
         const nf = (num, fallback = "۰") => (num ?? 0).toLocaleString('fa-IR');
         const getScoreClass = s => s >= 90 ? 'score-high' : s >= 70 ? 'score-med' : 'score-low';
-
         const ALL_SOURCES = [
             "ورزش سه | آخرین اخبار ورزشی",
             "طرفداری",
             "خبرورزشی؛ آخرین اخبار ورزشی ایران و جهان",
             "فوتبال 360"
         ];
-
-        var sportSourceNames = {
+        const sportSourceNames = {
             "ورزش سه | آخرین اخبار ورزشی": "ورزش سه",
             "طرفداری": "طرفداری",
             "خبرورزشی؛ آخرین اخبار ورزشی ایران و جهان": "خبرورزشی",
             "فوتبال 360": "فوتبال 360"
-        }
+        };
         const statsEl = document.getElementById('stats');
         const queuesEl = document.getElementById('queues');
         const publishedEl = document.getElementById('published');
         const logsEl = document.getElementById('logs');
         const countdownEl = document.getElementById('countdown');
+        const debugTimesEl = document.getElementById('debug-times');
         let countdown = 10;
 
         function startCountdown() {
-            countdown = 10;
+            countdown = 60;
             countdownEl.textContent = countdown;
             const id = setInterval(() => {
                 countdown--;
@@ -399,12 +419,19 @@
                 }
             }, 1000);
         }
-       
+
         async function load() {
             try {
                 const response = await fetch('/api/Dashboard/feed');
                 if (!response.ok) throw new Error("API Error");
                 const d = await response.json();
+
+                // نمایش زمان‌های دیباگ مستقیم از d
+                debugTimesEl.innerHTML = `
+                        <span><strong>UTC:</strong> ${e(d.utcNow || '—')}</span>
+                        <span><strong>سرور:</strong> ${e(d.serverLocal || '—')}</span>
+                        <span><strong>ایران:</strong> ${e(d.iranNow || '—')}</span>
+                    `;
 
                 const color = d.statusColor === 'red' ? '#f66' : d.statusColor === 'yellow' ? '#ff0' : '#0f9';
                 statsEl.innerHTML = `
@@ -417,15 +444,13 @@
                     `;
 
                 queuesEl.innerHTML = ALL_SOURCES.map(sourceName => {
-               
                     const items = d.queues[sourceName] || [];
                     const count = items.length;
                     const borderColor = count > 15 ? '#f66' : count > 8 ? '#ff0' : '#0f9';
-
-                    sourceName = sportSourceNames[sourceName];
+                    const displayName = sportSourceNames[sourceName] || sourceName;
                     return `
                             <div class="queue-box" style="border-color:${borderColor};">
-                                <h2 class="queue-title">${e(sourceName)} <span style="color:#0f9;font-weight:bold;">تعداد خبر ${count}</span></h2>
+                                <h2 class="queue-title">${e(displayName)} <span style="color:#0f9;font-weight:bold;">تعداد خبر ${count}</span></h2>
                                 <div class="scroll-box scroll-queues">
                                     <table>
                                         <thead>
@@ -458,7 +483,7 @@
                         ? d.publishedItems.map((i, idx) => `
                                         <tr>
                                             <td class="num">${idx + 1}</td>
-                                            <td><span class="status-sent">${e(i.source)}</span></td>
+                                            <td>${e(i.source)}</td>
                                             <td title="${e(i.title)}">${e(i.title?.substring(0, 70) || "بدون عنوان")}...</td>
                                             <td class="score ${getScoreClass(i.score || 0)}">${i.score || 0}</td>
                                             <td>${i.sentAt || ''}</td>
@@ -484,14 +509,11 @@
                             </thead>
                             <tbody>
                                 ${d.recentProcessed?.length
-                    ? d.recentProcessed.map((i, idx) => {
-                       
-                        const statusClass = `status-${i.statusId}`
-
+                        ? d.recentProcessed.map((i, idx) => {
+                            const statusClass = `status-${i.statusId}`;
                             const reasonCell = i.reason && i.reason.trim()
                                 ? `<td title="${e(i.reason)}">${e(i.reason.substring(0, 40))}...</td>`
-                                : `<td></td>`;
-
+                                : `<td>—</td>`;
                             return `
                                             <tr>
                                                 <td class="num">${idx + 1}</td>
@@ -509,13 +531,16 @@
                         </table>`;
 
                 startCountdown();
+
             } catch (err) {
                 console.error("خطا:", err);
+                debugTimesEl.innerHTML = `<span style="color:#f66;">خطا در دریافت داده‌ها</span>`;
                 startCountdown();
             }
         }
 
         load();
+        setInterval(load, 100000); // هر ۱۰ ثانیه کامل رفرش
     </script>
 </body>
 </html>
