@@ -176,24 +176,24 @@ namespace TelegramAggregator.WebAPI.Services
                 item.Caption = caption;
                 await _newsRepository.PublishedAsync(item, ct);
                 Message sentMessage;
-
-                if (!string.IsNullOrEmpty(item.ImageUrl))
+                try
                 {
+
                     sentMessage = await _bot.SendPhoto(
                         chatId: channelId, // 👈 مستقیماً کانال
                         photo: new InputFileUrl(item.ImageUrl),
                         caption: caption,
                         parseMode: ParseMode.Html,
                         cancellationToken: ct);
+
                 }
-                else
+                catch (Exception ex)
                 {
-                    sentMessage = await _bot.SendMessage(
-                        chatId: channelId, // 👈 مستقیماً کانال
-                        text: caption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
+                    _logger.LogError($"خطا در ارسال به تلگرام {ex.Message}");
+                    await _newsRepository.DecayAsync(item, $"خطا در ارسال به تلگرام {ex.Message}", ct, saveNow: true);
+                    throw;
                 }
+
 
 
 

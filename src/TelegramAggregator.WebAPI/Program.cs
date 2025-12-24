@@ -111,13 +111,13 @@ if (app.Environment.IsProduction())
     app.Urls.Add("http://0.0.0.0:5000");
 }
 
- 
 
-//using (var scope = app.Services.CreateScope())
-//{
-//    var db = scope.ServiceProvider.GetRequiredService<TelegramAggregatorContext>();
-//    db.Database.Migrate();
-//}
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<TelegramAggregatorContext>();
+    db.Database.Migrate();
+}
 
 
 
