@@ -10,7 +10,7 @@ using TelegramAggregator.WebAPI.Models.FootbalSettings;
 
 namespace TelegramAggregator.WebAPI.Services
 {
-    public partial class FootballforiService
+    public class FootballforiService
     {
         private readonly ITelegramBotClient _bot;
         private readonly ILogger<FootballforiService> _logger;
@@ -71,8 +71,8 @@ namespace TelegramAggregator.WebAPI.Services
                 }
             }
 
-            var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
-            allItems.AddRange(football360News);
+            //var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
+            //allItems.AddRange(football360News);
 
 
             await _newsRepository.ProcessNewsAsync(allItems, _footbalForiSettings, ct);

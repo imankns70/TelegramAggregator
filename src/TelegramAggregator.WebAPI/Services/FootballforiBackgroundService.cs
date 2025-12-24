@@ -20,10 +20,11 @@ public class FootballforiBackgroundService : BackgroundService
         _logger.LogInformation("FootballforiBackgroundService شروع شد");
 
         // دو task موازی: یکی برای واکشی، یکی برای انتشار
-        var fetchTask = FetchLoopAsync(stoppingToken);
-        var publishTask = PublishLoopAsync(stoppingToken);
+        await FetchLoopAsync(stoppingToken);
+        //var fetchTask = FetchLoopAsync(stoppingToken);
+        //var publishTask = PublishLoopAsync(stoppingToken);
 
-        await Task.WhenAll(fetchTask, publishTask);
+        //await Task.WhenAll(fetchTask, publishTask);
     }
 
     private async Task FetchLoopAsync(CancellationToken ct)
