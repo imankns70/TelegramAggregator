@@ -6,7 +6,7 @@ public class FootballforiBackgroundService : BackgroundService
 {
     private readonly ILogger<FootballforiBackgroundService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
-
+    private readonly Random _rnd = Random.Shared;
     public FootballforiBackgroundService(
         ILogger<FootballforiBackgroundService> logger,
         IServiceScopeFactory scopeFactory)
@@ -20,11 +20,10 @@ public class FootballforiBackgroundService : BackgroundService
         _logger.LogInformation("FootballforiBackgroundService شروع شد");
 
         // دو task موازی: یکی برای واکشی، یکی برای انتشار
-        await FetchLoopAsync(stoppingToken);
-        //var fetchTask = FetchLoopAsync(stoppingToken);
-        //var publishTask = PublishLoopAsync(stoppingToken);
+        var fetchTask = FetchLoopAsync(stoppingToken);
+        var publishTask = PublishLoopAsync(stoppingToken);
 
-        //await Task.WhenAll(fetchTask, publishTask);
+        await Task.WhenAll(fetchTask, publishTask);
     }
 
     private async Task FetchLoopAsync(CancellationToken ct)
@@ -87,7 +86,9 @@ public class FootballforiBackgroundService : BackgroundService
                 _logger.LogError(ex, "خطا در انتشار خبر");
             }
 
-            await Task.Delay(3000, ct); // یا delay تصادفی
+            await Task.Delay(TimeSpan.FromSeconds(20), ct);
+            //await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
+            _logger.LogWarning("PublishContinuouslyAsync خاتمه یافت");
         }
     }
 }

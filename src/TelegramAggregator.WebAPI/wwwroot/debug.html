@@ -360,7 +360,7 @@
         <div class="debug-times" id="debug-times">
             در حال بارگذاری زمان‌ها...
         </div>
-        <span class="refresh-text">رفرش خودکار در <span id="countdown">10</span> ثانیه</span>
+        <span class="refresh-text">رفرش خودکار در <span id="countdown">20</span> ثانیه</span>
     </div>
     <div class="main-container">
         <div class="full-width-block">
@@ -384,163 +384,182 @@
         </div>
     </div>
     <script>
-        const e = t => t ? String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : '';
+        const e = t => t ? String(t).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c])) : '';
+
         const nf = (num, fallback = "۰") => (num ?? 0).toLocaleString('fa-IR');
         const getScoreClass = s => s >= 90 ? 'score-high' : s >= 70 ? 'score-med' : 'score-low';
+
         const ALL_SOURCES = [
             "ورزش سه | آخرین اخبار ورزشی",
             "طرفداری",
             "خبرورزشی؛ آخرین اخبار ورزشی ایران و جهان",
             "فوتبال 360"
         ];
+
         const sportSourceNames = {
             "ورزش سه | آخرین اخبار ورزشی": "ورزش سه",
             "طرفداری": "طرفداری",
             "خبرورزشی؛ آخرین اخبار ورزشی ایران و جهان": "خبرورزشی",
             "فوتبال 360": "فوتبال 360"
         };
+
         const statsEl = document.getElementById('stats');
         const queuesEl = document.getElementById('queues');
         const publishedEl = document.getElementById('published');
         const logsEl = document.getElementById('logs');
         const countdownEl = document.getElementById('countdown');
         const debugTimesEl = document.getElementById('debug-times');
-        let countdown = 10;
+
+        let countdown = 20;
+        let countdownTimer = null;
+        let isLoading = false;
 
         function startCountdown() {
-            countdown = 60;
+            if (countdownTimer) clearInterval(countdownTimer);
+
+            countdown = 20;
             countdownEl.textContent = countdown;
-            const id = setInterval(() => {
+
+            countdownTimer = setInterval(() => {
                 countdown--;
                 countdownEl.textContent = countdown;
+
                 if (countdown <= 0) {
-                    clearInterval(id);
+                    clearInterval(countdownTimer);
                     load();
                 }
             }, 1000);
         }
 
         async function load() {
+            if (isLoading) return;
+            isLoading = true;
+
             try {
                 const response = await fetch('/api/Dashboard/feed');
                 if (!response.ok) throw new Error("API Error");
                 const d = await response.json();
 
-                // نمایش زمان‌های دیباگ مستقیم از d
                 debugTimesEl.innerHTML = `
-                        <span><strong>UTC:</strong> ${e(d.utcNow || '—')}</span>
-                        <span><strong>سرور:</strong> ${e(d.serverLocal || '—')}</span>
-                        <span><strong>ایران:</strong> ${e(d.iranNow || '—')}</span>
-                    `;
+                    <span><strong>UTC:</strong> ${e(d.utcNow || '—')}</span>
+                    <span><strong>سرور:</strong> ${e(d.serverLocal || '—')}</span>
+                    <span><strong>ایران:</strong> ${e(d.iranNow || '—')}</span>
+                `;
 
-                const color = d.statusColor === 'red' ? '#f66' : d.statusColor === 'yellow' ? '#ff0' : '#0f9';
+                const color =
+                    d.statusColor === 'red' ? '#f66' :
+                        d.statusColor === 'yellow' ? '#ff0' : '#0f9';
+
                 statsEl.innerHTML = `
-                        <div class="stat-box"><span class="stat-num" style="color:#0f9;">${nf(d.acceptedCount)}</span>قبول شده</div>
-                        <div class="stat-box"><span class="stat-num" style="color:#f66;">${nf(d.rejectedCount)}</span>رد شده</div>
-                        <div class="stat-box"><span class="stat-num" style="color:#0cf;">${nf(d.publishedCount)}</span>ارسال شده</div>
-                        <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(d.inQueueCount)}</span>در صف</div>
-                        <div class="stat-box"><span class="stat-num" style="color:#aaa;">${nf(d.totalProcessed)}</span>کل پردازش</div>
-                        <div class="stat-box"><span class="stat-num" style="color:${color};">${nf(d.acceptanceRate)}%</span>درصد قبولی</div>
-                    `;
+                    <div class="stat-box"><span class="stat-num" style="color:#0f9;">${nf(d.acceptedCount)}</span>قبول شده</div>
+                    <div class="stat-box"><span class="stat-num" style="color:#f66;">${nf(d.rejectedCount)}</span>رد شده</div>
+                    <div class="stat-box"><span class="stat-num" style="color:#0cf;">${nf(d.publishedCount)}</span>ارسال شده</div>
+                    <div class="stat-box"><span class="stat-num" style="color:#ff0;">${nf(d.inQueueCount)}</span>در صف</div>
+                    <div class="stat-box"><span class="stat-num" style="color:#aaa;">${nf(d.totalProcessed)}</span>کل پردازش</div>
+                    <div class="stat-box"><span class="stat-num" style="color:${color};">${nf(d.acceptanceRate)}%</span>درصد قبولی</div>
+                `;
 
                 queuesEl.innerHTML = ALL_SOURCES.map(sourceName => {
                     const items = d.queues[sourceName] || [];
                     const count = items.length;
                     const borderColor = count > 15 ? '#f66' : count > 8 ? '#ff0' : '#0f9';
                     const displayName = sportSourceNames[sourceName] || sourceName;
+
                     return `
-                            <div class="queue-box" style="border-color:${borderColor};">
-                                <h2 class="queue-title">${e(displayName)} <span style="color:#0f9;font-weight:bold;">تعداد خبر ${count}</span></h2>
-                                <div class="scroll-box scroll-queues">
-                                    <table>
-                                        <thead>
-                                            <tr><th>#</th><th>عنوان</th><th>امتیاز</th><th>زمان</th></tr>
-                                        </thead>
-                                        <tbody>
-                                            ${count === 0
+                        <div class="queue-box" style="border-color:${borderColor};">
+                            <h2 class="queue-title">${e(displayName)}
+                                <span style="color:#0f9;font-weight:bold;">تعداد خبر ${count}</span>
+                            </h2>
+                            <div class="scroll-box scroll-queues">
+                                <table>
+                                    <thead>
+                                        <tr><th>#</th><th>عنوان</th><th>امتیاز</th><th>زمان</th></tr>
+                                    </thead>
+                                    <tbody>
+                                        ${count === 0
                             ? `<tr><td colspan="4" class="empty">صف خالی</td></tr>`
                             : items.map((item, i) => `
-                                                    <tr>
-                                                        <td class="num">${i + 1}</td>
-                                                        <td title="${e(item.title)}">${e(item.title?.substring(0, 65) || "بدون عنوان")}...</td>
-                                                        <td class="score ${getScoreClass(item.score || 0)}">${item.score || 0}</td>
-                                                        <td>${item.pubDate || ''}</td>
-                                                    </tr>`
-                            ).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>`;
+                                                <tr>
+                                                    <td class="num">${i + 1}</td>
+                                                    <td title="${e(item.title)}">${e(item.title?.substring(0, 65) || "بدون عنوان")}...</td>
+                                                    <td class="score ${getScoreClass(item.score || 0)}">${item.score || 0}</td>
+                                                    <td>${item.pubDate || ''}</td>
+                                                </tr>
+                                            `).join('')
+                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>`;
                 }).join('');
 
                 publishedEl.innerHTML = `
-                        <table>
-                            <thead>
-                                <tr><th>#</th><th>منبع</th><th>عنوان</th><th>امتیاز</th><th>زمان ارسال</th></tr>
-                            </thead>
-                            <tbody>
-                                ${d.publishedItems?.length
+                    <table>
+                        <thead>
+                            <tr><th>#</th><th>منبع</th><th>عنوان</th><th>امتیاز</th><th>زمان ارسال</th></tr>
+                        </thead>
+                        <tbody>
+                            ${d.publishedItems?.length
                         ? d.publishedItems.map((i, idx) => `
-                                        <tr>
-                                            <td class="num">${idx + 1}</td>
-                                            <td>${e(i.source)}</td>
-                                            <td title="${e(i.title)}">${e(i.title?.substring(0, 70) || "بدون عنوان")}...</td>
-                                            <td class="score ${getScoreClass(i.score || 0)}">${i.score || 0}</td>
-                                            <td>${i.sentAt || ''}</td>
-                                        </tr>`
-                        ).join('')
+                                    <tr>
+                                        <td class="num">${idx + 1}</td>
+                                        <td>${e(i.source)}</td>
+                                        <td title="${e(i.title)}">${e(i.title?.substring(0, 70) || "بدون عنوان")}...</td>
+                                        <td class="score ${getScoreClass(i.score || 0)}">${i.score || 0}</td>
+                                        <td>${i.sentAt || ''}</td>
+                                    </tr>
+                                `).join('')
                         : `<tr><td colspan="5" class="empty">هنوز خبری ارسال نشده</td></tr>`
                     }
-                            </tbody>
-                        </table>`;
+                        </tbody>
+                    </table>`;
 
                 logsEl.innerHTML = `
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>#</th>
-                                    <th>منبع</th>
-                                    <th>عنوان</th>
-                                    <th>وضعیت</th>
-                                    <th>دلیل</th>
-                                    <th>زمان</th>
-                                    <th>لینک</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${d.recentProcessed?.length
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th><th>منبع</th><th>عنوان</th>
+                                <th>وضعیت</th><th>دلیل</th><th>زمان</th><th>لینک</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${d.recentProcessed?.length
                         ? d.recentProcessed.map((i, idx) => {
                             const statusClass = `status-${i.statusId}`;
-                            const reasonCell = i.reason && i.reason.trim()
+                            const reasonCell = i.reason?.trim()
                                 ? `<td title="${e(i.reason)}">${e(i.reason.substring(0, 40))}...</td>`
                                 : `<td>—</td>`;
                             return `
-                                            <tr>
-                                                <td class="num">${idx + 1}</td>
-                                                <td>${e(i.source)}</td>
-                                                <td title="${e(i.title)}">${e(i.title?.substring(0, 55) || "بدون عنوان")}...</td>
-                                                <td class="${statusClass}">${e(i.status) || '—'}</td>
-                                                ${reasonCell}
-                                                <td>${i.insertTime || ''}</td>
-                                                <td class="link-cell">${i.link ? `<a href="${e(i.link)}" target="_blank">Link</a>` : '—'}</td>
-                                            </tr>`;
+                                        <tr>
+                                            <td class="num">${idx + 1}</td>
+                                            <td>${e(i.source)}</td>
+                                            <td title="${e(i.title)}">${e(i.title?.substring(0, 55) || "بدون عنوان")}...</td>
+                                            <td class="${statusClass}">${e(i.status) || '—'}</td>
+                                            ${reasonCell}
+                                            <td>${i.insertTime || ''}</td>
+                                            <td class="link-cell">${i.link ? `<a href="${e(i.link)}" target="_blank">Link</a>` : '—'}</td>
+                                        </tr>`;
                         }).join('')
                         : `<tr><td colspan="7" class="empty">هنوز خبری پردازش نشده</td></tr>`
                     }
-                            </tbody>
-                        </table>`;
+                        </tbody>
+                    </table>`;
 
                 startCountdown();
 
             } catch (err) {
-                console.error("خطا:", err);
+                console.error(err);
                 debugTimesEl.innerHTML = `<span style="color:#f66;">خطا در دریافت داده‌ها</span>`;
                 startCountdown();
+            } finally {
+                isLoading = false;
             }
         }
 
         load();
-        setInterval(load, 100000); // هر ۱۰ ثانیه کامل رفرش
     </script>
+
 </body>
 </html>
