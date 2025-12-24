@@ -50,7 +50,7 @@ public class FootballforiBackgroundService : BackgroundService
                 _logger.LogError(ex, "خطا در واکشی RSS");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(10), ct);
+            await Task.Delay(TimeSpan.FromMinutes(20), ct);
         }
     }
 
@@ -86,8 +86,8 @@ public class FootballforiBackgroundService : BackgroundService
                 _logger.LogError(ex, "خطا در انتشار خبر");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(20), ct);
-            //await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
+            //await Task.Delay(TimeSpan.FromSeconds(20), ct);
+             await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
             _logger.LogWarning("PublishContinuouslyAsync خاتمه یافت");
         }
     }
