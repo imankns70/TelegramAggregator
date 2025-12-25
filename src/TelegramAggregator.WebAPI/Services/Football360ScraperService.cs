@@ -32,8 +32,19 @@ namespace TelegramAggregator.WebAPI.Services
 
                 // سلکتور اصلی و دقیق (این باید حداقل ۱۰-۱۵ تا برگردونه)
                 // سلکتور اصلی: همه لینک‌های خبری
-                var newsNodes = doc.DocumentNode.SelectNodes("//a[contains(@href, '/post/')]");
+                // سلکتور اصلی: همه آیتم‌های خبری در بخش "جدیدترین‌ها"
+                var newsNodes = doc.DocumentNode.SelectNodes("//div[contains(@class, 'NewNews_postItem')]//a[contains(@href, '/post/')]");
 
+                if (newsNodes == null || !newsNodes.Any())
+                {
+                    // fallback گسترده‌تر در صورت تغییر کلاس
+                    newsNodes = doc.DocumentNode.SelectNodes("//article/a[contains(@href, '/post/')]");
+                }
+
+                if (newsNodes == null || !newsNodes.Any())
+                {
+                    return newsList;
+                }
                 if (newsNodes == null || !newsNodes.Any())
                 {
                     Console.WriteLine("[Football360] هیچ خبری پیدا نشد – سایت ممکنه تغییر کرده باشه.");
@@ -105,16 +116,23 @@ namespace TelegramAggregator.WebAPI.Services
             if (string.IsNullOrWhiteSpace(href)) return null;
 
             item.Link = "https://football360.ir" + (href.StartsWith("/") ? href : "/" + href);
-           
+
             var html = await _http.GetStringAsync(item.Link, ct);
             var doc = new HtmlDocument();
             doc.LoadHtml(html);
 
-            var titleNode = doc.DocumentNode
-           .SelectSingleNode("//h1[contains(@class,'__title')]");
+            var titleNode = node.SelectSingleNode(".//h3");
+            string title = titleNode?.InnerText.Trim() ?? node.InnerText.Trim();
 
-            item.Title = CleanDescription(HttpUtility.HtmlDecode(titleNode?.InnerText));
-
+            if (string.IsNullOrWhiteSpace(title) || title.Length < 10) return null;
+            // پاکسازی عنوان از زمان و موارد اضافی (مثل "۲۲ دقیقه پیش")
+            item.Title = HttpUtility.HtmlDecode(title)
+                .Replace("دقیقه پیش", "")
+                .Replace("ساعت پیش", "")
+                .Replace("روز پیش", "")
+                .Trim();
+            item.Title = CleanDescription(HttpUtility.HtmlDecode(title));
+            if (item.Title.Contains("لایو") || item.Title.Contains("زنده") || item.Title.Contains("فانتزی")) return null;
 
             var subtitleNode = doc.DocumentNode.SelectSingleNode("//div[contains(@class,'__subTitle')]");
 
