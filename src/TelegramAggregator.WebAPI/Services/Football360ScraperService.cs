@@ -56,7 +56,7 @@ namespace TelegramAggregator.WebAPI.Services
                     .GroupBy(n => n.GetAttributeValue("href", "").Trim())
                     .Select(g => g.First())
                     .Take(MaxItems);
-                foreach (var node in newsNodes)
+                foreach (var node in uniqueNodes)
                 {
                     try
                     {
@@ -134,7 +134,7 @@ namespace TelegramAggregator.WebAPI.Services
             item.Title = CleanDescription(HttpUtility.HtmlDecode(title));
             if (item.Title.Contains("لایو") || item.Title.Contains("زنده") || item.Title.Contains("فانتزی")) return null;
 
-            var subtitleNode = doc.DocumentNode.SelectSingleNode("//div[contains(@class,'__subTitle')]");
+            var subtitleNode = doc.DocumentNode.SelectSingleNode("//div[contains(@class,'style_subTitle__iNvlW')]");
 
             if (subtitleNode != null)
             {
@@ -145,7 +145,7 @@ namespace TelegramAggregator.WebAPI.Services
 
 
             var paragraphNodes = doc.DocumentNode
-            .SelectNodes("//div[contains(@class,'__content')]//p");
+            .SelectNodes("//div[contains(@class,'style_content__qroM7')]//p");
 
             if (paragraphNodes != null && paragraphNodes.Count > 0)
             {

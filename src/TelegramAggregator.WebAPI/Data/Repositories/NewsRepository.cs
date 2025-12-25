@@ -388,7 +388,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         {
             var item = await GetAll()
                 .Where(n => n.NewsStatusId == StatusEnumeration.Sent.Id)
-                .OrderByDescending(n => n.Id)                
+                .OrderByDescending(n => n.SentDate)                
                 .FirstOrDefaultAsync(ct);
 
             return item;

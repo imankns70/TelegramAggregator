@@ -50,27 +50,27 @@ namespace TelegramAggregator.WebAPI.Services
         public async Task FetchAndFilterNewsAndAddToQueueAsync(CancellationToken ct)
         {
             var allItems = new List<NewsItem>();
-            // foreach (var source in _footbalForiSettings.Sources)
-            // {
-            //     try
-            //     {
-            //         var rssContent = await _httpHelper.GetStringAsync(source.Url, ct);
-            //         if (string.IsNullOrWhiteSpace(rssContent))
-            //         {
-            //             _logger.LogWarning("RSS خالی از {Source}", source.Name);
-            //             continue;
-            //         }
+            foreach (var source in _footbalForiSettings.Sources)
+            {
+                try
+                {
+                    var rssContent = await _httpHelper.GetStringAsync(source.Url, ct);
+                    if (string.IsNullOrWhiteSpace(rssContent))
+                    {
+                        _logger.LogWarning("RSS خالی از {Source}", source.Name);
+                        continue;
+                    }
 
-            //         var parsed = _rssParser.Parse(rssContent);
+                    var parsed = _rssParser.Parse(rssContent);
 
-            //         allItems.AddRange(parsed);
-            //     }
-            //     catch (Exception ex)
-            //     {
-            //         _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name, source.Url);
-            //         await Task.Delay(3000, ct);
-            //     }
-            // }
+                    allItems.AddRange(parsed);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name, source.Url);
+                    await Task.Delay(3000, ct);
+                }
+            }
 
             var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
             allItems.AddRange(football360News);

@@ -84,10 +84,11 @@ public class FootballforiBackgroundService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "خطا در انتشار خبر");
+                 await Task.Delay(TimeSpan.FromSeconds(3), ct);
             }
 
-            //await Task.Delay(TimeSpan.FromSeconds(20), ct);
-             await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
+            //await Task.Delay(TimeSpan.FromSeconds(60), ct);
+            await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
             _logger.LogWarning("PublishContinuouslyAsync خاتمه یافت");
         }
     }
