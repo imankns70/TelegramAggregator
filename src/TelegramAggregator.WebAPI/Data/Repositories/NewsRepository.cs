@@ -6,16 +6,18 @@ using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models.Entities;
 using TelegramAggregator.WebAPI.Models.FootbalSettings;
+using TelegramAggregator.WebAPI.Services;
 
 namespace TelegramAggregator.WebAPI.Models.Repositories
 {
     public class NewsRepository : INewsRepository
     {
         private readonly TelegramAggregatorContext _context;
-
-        public NewsRepository(TelegramAggregatorContext context)
+        private readonly ILogger<NewsRepository> _logger;
+        public NewsRepository(TelegramAggregatorContext context, ILogger<NewsRepository> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         public IQueryable<News> GetAll()
@@ -32,15 +34,19 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         public async Task InQueueAsync(NewsItem newsItem, FootbalForiSettings footbalForiSettings, CancellationToken ct)
         {
             var link = ClearUrl(newsItem.Link);
-            var news = await GetAll().FirstAsync(a => a.Link == link, ct);
-            news.Score = ScoreCalculator.Calculate(newsItem, footbalForiSettings);
-            news.NewsStatusId = StatusEnumeration.InQueue.Id;
-            news.Histories.Add(new NewsHistory
+            var news = await GetAll().FirstOrDefaultAsync(a => a.Link == link, ct);
+            if (news != null)
             {
-                NewsStatusId = StatusEnumeration.InQueue.Id,
-                InsertDate = DateTimeOffset.UtcNow
-            });
-        
+                news.Score = ScoreCalculator.Calculate(newsItem, footbalForiSettings);
+                news.NewsStatusId = StatusEnumeration.InQueue.Id;
+                news.Histories.Add(new NewsHistory
+                {
+                    NewsStatusId = StatusEnumeration.InQueue.Id,
+                    InsertDate = DateTimeOffset.UtcNow
+                });
+            }
+            _logger.LogWarning($"این خبر با آی دی {newsItem.Link}  برای تغییر وضعیت آن از دریافت به صف یاتف نشد");
+
 
         }
         public async Task InQueueRangeAsync(List<NewsItem> newsItems, FootbalForiSettings footbalForiSettings, CancellationToken ct)
@@ -66,7 +72,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
                 Reason = reason
             });
 
-         
+
             if (saveNow)
             {
                 await _context.SaveChangesAsync(ct);
@@ -283,7 +289,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
         public async Task ChangeNewsInQueueToExpiredState(CancellationToken ct)
         {
-            var yest= DateTimeOffset.UtcNow.AddDays(-1);
+            var yest = DateTimeOffset.UtcNow.AddDays(-1);
             var inQueueNews = await GetAll()
                                          .Include(n => n.Histories)
                                          .Where(n => n.NewsStatusId == StatusEnumeration.InQueue.Id && n.InsertDate.Date == yest.Date)
@@ -330,9 +336,9 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         }
 
 
-        public async Task<IReadOnlyList<News>> GetTodayNews(DateTimeOffset iranStartDate,CancellationToken ct)
+        public async Task<IReadOnlyList<News>> GetTodayNews(DateTimeOffset iranStartDate, CancellationToken ct)
         {
-         
+
 
             var allDate = await GetAll().Include(a => a.SportSource)
                                          .Where(a => a.InsertDate >= iranStartDate)
@@ -354,20 +360,20 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
                 .ThenInclude(n => n.SportSource)
                 .Include(a => a.NewsStatus)
                 .Where(a => a.InsertDate >= iranStartDate)
-                .OrderByDescending(a => a.InsertDate)                
+                .OrderByDescending(a => a.InsertDate)
                 .AsNoTracking()
                 .ToListAsync(ct);
 
             return allDate;
         }
 
-       
+
 
         public async Task<News> GetLastNews(CancellationToken ct)
         {
             var item = await GetAll()
                 .Where(n => n.NewsStatusId == StatusEnumeration.Sent.Id)
-                .OrderByDescending(n => n.SentDate)                
+                .OrderByDescending(n => n.SentDate)
                 .FirstOrDefaultAsync(ct);
 
             return item;
