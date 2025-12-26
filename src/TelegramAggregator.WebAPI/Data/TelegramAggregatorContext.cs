@@ -26,9 +26,9 @@ namespace TelegramAggregator.WebAPI.Data
                 entity.Property(e => e.Score).IsRequired(false);
                 entity.Property(e => e.Title).IsRequired().HasMaxLength(1000);
                 entity.Property(e => e.ShortDescription).IsRequired().HasMaxLength(2000);
-                entity.Property(e => e.FullDescription).IsRequired(false).HasMaxLength(10000);
-                entity.Property(e => e.Caption).IsRequired(false).HasMaxLength(5000);
-                entity.Property(e => e.Link).IsRequired().IsRequired();
+                entity.Property(e => e.FullDescription).IsRequired(false).HasColumnType("text");
+                entity.Property(e => e.Caption).IsRequired(false).HasColumnType("text");
+                entity.Property(e => e.Link).IsRequired().HasColumnType("text"); 
                 entity.Property(e => e.InsertDate).IsRequired();
                 entity.Property(e => e.PubDate).IsRequired();
                 entity.Property(e => e.SentDate).IsRequired(false);

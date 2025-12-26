@@ -21,7 +21,7 @@ namespace TelegramAggregator.WebAPI.Services
         private readonly FootbalForiSettings _footbalForiSettings;
         private readonly IFootball360ScraperService _football360ScraperService;
         private readonly INewsRepository _newsRepository;
-    
+
 
         public FootballforiService(
             ITelegramBotClient bot,
@@ -89,7 +89,7 @@ namespace TelegramAggregator.WebAPI.Services
             if (news is null)
             {
                 await Task.Delay(3000, ct);
-             
+
             }
             else
             {
@@ -145,12 +145,13 @@ namespace TelegramAggregator.WebAPI.Services
             else
             {
 
-                var caption = CaptionMakerExtension.GetCaption(item);
-                item.Caption = caption;
-                await _newsRepository.PublishedAsync(item, ct);
-                Message sentMessage;
+
                 try
                 {
+                    var caption = CaptionMakerExtension.GetCaption(item);
+                    item.Caption = caption;
+                    await _newsRepository.PublishedAsync(item, ct);
+                    Message sentMessage;
 
                     sentMessage = await _bot.SendPhoto(
                         chatId: channelId, // 👈 مستقیماً کانال

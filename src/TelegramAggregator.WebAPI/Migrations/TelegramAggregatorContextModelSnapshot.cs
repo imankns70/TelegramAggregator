@@ -31,17 +31,15 @@ namespace TelegramAggregator.WebAPI.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Caption")
-                        .HasMaxLength(5000)
-                        .HasColumnType("character varying(5000)");
+                        .HasColumnType("text");
 
                     b.Property<string>("FullDescription")
-                        .HasMaxLength(10000)
-                        .HasColumnType("character varying(10000)");
+                        .HasColumnType("text");
 
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");
 
-                    b.Property<DateTime>("InsertDate")
+                    b.Property<DateTimeOffset>("InsertDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Link")
@@ -51,13 +49,13 @@ namespace TelegramAggregator.WebAPI.Migrations
                     b.Property<int>("NewsStatusId")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime>("PubDate")
+                    b.Property<DateTimeOffset>("PubDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("Score")
                         .HasColumnType("integer");
 
-                    b.Property<DateTime?>("SentDate")
+                    b.Property<DateTimeOffset?>("SentDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("ShortDescription")

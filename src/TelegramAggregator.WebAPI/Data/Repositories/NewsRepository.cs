@@ -97,7 +97,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             var videoKeywords = footbalForiSettings.VideoKeywords;
             var otherSportsKeywords = footbalForiSettings.OtherSportsKeywords;
             var womenKeywords = footbalForiSettings.WomenKeywords;
-            var cutoff = DateTimeOffset.Now.AddHours(-6);
+            //var cutoff = DateTimeOffset.Now.AddHours(-6);
 
             // استفاده از List برای نگه داشتن decay با دلیل
             List<(string Reason, NewsItem Item)> decayList = new List<(string, NewsItem)>();
@@ -139,7 +139,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
                 else if (text.Contains("جدول پخش زنده")) decayList.Add(("جدول پخش زنده", item));
                 else if (text.Contains("پخش بازی")) decayList.Add(("پخش بازی", item));
                 else if (text.Contains("روزنامه خبرورزشی")) decayList.Add(("روزنامه خبرورزشی", item));
-                else if (item.PubDate < cutoff) decayList.Add(("قدیمی‌تر از ۶ ساعت", item));
+                //else if (item.PubDate < cutoff) decayList.Add(("قدیمی‌تر از ۶ ساعت", item));
 
                 if (decayList.Any(d => d.Item == item))
                     continue;
@@ -283,9 +283,10 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
         public async Task ChangeNewsInQueueToExpiredState(CancellationToken ct)
         {
+            var yest= DateTimeOffset.UtcNow.AddDays(-1);
             var inQueueNews = await GetAll()
                                          .Include(n => n.Histories)
-                                         .Where(n => n.NewsStatusId == StatusEnumeration.InQueue.Id)
+                                         .Where(n => n.NewsStatusId == StatusEnumeration.InQueue.Id && n.InsertDate.Date == yest.Date)
                                          .ToListAsync(ct);
             if (!inQueueNews.Any())
                 return;

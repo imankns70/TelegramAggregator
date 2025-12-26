@@ -12,9 +12,7 @@
         public string SystemStatus { get; set; } = "Unknown";
         public string StatusColor { get; set; } = "green";
         public string QueueDetails { get; set; } = "Empty";
-        public string UtcNow { get; set; } 
-        public string IranNow { get; set; } 
-        public string ServerLocal { get; set; } 
+   
 
 
         public Dictionary<string, List<QueueFootbalForiDashboardDto>> Queues { get; set; }

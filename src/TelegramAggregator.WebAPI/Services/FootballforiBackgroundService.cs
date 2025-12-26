@@ -30,10 +30,14 @@ public class FootballforiBackgroundService : BackgroundService
     {
         _logger.LogInformation("شروع حلقه واکشی RSS");
 
+        var iranTz = GetIranTimeZone();
+
         while (!ct.IsCancellationRequested)
         {
-            var now = DateTimeOffset.Now;
-            if (now.Hour >= 1 && now.Hour < 8)
+            var nowIran = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, iranTz);
+
+            // توقف واکشی از 01:00 تا 07:59 به وقت ایران
+            if (nowIran.Hour >= 1 && nowIran.Hour < 8)
             {
                 await Task.Delay(TimeSpan.FromMinutes(30), ct);
                 continue;
@@ -43,7 +47,7 @@ public class FootballforiBackgroundService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var service = scope.ServiceProvider.GetRequiredService<FootballforiService>();
-                await service.FetchAndFilterNewsAndAddToQueueAsync(ct);  // فقط این متد رو صدا بزن
+                await service.FetchAndFilterNewsAndAddToQueueAsync(ct);
             }
             catch (Exception ex)
             {
@@ -54,26 +58,74 @@ public class FootballforiBackgroundService : BackgroundService
         }
     }
 
+
     private async Task PublishLoopAsync(CancellationToken ct)
     {
         _logger.LogInformation("شروع حلقه انتشار خبر");
-
+        var iranTz = GetIranTimeZone();
+        DateOnly? lastExpireRun = null;
         while (!ct.IsCancellationRequested)
         {
-            var now = DateTime.Now;
-            bool isWorkingHours = now.Hour >= 8 || now.Hour < 3;
+
+            var nowUtc = DateTime.UtcNow;
+            var nowIran = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, iranTz);
+
+            bool isWorkingHours = (nowIran.Hour >= 8 && nowIran.Hour <= 23) || nowIran.Hour < 3;
+
 
             if (!isWorkingHours)
             {
-                if (now.Hour == 3 && now.Minute < 5)
+                _logger.LogDebug(
+                    "Not working hours | IranTime={IranTime} | Hour={Hour}",
+                    nowIran,
+                    nowIran.Hour
+                );
+
+                if (nowIran.Hour >= 3 &&
+                    lastExpireRun != DateOnly.FromDateTime(nowIran))
                 {
-                    using var scope = _scopeFactory.CreateScope();
-                    var repo = scope.ServiceProvider.GetRequiredService<INewsRepository>();
-                    await repo.ChangeNewsInQueueToExpiredState(ct);
+                    lastExpireRun = DateOnly.FromDateTime(nowIran);
+
+                    _logger.LogInformation(
+                        "Expire job STARTED | IranTime={IranTime}",
+                        nowIran
+                    );
+
+                    try
+                    {
+                        using var scope = _scopeFactory.CreateScope();
+                        var repo = scope.ServiceProvider.GetRequiredService<INewsRepository>();
+
+                        await repo.ChangeNewsInQueueToExpiredState(ct);
+
+                        _logger.LogInformation(
+                            "Expire job FINISHED | IranTime={IranTime}",
+                            nowIran
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(
+                            ex,
+                            "Expire job ERROR | IranTime={IranTime}",
+                            nowIran
+                        );
+
+                        lastExpireRun = null; // اجازه retry
+                    }
                 }
+                else
+                {
+                    _logger.LogDebug(
+                        "Expire job skipped | IranTime={IranTime} | Reason=AlreadyRunOrBefore3AM",
+                        nowIran
+                    );
+                }
+
                 await Task.Delay(TimeSpan.FromMinutes(30), ct);
                 continue;
             }
+
 
             try
             {
@@ -84,12 +136,25 @@ public class FootballforiBackgroundService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "خطا در انتشار خبر");
-                 await Task.Delay(TimeSpan.FromSeconds(3), ct);
+                await Task.Delay(TimeSpan.FromSeconds(3), ct);
             }
 
-            //await Task.Delay(TimeSpan.FromSeconds(60), ct);
+            //await Task.Delay(TimeSpan.FromSeconds(10), ct);
             await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
-            _logger.LogWarning("PublishContinuouslyAsync خاتمه یافت");
+
+        }
+
+    }
+    private static TimeZoneInfo GetIranTimeZone()
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("Iran Standard Time");
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById("Asia/Tehran");
         }
     }
+
 }

@@ -356,10 +356,7 @@
 </head>
 <body>
     <div class="top-header">
-        <span class="main-title">دیباگ زنده ربات فوتبال فوری — نسخه هوشمند</span>
-        <div class="debug-times" id="debug-times">
-            در حال بارگذاری زمان‌ها...
-        </div>
+        <span class="main-title">دیباگ زنده ربات فوتبال فوری — نسخه هوشمند</span>       
         <span class="refresh-text">رفرش خودکار در <span id="countdown">20</span> ثانیه</span>
     </div>
     <div class="main-container">
@@ -410,7 +407,7 @@
         const publishedEl = document.getElementById('published');
         const logsEl = document.getElementById('logs');
         const countdownEl = document.getElementById('countdown');
-        const debugTimesEl = document.getElementById('debug-times');
+       
 
         let countdown = 20;
         let countdownTimer = null;
@@ -442,11 +439,7 @@
                 if (!response.ok) throw new Error("API Error");
                 const d = await response.json();
 
-                debugTimesEl.innerHTML = `
-                    <span><strong>UTC:</strong> ${e(d.utcNow || '—')}</span>
-                    <span><strong>سرور:</strong> ${e(d.serverLocal || '—')}</span>
-                    <span><strong>ایران:</strong> ${e(d.iranNow || '—')}</span>
-                `;
+               
 
                 const color =
                     d.statusColor === 'red' ? '#f66' :
