@@ -5,120 +5,81 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 {
     public static class ScoreCalculator
     {
+        private const int MaxScoreLimit = 200;
+
         public static int Calculate(NewsItem news, FootbalForiSettings settings)
         {
-            // همه متن‌ها رو با هم چک می‌کنیم (عنوان + شرح کوتاه + متن کامل)
             var text = $"{news.Title} {news.ShortDescription} {news.FullDescription}".ToLowerInvariant();
-
             int score = 0;
 
-       
+            // ScoredItem-based dictionaries
+            var scoredDictionaries = new List<Dictionary<string, List<ScoredItem>>>
+            {
+                settings.Conferences,
+                settings.Teams,
+                settings.Celebrities,
+                settings.PerspolisPlayers,
+                settings.EsteghlalPlayers,
+                settings.Coaches
+            };
 
-            score += GetMaxScore(settings.Conferences, text);
+            foreach (var dict in scoredDictionaries)
+            {
+                score += GetMaxScoreFromDictionary(dict, text);
+            }
 
-            // ۱. تیم‌ها
-            score += GetMaxScore(settings.Teams, text);
-            // ۲. مربیان
+            // Commentators
+            score += GetMaxScoreFromList(settings.Commentators, text);
 
-            // ۳. سلبریتی‌های جهانی (مسی، رونالدو، هالند، عادل و …)
-            score += GetMaxScore(settings.Celebrities, text);
+            // Keywords
+            score += ContainsAny(text, settings.AgencyKeywords) ? settings.Scoring.Weights.Agencies : 0;
+            score += ContainsAny(text, settings.TransferKeywords) ? settings.Scoring.Weights.TransferNews : 0;
+            score += ContainsAny(text, settings.SevereInjuryKeywords) ? settings.Scoring.Weights.SevereInjury : 0;
+            score += ContainsAny(text, settings.ExclusiveTags) ? settings.Scoring.Weights.ExclusiveTag : 0;
 
-            // ۴. بازیکنان پرسپولیس و استقلال — وزن جدا و منطقی
-            score += GetMaxScore(settings.PerspolisPlayers, text);
-            score += GetMaxScore(settings.EsteghlalPlayers, text);
-            score += GetMaxScore(settings.Coaches, text);
-
-            // ۵. گزارشگران (عادل، پیمان یوسفی و …)
-            score += GetCommentatorScore(text, settings.Commentators);
-
-            
-            if (ContainsAny(text, settings.AgencyKeywords))
-                score += settings.Scoring.Weights.Agencies;
-
-            // ۶. نقل و انتقالات — یکی از مهم‌ترین موضوعات ایران!
-            if (ContainsAny(text, settings.TransferKeywords))
-                score += settings.Scoring.Weights.TransferNews;
-
-            // ۷. مصدومیت سنگین
-            if (ContainsAny(text, settings.SevereInjuryKeywords))
-                score += settings.Scoring.Weights.SevereInjury;
-
-            // ۸. خبر اختصاصی
-            if (ContainsAny(text, settings.ExclusiveTags))
-                score += settings.Scoring.Weights.ExclusiveTag;
-
-            // ۹. تازگی خبر (حداکثر ۱۵ امتیاز)
+            // Freshness
             var minutesOld = (DateTimeOffset.UtcNow - news.PubDate).TotalMinutes;
             if (minutesOld < 30)
                 score += settings.Scoring.Weights.FreshnessBonus;
             else if (minutesOld < 60)
-                score += settings.Scoring.Weights.FreshnessBonus / 2; // +7.5 → 8
+                score += settings.Scoring.Weights.FreshnessBonus / 2;
 
-            // ۱۰. بازی زنده
-            //if (IsLiveMatch(text))
-            //    score += settings.Scoring.Weights.LiveMatch;
-
-            // ۱۱. دربی یا ال‌کلاسیکو
+            // Derby matches
             if (IsDerbyMatch(text))
                 score += settings.Scoring.Weights.DerbyMatch;
 
-            // سقف امتیاز: ۲۰۰ (برای خبرهای خیلی داغ مثل دربی زنده با نقل رسمی!)
-            return Math.Clamp(score, 0, 200);
+            return Math.Clamp(score, 0, MaxScoreLimit);
         }
 
-        private static int GetMaxScore(Dictionary<string, List<ScoredItem>> dict, string text)
+        private static int GetMaxScoreFromDictionary(Dictionary<string, List<ScoredItem>> dict, string text)
         {
-            int max = 0;
+            int maxScore = 0;
             foreach (var list in dict.Values)
             {
-                foreach (var item in list)
-                {
-                    if (text.Contains(item.Name.ToLowerInvariant()))
-                    {
-                        max = Math.Max(max, item.Score);
-                    }
-                }
+                maxScore = Math.Max(maxScore, GetMaxScoreFromList(list, text));
             }
-            return max;
+            return maxScore;
         }
 
-        private static int GetCommentatorScore(string text, List<ScoredItem> commentators)
+        private static int GetMaxScoreFromList(IEnumerable<ScoredItem> items, string text)
         {
-            return commentators
-                .Where(c => text.Contains(c.Name.ToLowerInvariant()))
-                .Max(c => (int?)c.Score) ?? 0;
+            return items
+                .Where(i => text.Contains(i.Name.ToLowerInvariant()))
+                .Max(i => (int?)i.Score) ?? 0;
         }
 
-        private static bool ContainsAny(string text, IEnumerable<string> keywords)
+        private static bool ContainsAny(string text, IEnumerable<string>? keywords)
             => keywords?.Any(k => text.Contains(k.ToLowerInvariant())) == true;
-
-        private static bool IsLiveMatch(string text)
-        {
-            return text.Contains("دقیقه") ||
-                   text.Contains("گل به خودی") ||
-                   text.Contains("پنالتی") ||
-                   text.Contains("اخراج") ||
-                   text.Contains("گلزنی") ||
-                   text.Contains("نیمه اول") ||
-                   text.Contains("نیمه دوم") ||
-                   text.Contains("وقت اضافه") ||
-                   text.Contains("در حال برگزاری");
-        }
 
         private static bool IsDerbyMatch(string text)
         {
-            return text.Contains("دربی") ||
-                   text.Contains("ال‌کلاسیکو") ||
-                   text.Contains("ال کلاسیکو") ||
-                   text.Contains("منچستر دربی") ||
-                   text.Contains("دربی تهران") ||
-                   text.Contains("دربی ۱۰") ||
-                   text.Contains("پرسپولیس استقلال") ||
-                   text.Contains("استقلال پرسپولیس") ||
-                   text.Contains("رئال بارسا") ||
-                   text.Contains("بارسا رئال") ||
-                   text.Contains("بارسا لندن") ||
-                   text.Contains("دربی منچستر");
+            var derbyKeywords = new[]
+            {
+                "دربی", "ال‌کلاسیکو", "ال کلاسیکو", "منچستر دربی", "دربی تهران",
+                "دربی ۱۰", "پرسپولیس استقلال", "استقلال پرسپولیس",
+                "رئال بارسا", "بارسا رئال", "بارسا لندن", "دربی منچستر"
+            };
+            return ContainsAny(text, derbyKeywords);
         }
     }
 }

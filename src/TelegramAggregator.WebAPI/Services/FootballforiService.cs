@@ -150,7 +150,7 @@ namespace TelegramAggregator.WebAPI.Services
                 {
                     var caption = CaptionMakerExtension.GetCaption(item);
                     item.Caption = caption;
-                    await _newsRepository.PublishedAsync(item, ct);
+
                     Message sentMessage;
 
                     sentMessage = await _bot.SendPhoto(
@@ -159,6 +159,8 @@ namespace TelegramAggregator.WebAPI.Services
                         caption: caption,
                         parseMode: ParseMode.Html,
                         cancellationToken: ct);
+
+                    await _newsRepository.PublishedAsync(item, ct);
 
                 }
                 catch (Exception ex)

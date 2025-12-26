@@ -198,7 +198,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             news.Histories.Add(new NewsHistory
             {
                 NewsStatusId = StatusEnumeration.Sent.Id,
-                InsertDate = DateTimeOffset.UtcNow
+                InsertDate = now
             });
 
             await _context.SaveChangesAsync(ct);
@@ -330,12 +330,12 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         }
 
 
-        public async Task<IReadOnlyList<News>> GetTodayNews(CancellationToken ct)
+        public async Task<IReadOnlyList<News>> GetTodayNews(DateTimeOffset iranStartDate,CancellationToken ct)
         {
-            var startDate = GetTodayStartUtcOffset();
+         
 
             var allDate = await GetAll().Include(a => a.SportSource)
-                                         .Where(a => a.InsertDate >= startDate)
+                                         .Where(a => a.InsertDate >= iranStartDate)
                                          .AsNoTracking()
                                          .ToListAsync(ct);
 
@@ -343,47 +343,25 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
         }
 
-        public async Task<IReadOnlyList<NewsHistory>> GetTodayNewsHistory(int take, CancellationToken ct)
+        public async Task<IReadOnlyList<NewsHistory>> GetTodayNewsHistory(DateTimeOffset iranStartDate, CancellationToken ct)
         {
 
-            var iranStartOfDay = GetTodayStartUtcOffset(); // 7:00 AM Iran time today
+            // 7:00 AM Iran time today
 
 
             var allDate = await _context.NewsHistories
                 .Include(a => a.News)
                 .ThenInclude(n => n.SportSource)
                 .Include(a => a.NewsStatus)
-                .Where(a => a.InsertDate >= iranStartOfDay)
-                .OrderByDescending(a => a.InsertDate)
-                .Take(take)
+                .Where(a => a.InsertDate >= iranStartDate)
+                .OrderByDescending(a => a.InsertDate)                
                 .AsNoTracking()
                 .ToListAsync(ct);
 
             return allDate;
         }
 
-        public static DateTimeOffset GetTodayStartUtcOffset(int hour = 8)
-        {
-            var iranTimeZone = TimeZoneInfo.FindSystemTimeZoneById(
-                OperatingSystem.IsWindows() ? "Iran Standard Time" : "Asia/Tehran");
-
-            // زمان فعلی ایران به صورت DateTimeOffset
-            var nowIran = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, iranTimeZone);
-
-            // امروز ایران ساعت 00:00
-            var todayIran = new DateTimeOffset(
-                nowIran.Year,
-                nowIran.Month,
-                nowIran.Day,
-                0, 0, 0,
-                iranTimeZone.GetUtcOffset(nowIran));
-
-            // ساعت شروع بیزینس (مثلاً ۸ صبح ایران)
-            var startIran = todayIran.AddHours(hour);
-
-            // تبدیل به UTC
-            return startIran.ToUniversalTime();
-        }
+       
 
         public async Task<News> GetLastNews(CancellationToken ct)
         {

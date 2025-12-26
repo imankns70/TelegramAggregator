@@ -14,10 +14,33 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
         {
             _newsRepository = newsRepository;
         }
+        public static DateTimeOffset GetTodayStartUtcOffset(int hour = 8)
+        {
+            var iranTimeZone = GetIranTimeZone();
+
+            // زمان فعلی ایران به صورت DateTimeOffset
+            var nowIran = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, iranTimeZone);
+
+            // امروز ایران ساعت 00:00
+            var todayIran = new DateTimeOffset(
+                nowIran.Year,
+                nowIran.Month,
+                nowIran.Day,
+                0, 0, 0,
+                iranTimeZone.GetUtcOffset(nowIran));
+
+            // ساعت شروع بیزینس (مثلاً ۸ صبح ایران)
+            var startIran = todayIran.AddHours(hour);
+
+            // تبدیل به UTC
+            return startIran.ToUniversalTime();
+        }
         public async Task<FootbalForiDashboardDto> GetDataAsync(CancellationToken ct)
         {
-            var iranTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Iran Standard Time");
-            var allDate = await _newsRepository.GetTodayNews(ct);
+            var iranStartOfDay = GetTodayStartUtcOffset(hour: 8);
+
+            var iranTimeZone = GetIranTimeZone();
+            var allDate = await _newsRepository.GetTodayNews(iranStartOfDay, ct);
             var accepted = allDate.Count(a => a.NewsStatusId == StatusEnumeration.Receive.Id || a.NewsStatusId == StatusEnumeration.InQueue.Id ||
                        a.NewsStatusId == StatusEnumeration.Sent.Id);
 
@@ -64,7 +87,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
 
                }).ToList();
 
-            var todayNewsHistoryData = await _newsRepository.GetTodayNewsHistory(take: 60, ct);
+            var todayNewsHistoryData = await _newsRepository.GetTodayNewsHistory(iranStartOfDay, ct);
 
 
             var recentProcessed = todayNewsHistoryData
@@ -80,7 +103,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                     InsertTime = TimeZoneInfo.ConvertTime(x.InsertDate, iranTimeZone).ToString("HH:mm"),
 
                 }).ToList();
-       
+
             var viewModel = new FootbalForiDashboardDto
             {
                 TotalProcessed = allDate.Count,
@@ -94,7 +117,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
                 Queues = queues,
                 PublishedItems = publishedItems,
                 RecentProcessed = recentProcessed,
-          
+
             };
 
             return viewModel;
@@ -112,5 +135,16 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
             return (imageurl: "", caption: "");
         }
 
+        private static TimeZoneInfo GetIranTimeZone()
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Iran Standard Time");
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById("Asia/Tehran");
+            }
+        }
     }
 }
