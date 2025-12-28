@@ -7,8 +7,7 @@ namespace TelegramAggregator.WebAPI.Data.Repositories
     public interface INewsRepository
     {
         IQueryable<News> GetAll();
-        Task<News> GetByIdAsync(long id, CancellationToken ct);
-        Task ReceiveAsync(NewsItem newsItem, CancellationToken ct);
+        Task<News> GetByIdAsync(long id, CancellationToken ct); 
         Task PublishedAsync(News newsItem, CancellationToken ct);
         Task DecayAsync(News news, string reason, CancellationToken ct, bool saveNow = false);
         void FilterNews(List<NewsItem> news);

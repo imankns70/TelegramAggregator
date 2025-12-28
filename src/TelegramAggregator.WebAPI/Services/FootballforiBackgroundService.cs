@@ -139,8 +139,8 @@ public class FootballforiBackgroundService : BackgroundService
                 await Task.Delay(TimeSpan.FromSeconds(3), ct);
             }
 
-            //await Task.Delay(TimeSpan.FromSeconds(10), ct);
-            await Task.Delay(TimeSpan.FromMinutes(_rnd.Next(20, 40)), ct);
+            int randomId = _rnd.Next(20, 40);
+            await Task.Delay(TimeSpan.FromMinutes(randomId), ct);
 
         }
 

@@ -33,8 +33,8 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
         public async Task InQueueAsync(NewsItem newsItem, FootbalForiSettings footbalForiSettings, CancellationToken ct)
         {
-            var link = ClearUrl(newsItem.Link);
-            var news = await GetAll().FirstOrDefaultAsync(a => a.Link == link, ct);
+
+            var news = await GetAll().FirstOrDefaultAsync(a => a.Id == newsItem.Id, ct);
             if (news != null)
             {
                 news.Score = ScoreCalculator.Calculate(newsItem, footbalForiSettings);
@@ -80,18 +80,16 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         }
         public async Task DecayRangeAsync(List<(string Reason, NewsItem Item)> newsItems, CancellationToken ct)
         {
-            var links = newsItems.Select(a => ClearUrl(a.Item.Link)).ToHashSet();
-            var newsInDb = await GetAll().Where(a => links.Contains(a.Link)).ToListAsync(ct);
-            var newsDict = newsInDb.ToDictionary(n => n.Link);
+            var Ids = newsItems.Select(a => a.Item.Id).ToHashSet();
+            var newsInDb = await GetAll().Where(a => Ids.Contains(a.Id)).ToListAsync(ct);
+
 
             foreach (var item in newsItems)
             {
-                var cleanLink = ClearUrl(item.Item.Link);
-
-                if (!newsDict.TryGetValue(cleanLink, out var news))
-                    continue;
-
+                var news = newsInDb.First(a => a.Id == item.Item.Id);
                 await DecayAsync(news, item.Reason, ct);
+
+
             }
             await _context.SaveChangesAsync();
         }
@@ -99,6 +97,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
         public async Task ProcessNewsAsync(List<NewsItem> newsItems, FootbalForiSettings footbalForiSettings, CancellationToken ct)
         {
+
             await ReceiveRangeAsync(newsItems, ct);
             var videoKeywords = footbalForiSettings.VideoKeywords;
             var otherSportsKeywords = footbalForiSettings.OtherSportsKeywords;
@@ -209,33 +208,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
             await _context.SaveChangesAsync(ct);
         }
-        public async Task ReceiveAsync(NewsItem newsItem, CancellationToken ct)
-        {
-            var now = DateTimeOffset.UtcNow;
-            string cleanLink = ClearUrl(newsItem.Link);
-            int sportSourceId = GetSportSourceId(newsItem.SourceName);
-            var news = new News
-            {
-                Link = cleanLink,
-                Title = newsItem.Title,
-                ShortDescription = newsItem.ShortDescription,
-                FullDescription = newsItem.FullDescription,
-                InsertDate = now,
-                PubDate = newsItem.PubDate.ToUniversalTime(),
-                SportSourceId = sportSourceId,
-                NewsStatusId = StatusEnumeration.Receive.Id,
-            };
 
-            news.Histories.Add(new NewsHistory
-            {
-                InsertDate = now,
-                NewsStatusId = StatusEnumeration.Receive.Id,
-
-            });
-            await _context.AddAsync(news);
-
-
-        }
 
 
         public void FilterNews(List<NewsItem> news)
@@ -277,12 +250,37 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
         public async Task ReceiveRangeAsync(List<NewsItem> newsItems, CancellationToken ct)
         {
-            foreach (var news in newsItems)
+
+            foreach (var item in newsItems)
             {
-                await ReceiveAsync(news, ct);
+                var now = DateTimeOffset.UtcNow;
+                string cleanLink = ClearUrl(item.Link);
+                int sportSourceId = GetSportSourceId(item.SourceName);
+                var news = new News
+                {
+                    Link = cleanLink,
+                    Title = item.Title,
+                    ShortDescription = item.ShortDescription,
+                    FullDescription = item.FullDescription,
+                    InsertDate = now,
+                    PubDate = item.PubDate.ToUniversalTime(),
+                    SportSourceId = sportSourceId,
+                    NewsStatusId = StatusEnumeration.Receive.Id,
+                };
+
+                news.Histories.Add(new NewsHistory
+                {
+                    InsertDate = now,
+                    NewsStatusId = StatusEnumeration.Receive.Id,
+
+                });
+
+                await _context.AddAsync(news);
+                await _context.SaveChangesAsync(ct);
+                item.Id = news.Id;
+
             }
 
-            await _context.SaveChangesAsync(ct);
 
         }
 
@@ -292,7 +290,8 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             var yest = DateTimeOffset.UtcNow.AddDays(-1);
             var inQueueNews = await GetAll()
                                          .Include(n => n.Histories)
-                                         .Where(n => n.NewsStatusId == StatusEnumeration.InQueue.Id && n.InsertDate.Date == yest.Date)
+                                         .Where(n => (n.NewsStatusId == StatusEnumeration.InQueue.Id)
+                                         && n.InsertDate.Date == yest.Date)
                                          .ToListAsync(ct);
             if (!inQueueNews.Any())
                 return;

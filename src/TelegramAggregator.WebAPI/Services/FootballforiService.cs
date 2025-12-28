@@ -75,8 +75,11 @@ namespace TelegramAggregator.WebAPI.Services
             var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
             allItems.AddRange(football360News);
 
+            if (allItems.Any())
+            {
+                await _newsRepository.ProcessNewsAsync(allItems, _footbalForiSettings, ct);
 
-            await _newsRepository.ProcessNewsAsync(allItems, _footbalForiSettings, ct);
+            }
 
 
         }
