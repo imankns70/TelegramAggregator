@@ -26,7 +26,7 @@ public static class LoggerExtension
         {
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Verbose()
-                .Enrich.FromLogContext()
+                //.Enrich.FromLogContext()
                 .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
                 // ---------- جدول اصلی لاگ‌ها ----------
                 .WriteTo.PostgreSQL(
@@ -36,7 +36,8 @@ public static class LoggerExtension
                     needAutoCreateTable: false
                     ,  // تغییر به false
                     restrictedToMinimumLevel: LogEventLevel.Verbose,
-                    columnOptions: GetGeneralColumns())
+                    columnOptions: GetGeneralColumns()
+                    )
                 // ---------- لاگ‌های HttpClient جداگانه ----------
                 .WriteTo.Logger(lc => lc
                     .Filter.ByIncludingOnly(Matching.WithProperty<string>("Tag", tag => tag == "HttpClient"))
