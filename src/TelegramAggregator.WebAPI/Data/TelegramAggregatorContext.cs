@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using TelegramAggregator.WebAPI.Models.Entities;
+using TelegramAggregator.WebAPI.Models.Entities.Logs;
 
 namespace TelegramAggregator.WebAPI.Data
 {
@@ -14,9 +15,16 @@ namespace TelegramAggregator.WebAPI.Data
         public DbSet<NewsHistory> NewsHistories { get; set; } = null!;
         public DbSet<NewsStatus> NewsStatuses { get; set; } = null!;
         public DbSet<SportSource> SportSources { get; set; } = null!;
+        public DbSet<Log> Logs { get; set; }
+        public DbSet<HttpClientLog> HttpClientLogs { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            base.OnModelCreating(modelBuilder);
+            modelBuilder.Entity<Log>().HasIndex(l => l.TimeStamp);
+            modelBuilder.Entity<Log>().HasIndex(l => l.Level);
+
+            modelBuilder.Entity<HttpClientLog>().HasIndex(l => l.TimeStamp);
+            modelBuilder.Entity<HttpClientLog>().HasIndex(l => l.RequestedUrl);
+     
           
             // News
             modelBuilder.Entity<News>(entity =>
@@ -93,6 +101,10 @@ namespace TelegramAggregator.WebAPI.Data
               .WithOne(h => h.SportSource)
               .HasForeignKey(h => h.SportSourceId);
             });
+
+
+            //base
+            base.OnModelCreating(modelBuilder);
 
         }
     }

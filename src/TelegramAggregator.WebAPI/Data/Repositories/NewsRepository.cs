@@ -45,7 +45,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
                     InsertDate = DateTimeOffset.UtcNow
                 });
             }
-            _logger.LogWarning($"این خبر با آی دی {newsItem.Link}  برای تغییر وضعیت آن از دریافت به صف یاتف نشد");
+            _logger.LogDebug($"این خبر با آی دی {newsItem.Link}  برای تغییر وضعیت آن از دریافت به صف یاتف نشد");
 
 
         }
@@ -290,8 +290,8 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             var yest = DateTimeOffset.UtcNow.AddDays(-1);
             var inQueueNews = await GetAll()
                                          .Include(n => n.Histories)
-                                         .Where(n => (n.NewsStatusId == StatusEnumeration.InQueue.Id)
-                                         && n.InsertDate.Date == yest.Date)
+                                         .Where(n => (n.NewsStatusId == StatusEnumeration.InQueue.Id || n.NewsStatusId == StatusEnumeration.Receive.Id)
+                                         && n.InsertDate.Date >= yest.Date)
                                          .ToListAsync(ct);
             if (!inQueueNews.Any())
                 return;

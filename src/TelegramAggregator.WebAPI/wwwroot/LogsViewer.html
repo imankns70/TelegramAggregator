@@ -1,0 +1,157 @@
+﻿<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>نمایش زنده لاگ‌های  فوتبال فوری</title>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/datatables.net@2.1.8/js/dataTables.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/datatables.net-bs5@2.1.8/js/dataTables.bootstrap5.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/datatables.net-bs5@2.1.8/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: #000;
+            color: #0f9;
+            font-family: Tahoma, sans-serif;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #0cf;
+            text-shadow: 0 0 15px #0cf;
+            margin-bottom: 30px;
+        }
+
+        .table {
+            background: #111;
+            border: 1px solid #0f9;
+        }
+
+            .table thead th {
+                background: #001a00;
+                color: #0f9;
+                border-bottom: 2px solid #0f9;
+            }
+
+            .table tbody tr:hover {
+                background: #002200 !important;
+            }
+
+        .level-error {
+            background: #300;
+            color: #f66;
+            font-weight: bold;
+        }
+
+        .level-warning {
+            background: #330;
+            color: #ff0;
+            font-weight: bold;
+        }
+
+        .level-information {
+            background: #003;
+            color: #0cf;
+        }
+
+        .level-debug {
+            background: #111;
+            color: #aaa;
+        }
+
+        .properties {
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 0.9em;
+            max-width: 400px;
+        }
+
+        .refresh-info {
+            text-align: center;
+            color: #0f9;
+            margin: 20px 0;
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>نمایش زنده لاگ‌های Serilog</h1>
+        <div class="refresh-info">رفرش خودکار هر ۱۰ ثانیه — آخرین به‌روزرسانی: <span id="last-update">در حال بارگذاری...</span></div>
+
+        <table id="logsTable" class="table table-striped table-bordered table-hover">
+            <thead>
+                <tr>
+                    <th>زمان</th>
+                    <th>سطح</th>
+                    <th>پیام</th>
+                    <th>ویژگی‌ها (Properties)</th>
+                    <th>استثنا</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        const table = $('#logsTable').DataTable({
+            order: [[0, 'desc']], // جدیدترین بالا
+            pageLength: 50,
+            lengthMenu: [25, 50, 100, 200],
+            language: {
+                url: 'https://cdn.datatables.net/plug-ins/2.1.8/i18n/fa.json'
+            },
+            columnDefs: [
+                { targets: 0, width: "160px" },
+                { targets: 1, width: "100px", className: "text-center" },
+                { targets: 3, width: "400px" },
+                { targets: 4, width: "300px" }
+            ]
+        });
+
+        async function loadLogs() {
+            try {
+                const response = await fetch('/api/dashboard/logs'); // این endpoint رو باید بسازی
+                if (!response.ok) throw new Error("خطا در دریافت لاگ‌ها");
+
+                const logs = await response.json();
+
+                table.clear();
+
+                logs.forEach(log => {
+                    const levelClass = `level-${log.level.toLowerCase()}`;
+                    const properties = log.properties ? JSON.stringify(JSON.parse(log.properties), null, 2) : '';
+                    const exception = log.exception || '';
+
+                    table.row.add([
+                        new Date(log.timestamp).toLocaleString('fa-IR'),
+                        `<span class="${levelClass}">${log.level}</span>`,
+                        log.message || '',
+                        `<pre class="properties">${properties}</pre>`,
+                        exception ? `<pre style="color:#f66; font-size:0.9em;">${exception}</pre>` : ''
+                    ]);
+                });
+
+                table.draw();
+                document.getElementById('last-update').textContent = new Date().toLocaleString('fa-IR');
+            } catch (err) {
+                console.error(err);
+                document.getElementById('last-update').textContent = 'خطا در بارگذاری';
+            }
+        }
+
+        // اولین بار لود کن
+        loadLogs();
+
+        // هر ۱۰ ثانیه رفرش
+        setInterval(loadLogs, 10000);
+    </script>
+</body>
+</html>

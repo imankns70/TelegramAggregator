@@ -1,8 +1,11 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Serilog;
 using System.Text;
 using Telegram.Bot;
+using TelegramAggregator.WebAPI.BackgroundServices;
 using TelegramAggregator.WebAPI.Data;
+using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Services;
 using TelegramAggregator.WebAPI.Services.Dashboard;
@@ -11,6 +14,8 @@ Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding = Encoding.UTF8;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddSeriLogLogger();
+ 
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -28,6 +33,7 @@ builder.Services.AddRepositories();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
+
 // CORS
 builder.Services.AddCors(options =>
 {
@@ -40,7 +46,7 @@ builder.Services.AddCors(options =>
 });
 
 
-builder.Logging.AddConsole();
+ 
 
 
 
@@ -101,7 +107,7 @@ app.UseStaticFiles();        // مهم: برای debug.html و wwwroot
 app.UseRouting();
 app.UseCors("AllowAll");
 
-
+app.UseSerilogRequestLogging();
 
 app.MapControllers();
 
@@ -111,14 +117,13 @@ if (app.Environment.IsProduction())
     app.Urls.Add("http://0.0.0.0:5000");
 }
 
-if (app.Environment.IsProduction())
-{
+
     using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<TelegramAggregatorContext>();
         db.Database.Migrate();
     }
 
-}
+
 
 app.Run();

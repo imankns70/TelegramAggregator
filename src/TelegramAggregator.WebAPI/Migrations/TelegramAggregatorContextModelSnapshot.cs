@@ -22,6 +22,98 @@ namespace TelegramAggregator.WebAPI.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("TelegramAggregator.WebAPI.Models.Entities.HttpClientLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Exception")
+                        .HasColumnType("text")
+                        .HasColumnName("exception");
+
+                    b.Property<string>("HttpClient")
+                        .HasColumnType("text")
+                        .HasColumnName("http_client");
+
+                    b.Property<string>("InputData")
+                        .HasColumnType("text")
+                        .HasColumnName("input_data");
+
+                    b.Property<string>("Level")
+                        .HasColumnType("text")
+                        .HasColumnName("level");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("text")
+                        .HasColumnName("message");
+
+                    b.Property<string>("Properties")
+                        .HasColumnType("text")
+                        .HasColumnName("properties");
+
+                    b.Property<string>("RequestedUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("requested_url");
+
+                    b.Property<DateTime>("TimeStamp")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("timestamp");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestedUrl");
+
+                    b.HasIndex("TimeStamp");
+
+                    b.ToTable("log_http_client", "public");
+                });
+
+            modelBuilder.Entity("TelegramAggregator.WebAPI.Models.Entities.Logs.Log", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Exception")
+                        .HasColumnType("text")
+                        .HasColumnName("exception");
+
+                    b.Property<string>("Level")
+                        .HasColumnType("text")
+                        .HasColumnName("level");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("text")
+                        .HasColumnName("message");
+
+                    b.Property<string>("MessageTemplate")
+                        .HasColumnType("text")
+                        .HasColumnName("message_template");
+
+                    b.Property<string>("Properties")
+                        .HasColumnType("text")
+                        .HasColumnName("properties");
+
+                    b.Property<DateTime>("TimeStamp")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("timestamp");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Level");
+
+                    b.HasIndex("TimeStamp");
+
+                    b.ToTable("logs", "public");
+                });
+
             modelBuilder.Entity("TelegramAggregator.WebAPI.Models.Entities.News", b =>
                 {
                     b.Property<long>("Id")

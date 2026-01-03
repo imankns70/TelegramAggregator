@@ -154,14 +154,14 @@ namespace TelegramAggregator.WebAPI.Services
                     var caption = CaptionMakerExtension.GetCaption(item);
                     item.Caption = caption;
 
-                    Message sentMessage;
+                    //Message sentMessage;
 
-                    sentMessage = await _bot.SendPhoto(
-                        chatId: channelId, // 👈 مستقیماً کانال
-                        photo: new InputFileUrl(item.ImageUrl),
-                        caption: caption,
-                        parseMode: ParseMode.Html,
-                        cancellationToken: ct);
+                    //sentMessage = await _bot.SendPhoto(
+                    //    chatId: channelId, // 👈 مستقیماً کانال
+                    //    photo: new InputFileUrl(item.ImageUrl),
+                    //    caption: caption,
+                    //    parseMode: ParseMode.Html,
+                    //    cancellationToken: ct);
 
                     await _newsRepository.PublishedAsync(item, ct);
 

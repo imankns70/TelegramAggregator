@@ -1,96 +1,98 @@
-// using System.Data;
-// using Serilog;
-// using Serilog.Events;
-// using Serilog.Filters;
-// using Serilog.Sinks.MSSqlServer;
+﻿using Serilog;
+using Serilog.Events;
+using Serilog.Filters;
+using Serilog.Sinks.PostgreSQL;
 
-// namespace Ksc.OPC.UAMiddleware.WebApi.Extensions;
+namespace TelegramAggregator.WebAPI.Infrastructure;
 
-// public static class LoggerExtension
-// {
-//     public static void AddUaMiddlewareLogger(this IHostApplicationBuilder webApplicationBuilder)
-//     {
-//         {
-//             try
-//             {
-//                 Log.Logger = new LoggerConfiguration()
-//                     .WriteTo.Console()
-//                     .WriteTo.File("logs.log",
-//                         restrictedToMinimumLevel: LogEventLevel.Error,
-//                         rollingInterval: RollingInterval.Day,
-//                         fileSizeLimitBytes: 100_000_000,
-//                         retainedFileCountLimit: 5,
-//                         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"
-//                     )
-         
-//                     .WriteTo.MSSqlServer(
-//                         restrictedToMinimumLevel: LogEventLevel.Error,
-//                         connectionString: webApplicationBuilder.Configuration.GetConnectionString("OPCClientDB"),
-//                         sinkOptions: new MSSqlServerSinkOptions
-//                         {
-//                             SchemaName = "log",
-//                             TableName = "OPC_UAMiddleware",
-//                             AutoCreateSqlTable = true
-//                         },
-//                         columnOptions: GetGeneralColumnOptions()
-//                     )
-//                     // HTTP client exceptions sink
-//                     .WriteTo.Logger(lc => lc
-//                         .Filter.ByIncludingOnly(Matching.WithProperty<string>("Tag", tag => tag == "HttpClient"))
-//                         .WriteTo.MSSqlServer(
-//                             connectionString: webApplicationBuilder.Configuration.GetConnectionString("OPCClientDB"),
-//                             sinkOptions: new MSSqlServerSinkOptions
-//                             {
-//                                 SchemaName = "Log",
-//                                 TableName = "OPC_UAMiddleware_HttpClient",
-//                                 AutoCreateSqlTable = true
-//                             },
-//                             restrictedToMinimumLevel: LogEventLevel.Error,
-//                             columnOptions: GetHttpClientColumnOptions()
-//                         )
-//                     )
-//                     .CreateLogger();
-//             }
-//             catch (Exception e)
-//             {
-//                 // Could not initialize SQL logger 
-//                 Log.Logger = new LoggerConfiguration()
-//                     .WriteTo.Console()
-//                     .WriteTo.File("logs.log",
-//                         restrictedToMinimumLevel: LogEventLevel.Error,
-//                         rollingInterval: RollingInterval.Day,
-//                         fileSizeLimitBytes: 100_000_000,
-//                         retainedFileCountLimit: 5,
-//                         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {Message:lj}{NewLine}{Exception}"
-//                     )
-//                     // HTTP client exceptions sink
-//                     .WriteTo.Logger(lc => lc
-//                         .Filter.ByIncludingOnly(Matching.WithProperty<string>("Tag", tag => tag == "HttpClient"))
-//                     )
-//                     .CreateLogger();
-//             }
-//         }
+public static class LoggerExtension
+{
+    public static void AddSeriLogLogger(this WebApplicationBuilder builder)
+    {
+        var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-//         ColumnOptions GetGeneralColumnOptions()
-//         {
-//             var options = new ColumnOptions();
-//             options.Store.Remove(StandardColumn.Properties);
-//             options.Store.Add(StandardColumn.Properties);
-//             return options;
-//         }
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Verbose()
+                .WriteTo.Console()
+                .CreateBootstrapLogger();
 
-//         ColumnOptions GetHttpClientColumnOptions()
-//         {
-//             var options = new ColumnOptions();
-//             options.Store.Remove(StandardColumn.Properties);
-//             options.Store.Add(StandardColumn.Properties);
-//             options.AdditionalColumns =
-//             [
-//                 new SqlColumn { ColumnName = "HttpClient", DataType = SqlDbType.NVarChar, DataLength = 100 },
-//                 new SqlColumn { ColumnName = "RequestedUrl", DataType = SqlDbType.NVarChar, DataLength = -1 },
-//                 new SqlColumn { ColumnName = "InputData", DataType = SqlDbType.NVarChar, DataLength = -1 }
-//             ];
-//             return options;
-//         }
-//     }
-// }
+            builder.Host.UseSerilog(); // حتی اینجا هم اضافه کنید
+            return;
+        }
+
+        try
+        {
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Verbose()
+                .Enrich.FromLogContext()
+                .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
+                // ---------- جدول اصلی لاگ‌ها ----------
+                .WriteTo.PostgreSQL(
+                    connectionString: connectionString,
+                    tableName: "logs",
+                    schemaName: "public",
+                    needAutoCreateTable: false
+                    ,  // تغییر به false
+                    restrictedToMinimumLevel: LogEventLevel.Verbose,
+                    columnOptions: GetGeneralColumns())
+                // ---------- لاگ‌های HttpClient جداگانه ----------
+                .WriteTo.Logger(lc => lc
+                    .Filter.ByIncludingOnly(Matching.WithProperty<string>("Tag", tag => tag == "HttpClient"))
+                    .WriteTo.PostgreSQL(
+                        connectionString: connectionString,
+                        tableName: "log_http_client",
+                        schemaName: "public",
+                        needAutoCreateTable: false,  // تغییر به false
+                        restrictedToMinimumLevel: LogEventLevel.Verbose,
+                        columnOptions: GetHttpClientColumns()
+                    )
+                )
+                .CreateBootstrapLogger();
+
+            // این خط رو حتماً اضافه کنید (داخل try یا خارج)
+            builder.Host.UseSerilog();
+        }
+        catch (Exception ex)
+        {
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Error()
+                .WriteTo.Console()
+                .CreateBootstrapLogger();
+
+            builder.Host.UseSerilog(); // حتی در حالت خطا
+
+            Log.Fatal(ex, "خطا در راه‌اندازی Serilog با PostgreSQL");
+        }
+    }
+
+    private static IDictionary<string, ColumnWriterBase> GetGeneralColumns()
+    {
+        return new Dictionary<string, ColumnWriterBase>
+        {
+            ["message"] = new RenderedMessageColumnWriter(),
+            ["message_template"] = new MessageTemplateColumnWriter(),
+            ["level"] = new LevelColumnWriter(true),
+            ["timestamp"] = new TimestampColumnWriter(),
+            ["exception"] = new ExceptionColumnWriter(),
+            ["properties"] = new LogEventSerializedColumnWriter()
+        };
+    }
+
+    private static IDictionary<string, ColumnWriterBase> GetHttpClientColumns()
+    {
+        return new Dictionary<string, ColumnWriterBase>
+        {
+            ["message"] = new RenderedMessageColumnWriter(),
+            ["message_template"] = new MessageTemplateColumnWriter(),  // حتماً اضافه کنید
+            ["level"] = new LevelColumnWriter(true),
+            ["timestamp"] = new TimestampColumnWriter(),
+            ["exception"] = new ExceptionColumnWriter(),
+            ["properties"] = new LogEventSerializedColumnWriter(),
+            ["http_client"] = new SinglePropertyColumnWriter("HttpClient"),
+            ["requested_url"] = new SinglePropertyColumnWriter("RequestedUrl"),
+            ["input_data"] = new SinglePropertyColumnWriter("InputData")
+        };
+    }
+}

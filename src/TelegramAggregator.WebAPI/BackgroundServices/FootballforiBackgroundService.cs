@@ -1,6 +1,7 @@
 ﻿using TelegramAggregator.WebAPI.Data.Repositories;
+using TelegramAggregator.WebAPI.Services;
 
-namespace TelegramAggregator.WebAPI.Services;
+namespace TelegramAggregator.WebAPI.BackgroundServices;
 
 public class FootballforiBackgroundService : BackgroundService
 {
@@ -86,7 +87,7 @@ public class FootballforiBackgroundService : BackgroundService
                 {
                     lastExpireRun = DateOnly.FromDateTime(nowIran);
 
-                    _logger.LogInformation(
+                    _logger.LogDebug(
                         "Expire job STARTED | IranTime={IranTime}",
                         nowIran
                     );
@@ -98,7 +99,7 @@ public class FootballforiBackgroundService : BackgroundService
 
                         await repo.ChangeNewsInQueueToExpiredState(ct);
 
-                        _logger.LogInformation(
+                        _logger.LogDebug(
                             "Expire job FINISHED | IranTime={IranTime}",
                             nowIran
                         );
@@ -140,7 +141,9 @@ public class FootballforiBackgroundService : BackgroundService
             }
 
             int randomId = _rnd.Next(20, 40);
-            await Task.Delay(TimeSpan.FromMinutes(randomId), ct);
+            _logger.LogDebug($"مد زمان خواب تا ارسال بعدی {randomId} دقیقه می باشد");
+            await Task.Delay(TimeSpan.FromSeconds(15), ct);
+            //await Task.Delay(TimeSpan.FromMinutes(randomId), ct);
 
         }
 
