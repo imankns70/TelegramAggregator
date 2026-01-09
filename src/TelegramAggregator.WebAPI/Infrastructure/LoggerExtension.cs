@@ -11,49 +11,28 @@ public static class LoggerExtension
     {
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Verbose()
-                .WriteTo.Console()
-                .CreateBootstrapLogger();
-
-            builder.Host.UseSerilog(); // حتی اینجا هم اضافه کنید
-            return;
-        }
+       
 
         try
         {
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Verbose()
-                //.Enrich.FromLogContext()
-                .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
+                .Enrich.FromLogContext()
+                .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Verbose)
                 // ---------- جدول اصلی لاگ‌ها ----------
                 .WriteTo.PostgreSQL(
                     connectionString: connectionString,
-                    tableName: "logs",
-                    schemaName: "public",
-                    needAutoCreateTable: false
-                    ,  // تغییر به false
+                    schemaName:"public",
+                    tableName: "Logg", 
+                    needAutoCreateTable: true,
                     restrictedToMinimumLevel: LogEventLevel.Verbose,
                     columnOptions: GetGeneralColumns()
                     )
-                // ---------- لاگ‌های HttpClient جداگانه ----------
-                .WriteTo.Logger(lc => lc
-                    .Filter.ByIncludingOnly(Matching.WithProperty<string>("Tag", tag => tag == "HttpClient"))
-                    .WriteTo.PostgreSQL(
-                        connectionString: connectionString,
-                        tableName: "log_http_client",
-                        schemaName: "public",
-                        needAutoCreateTable: false,  // تغییر به false
-                        restrictedToMinimumLevel: LogEventLevel.Verbose,
-                        columnOptions: GetHttpClientColumns()
-                    )
-                )
+              
                 .CreateBootstrapLogger();
 
             // این خط رو حتماً اضافه کنید (داخل try یا خارج)
-            builder.Host.UseSerilog();
+
         }
         catch (Exception ex)
         {
@@ -62,7 +41,7 @@ public static class LoggerExtension
                 .WriteTo.Console()
                 .CreateBootstrapLogger();
 
-            builder.Host.UseSerilog(); // حتی در حالت خطا
+         
 
             Log.Fatal(ex, "خطا در راه‌اندازی Serilog با PostgreSQL");
         }
@@ -72,6 +51,7 @@ public static class LoggerExtension
     {
         return new Dictionary<string, ColumnWriterBase>
         {
+            ["id"] = new RenderedMessageColumnWriter(),
             ["message"] = new RenderedMessageColumnWriter(),
             ["message_template"] = new MessageTemplateColumnWriter(),
             ["level"] = new LevelColumnWriter(true),
@@ -85,6 +65,7 @@ public static class LoggerExtension
     {
         return new Dictionary<string, ColumnWriterBase>
         {
+            ["id"] = new RenderedMessageColumnWriter(),
             ["message"] = new RenderedMessageColumnWriter(),
             ["message_template"] = new MessageTemplateColumnWriter(),  // حتماً اضافه کنید
             ["level"] = new LevelColumnWriter(true),

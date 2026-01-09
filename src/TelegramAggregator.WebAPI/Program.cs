@@ -15,7 +15,7 @@ Console.InputEncoding = Encoding.UTF8;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddSeriLogLogger();
- 
+builder.Host.UseSerilog();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -98,8 +98,8 @@ builder.Services.AddHostedService<FootballforiBackgroundService>(); // این خ
 
 // ------------------- اپلیکیشن -------------------
 var app = builder.Build();
-
-
+ 
+ 
 // Middleware ها
 app.UseHttpsRedirection();
 app.UseHsts();
@@ -108,7 +108,7 @@ app.UseRouting();
 app.UseCors("AllowAll");
 
 app.UseSerilogRequestLogging();
-
+ 
 app.MapControllers();
 
 // در پروداکشن روی همه آی‌پی‌ها گوش بده
