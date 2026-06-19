@@ -14,11 +14,11 @@ namespace TelegramAggregator.WebAPI.Services
             _httpClient = httpClient;
         }
 
-        public async Task<string> GetFullDescriptionAsync(string url)
+        public async Task<string> GetFullDescriptionAsync(string url, CancellationToken ct = default)
         {
             try
             {
-                var html = await _httpClient.GetStringAsync(url);
+                var html = await _httpClient.GetStringAsync(url, ct);
                 var doc = new HtmlDocument();
                 doc.LoadHtml(html);
 

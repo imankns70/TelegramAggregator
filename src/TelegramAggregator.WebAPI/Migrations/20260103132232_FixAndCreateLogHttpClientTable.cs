@@ -11,72 +11,41 @@ namespace TelegramAggregator.WebAPI.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // اگر جدول log_http_client وجود نداشته باشه، بساز (اگر وجود داشته باشه، ignore می‌شه)
-            migrationBuilder.CreateTable(
-                name: "log_http_client",
-                schema: "public",
-                columns: table => new
-                {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    message = table.Column<string>(type: "text", nullable: true),
-                    message_template = table.Column<string>(type: "text", nullable: true),  // اضافه شده برای سازگاری
-                    level = table.Column<string>(type: "varchar(32)", nullable: true),     // بهتر از text
-                    timestamp = table.Column<DateTimeOffset>(type: "timestamptz", nullable: false),  // بهتر برای offset
-                    exception = table.Column<string>(type: "text", nullable: true),
-                    properties = table.Column<string>(type: "jsonb", nullable: true),       // jsonb برای query بهتر
-                    http_client = table.Column<string>(type: "text", nullable: true),
-                    requested_url = table.Column<string>(type: "text", nullable: true),
-                    input_data = table.Column<string>(type: "text", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_log_http_client", x => x.id);
-                });
+            // PROBLEM: the previous version of this migration called CreateTable("log_http_client")
+            // but the first migration already created that table, causing "relation already exists"
+            // on every startup and crashing db.Database.Migrate().
+            //
+            // FIX: use ADD COLUMN IF NOT EXISTS — safe to run even if already applied.
 
-            // اصلاح جدول logs (که وجود داره)
-            migrationBuilder.AlterColumn<string>(
-                name: "properties",
-                schema: "public",
-                table: "logs",
-                type: "jsonb",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "text",
-                oldNullable: true);
+            migrationBuilder.Sql(@"
+                ALTER TABLE public.log_http_client
+                    ADD COLUMN IF NOT EXISTS message_template text;
+            ");
 
-            migrationBuilder.AlterColumn<string>(
-                name: "level",
-                schema: "public",
-                table: "logs",
-                type: "varchar(32)",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "text",
-                oldNullable: true);
+            // Upgrade column types to be more efficient (idempotent via USING cast)
+            migrationBuilder.Sql(@"
+                ALTER TABLE public.log_http_client
+                    ALTER COLUMN level TYPE varchar(32),
+                    ALTER COLUMN timestamp TYPE timestamptz USING timestamp AT TIME ZONE 'UTC',
+                    ALTER COLUMN properties TYPE jsonb USING properties::jsonb;
+            ");
 
-            migrationBuilder.AlterColumn<DateTimeOffset>(
-                name: "timestamp",
-                schema: "public",
-                table: "logs",
-                type: "timestamptz",
-                nullable: false,
-                oldClrType: typeof(DateTime),
-                oldType: "timestamp with time zone");
+            // Same upgrades for the logs table
+            migrationBuilder.Sql(@"
+                ALTER TABLE public.logs
+                    ALTER COLUMN level TYPE varchar(32),
+                    ALTER COLUMN timestamp TYPE timestamptz USING timestamp AT TIME ZONE 'UTC',
+                    ALTER COLUMN properties TYPE jsonb USING properties::jsonb;
+            ");
 
-            // ایندکس‌ها (اگر قبلاً نبودن)
-            migrationBuilder.CreateIndex(
-                name: "IX_log_http_client_timestamp",
-                schema: "public",
-                table: "log_http_client",
-                column: "timestamp",
-                descending: new[] { true });
+            // Indexes — IF NOT EXISTS prevents failure on re-run
+            migrationBuilder.Sql(@"
+                CREATE INDEX IF NOT EXISTS ""IX_log_http_client_timestamp""
+                    ON public.log_http_client (timestamp DESC);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_log_http_client_requested_url",
-                schema: "public",
-                table: "log_http_client",
-                column: "requested_url");
+                CREATE INDEX IF NOT EXISTS ""IX_log_http_client_requested_url""
+                    ON public.log_http_client (requested_url);
+            ");
         }
 
         protected override void Down(MigrationBuilder migrationBuilder)

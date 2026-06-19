@@ -28,12 +28,11 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         public async Task<News> GetByIdAsync(long id, CancellationToken ct)
         {
             return await GetAll()
-            .Include(a => a.Histories).FirstOrDefaultAsync(ct);
+            .Include(a => a.Histories).FirstOrDefaultAsync(a => a.Id == id, ct);
         }
 
         public async Task InQueueAsync(NewsItem newsItem, FootbalForiSettings footbalForiSettings, CancellationToken ct)
         {
-
             var news = await GetAll().FirstOrDefaultAsync(a => a.Id == newsItem.Id, ct);
             if (news != null)
             {
@@ -45,20 +44,39 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
                     InsertDate = DateTimeOffset.UtcNow
                 });
             }
-            _logger.LogDebug($"این خبر با آی دی {newsItem.Link}  برای تغییر وضعیت آن از دریافت به صف یاتف نشد");
-
-
+            else
+            {
+                _logger.LogWarning("خبر با لینک {Link} برای تغییر وضعیت به صف یافت نشد", newsItem.Link);
+            }
         }
         public async Task InQueueRangeAsync(List<NewsItem> newsItems, FootbalForiSettings footbalForiSettings, CancellationToken ct)
         {
+            // Bulk-load all IDs in one query instead of N+1 queries
+            var ids = newsItems.Select(n => n.Id).ToHashSet();
+            var newsInDb = await GetAll()
+                .Include(n => n.Histories)
+                .Where(n => ids.Contains(n.Id))
+                .ToListAsync(ct);
 
-            foreach (var news in newsItems)
+            var dbLookup = newsInDb.ToDictionary(n => n.Id);
+            foreach (var newsItem in newsItems)
             {
-                await InQueueAsync(news, footbalForiSettings, ct);
-
+                if (dbLookup.TryGetValue(newsItem.Id.GetValueOrDefault(), out var news))
+                {
+                    news.Score = ScoreCalculator.Calculate(newsItem, footbalForiSettings);
+                    news.NewsStatusId = StatusEnumeration.InQueue.Id;
+                    news.Histories.Add(new NewsHistory
+                    {
+                        NewsStatusId = StatusEnumeration.InQueue.Id,
+                        InsertDate = DateTimeOffset.UtcNow
+                    });
+                }
+                else
+                {
+                    _logger.LogWarning("خبر با لینک {Link} برای تغییر وضعیت به صف یافت نشد", newsItem.Link);
+                }
             }
             await _context.SaveChangesAsync(ct);
-
         }
         public async Task DecayAsync(News news, string reason, CancellationToken ct, bool saveNow = false)
         {
@@ -80,18 +98,19 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         }
         public async Task DecayRangeAsync(List<(string Reason, NewsItem Item)> newsItems, CancellationToken ct)
         {
-            var Ids = newsItems.Select(a => a.Item.Id).ToHashSet();
-            var newsInDb = await GetAll().Where(a => Ids.Contains(a.Id)).ToListAsync(ct);
+            var ids = newsItems.Select(a => a.Item.Id).ToHashSet();
+            var newsInDb = await GetAll()
+                .Include(n => n.Histories)
+                .Where(a => ids.Contains(a.Id))
+                .ToListAsync(ct);
 
-
+            var dbLookup = newsInDb.ToDictionary(n => n.Id);
             foreach (var item in newsItems)
             {
-                var news = newsInDb.First(a => a.Id == item.Item.Id);
-                await DecayAsync(news, item.Reason, ct);
-
-
+                if (dbLookup.TryGetValue(item.Item.Id, out var news))
+                    await DecayAsync(news, item.Reason, ct);
             }
-            await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync(ct);  // was missing CancellationToken
         }
 
 
@@ -109,9 +128,10 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             List<NewsItem> inQueueList = new List<NewsItem>();
 
             var eightHoursAgo = DateTimeOffset.UtcNow.AddHours(-8);
-            var dbCandidates = GetAll()
+            var dbCandidates = await GetAll()
                 .Where(n => n.InsertDate >= eightHoursAgo)
-                .ToList();
+                .AsNoTracking()
+                .ToListAsync(ct);
 
             foreach (var item in newsItems)
             {
@@ -186,9 +206,10 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         public async Task<News> GetBestNews(CancellationToken ct)
         {
             var item = await GetAll()
+                .Include(n => n.Histories)
                 .Where(n => n.NewsStatusId == StatusEnumeration.InQueue.Id)
                 .OrderByDescending(n => n.Score)
-                .ThenBy(n => n.PubDate)
+                .ThenByDescending(n => n.PubDate)  // newest first among equal scores
                 .FirstOrDefaultAsync(ct);
 
             return item;
@@ -250,11 +271,22 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
         public async Task ReceiveRangeAsync(List<NewsItem> newsItems, CancellationToken ct)
         {
+            // Skip items whose links are already in the DB (dedup before insert)
+            var cleanLinks = newsItems.Select(i => ClearUrl(i.Link)).ToHashSet();
+            var existingLinks = await _context.News
+                .Where(n => cleanLinks.Contains(n.Link))
+                .Select(n => n.Link)
+                .ToHashSetAsync(ct);
+
+            var newEntities = new List<(News Entity, NewsItem Item)>();
+            var now = DateTimeOffset.UtcNow;
 
             foreach (var item in newsItems)
             {
-                var now = DateTimeOffset.UtcNow;
                 string cleanLink = ClearUrl(item.Link);
+                if (existingLinks.Contains(cleanLink))
+                    continue;
+
                 int sportSourceId = GetSportSourceId(item.SourceName);
                 var news = new News
                 {
@@ -272,26 +304,30 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
                 {
                     InsertDate = now,
                     NewsStatusId = StatusEnumeration.Receive.Id,
-
                 });
 
-                await _context.AddAsync(news);
-                await _context.SaveChangesAsync(ct);
-                item.Id = news.Id;
-
+                _context.News.Add(news);
+                newEntities.Add((news, item));
             }
 
+            // Single SaveChanges for all inserts (was N separate saves)
+            await _context.SaveChangesAsync(ct);
 
+            // Assign generated IDs back to NewsItems
+            foreach (var (entity, item) in newEntities)
+                item.Id = entity.Id;
         }
 
 
         public async Task ChangeNewsInQueueToExpiredState(CancellationToken ct)
         {
-            var yest = DateTimeOffset.UtcNow.AddDays(-1);
+            // Expire news inserted BEFORE today (i.e., yesterday and older).
+            // Bug was: >= yest.Date which also expired today's news.
+            var todayUtc = DateTimeOffset.UtcNow.Date;
             var inQueueNews = await GetAll()
                                          .Include(n => n.Histories)
                                          .Where(n => (n.NewsStatusId == StatusEnumeration.InQueue.Id || n.NewsStatusId == StatusEnumeration.Receive.Id)
-                                         && n.InsertDate.Date >= yest.Date)
+                                         && n.InsertDate.Date < todayUtc)
                                          .ToListAsync(ct);
             if (!inQueueNews.Any())
                 return;

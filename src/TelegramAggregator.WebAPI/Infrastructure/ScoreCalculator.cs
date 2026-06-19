@@ -71,15 +71,13 @@ namespace TelegramAggregator.WebAPI.Infrastructure
         private static bool ContainsAny(string text, IEnumerable<string>? keywords)
             => keywords?.Any(k => text.Contains(k.ToLowerInvariant())) == true;
 
-        private static bool IsDerbyMatch(string text)
+        private static readonly string[] DerbyKeywords =
         {
-            var derbyKeywords = new[]
-            {
-                "دربی", "ال‌کلاسیکو", "ال کلاسیکو", "منچستر دربی", "دربی تهران",
-                "دربی ۱۰", "پرسپولیس استقلال", "استقلال پرسپولیس",
-                "رئال بارسا", "بارسا رئال", "بارسا لندن", "دربی منچستر"
-            };
-            return ContainsAny(text, derbyKeywords);
-        }
+            "دربی", "ال‌کلاسیکو", "ال کلاسیکو", "منچستر دربی", "دربی تهران",
+            "دربی ۱۰", "پرسپولیس استقلال", "استقلال پرسپولیس",
+            "رئال بارسا", "بارسا رئال", "بارسا لندن", "دربی منچستر"
+        };
+
+        private static bool IsDerbyMatch(string text) => ContainsAny(text, DerbyKeywords);
     }
 }

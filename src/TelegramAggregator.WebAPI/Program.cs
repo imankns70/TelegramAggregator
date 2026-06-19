@@ -126,4 +126,12 @@ if (app.Environment.IsProduction())
 
 
 
-app.Run();
+try
+{
+    app.Run();
+}
+finally
+{
+    // Ensure all buffered Serilog rows are flushed to PostgreSQL before process exits
+    Log.CloseAndFlush();
+}

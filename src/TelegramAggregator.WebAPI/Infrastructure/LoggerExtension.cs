@@ -33,8 +33,7 @@ public static class LoggerExtension
                     connectionString: connectionString,
                     tableName: "logs",
                     schemaName: "public",
-                    needAutoCreateTable: false
-                    ,  // تغییر به false
+                    needAutoCreateTable: false,
                     restrictedToMinimumLevel: LogEventLevel.Verbose,
                     columnOptions: GetGeneralColumns())
                 // ---------- لاگ‌های HttpClient جداگانه ----------
@@ -44,24 +43,24 @@ public static class LoggerExtension
                         connectionString: connectionString,
                         tableName: "log_http_client",
                         schemaName: "public",
-                        needAutoCreateTable: false,  // تغییر به false
+                        needAutoCreateTable: false,
                         restrictedToMinimumLevel: LogEventLevel.Verbose,
                         columnOptions: GetHttpClientColumns()
                     )
                 )
-                .CreateBootstrapLogger();
+                .CreateLogger();  // ← was CreateBootstrapLogger() — bootstrap loggers are temporary
+                                  //   and may never flush their sinks when no reload callback exists
 
-            // این خط رو حتماً اضافه کنید (داخل try یا خارج)
-            builder.Host.UseSerilog();
+            builder.Host.UseSerilog(Log.Logger, dispose: true);  // explicit, deterministic
         }
         catch (Exception ex)
         {
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Error()
                 .WriteTo.Console()
-                .CreateBootstrapLogger();
+                .CreateLogger();
 
-            builder.Host.UseSerilog(); // حتی در حالت خطا
+            builder.Host.UseSerilog(Log.Logger, dispose: true);
 
             Log.Fatal(ex, "خطا در راه‌اندازی Serilog با PostgreSQL");
         }

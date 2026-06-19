@@ -113,7 +113,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             if (item.SportSourceId != SportSourceEnumeration.Football360.Id)
             {
-                fullDescTask = _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link);
+                fullDescTask = _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link, ct);
                 await Task.WhenAll(imageTask, hasVideoTask, fullDescTask);
             }
             else
@@ -132,15 +132,12 @@ namespace TelegramAggregator.WebAPI.Services
                 await _newsRepository.DecayAsync(item, "خبر بدون عکس", ct, saveNow: true);
                 await Task.Delay(3000, ct);
             }
-
             else if (hasVideo)
             {
-
                 await _newsRepository.DecayAsync(item, "حاوی تگ ویدئو", ct, saveNow: true);
                 await Task.Delay(3000, ct);
-
             }
-            else if (item.FullDescription.Contains("خطا در دریافت محتوا"))
+            else if (item.FullDescription != null && item.FullDescription.Contains("خطا در دریافت محتوا"))
             {
                 await _newsRepository.DecayAsync(item, "خطا در واکشی شرح کامل", ct, saveNow: true);
                 await Task.Delay(3000, ct);
@@ -168,10 +165,9 @@ namespace TelegramAggregator.WebAPI.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError($"خطا در ارسال به تلگرام {ex.Message}");
+                    _logger.LogError(ex, "خطا در ارسال به تلگرام {Message}", ex.Message);
                     await _newsRepository.DecayAsync(item, $"خطا در ارسال به تلگرام {ex.Message}", ct, saveNow: true);
-                    await Task.Delay(TimeSpan.FromSeconds(3000), ct);
-
+                    await Task.Delay(TimeSpan.FromSeconds(3), ct);  // was 3000s (50 min!) — fixed to 3s
                 }
 
 

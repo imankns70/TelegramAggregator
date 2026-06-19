@@ -43,44 +43,34 @@ namespace TelegramAggregator.WebAPI.Services
 
                 if (newsNodes == null || !newsNodes.Any())
                 {
-                    return newsList;
-                }
-                if (newsNodes == null || !newsNodes.Any())
-                {
                     Console.WriteLine("[Football360] هیچ خبری پیدا نشد – سایت ممکنه تغییر کرده باشه.");
                     return newsList;
                 }
 
-                // حذف تکراری و محدود کردن تعداد
+                // Deduplicate and limit, then fetch all articles in parallel
                 var uniqueNodes = newsNodes
                     .GroupBy(n => n.GetAttributeValue("href", "").Trim())
                     .Select(g => g.First())
-                    .Take(MaxItems);
-                foreach (var node in uniqueNodes)
+                    .Take(MaxItems)
+                    .ToList();
+
+                var fetchTasks = uniqueNodes.Select(async node =>
                 {
-                    try
-                    {
-                        var item = await ExtractNewsItem(node, ct);
-                        if (item != null)
-                        {
-                            if (!string.IsNullOrWhiteSpace(item.Title))
-                            {
-                                if (!string.IsNullOrWhiteSpace(item.ShortDescription))
-                                {
-                                    newsList.Add(item);
-                                }
-
-                            }
-
-                        }
-
-
-                    }
-
-
+                    try { return await ExtractNewsItem(node, ct); }
                     catch (Exception ex)
                     {
                         Console.WriteLine($"[Football360] خطا در پردازش یک خبر: {ex.Message}");
+                        return null;
+                    }
+                });
+                var fetchResults = await Task.WhenAll(fetchTasks);
+                foreach (var item in fetchResults)
+                {
+                    if (item != null &&
+                        !string.IsNullOrWhiteSpace(item.Title) &&
+                        !string.IsNullOrWhiteSpace(item.ShortDescription))
+                    {
+                        newsList.Add(item);
                     }
                 }
 

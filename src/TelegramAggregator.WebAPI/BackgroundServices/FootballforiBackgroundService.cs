@@ -141,9 +141,9 @@ public class FootballforiBackgroundService : BackgroundService
             }
 
             int randomId = _rnd.Next(20, 40);
-            _logger.LogDebug($"مد زمان خواب تا ارسال بعدی {randomId} دقیقه می باشد");
-            await Task.Delay(TimeSpan.FromSeconds(15), ct);
-            //await Task.Delay(TimeSpan.FromMinutes(randomId), ct);
+            _logger.LogDebug("زمان خواب تا ارسال بعدی {RandomId} دقیقه", randomId);
+            // WARNING: 15s delay is DEBUG mode — use the randomized delay in production!
+            await Task.Delay(TimeSpan.FromMinutes(randomId), ct);
 
         }
 

@@ -81,7 +81,7 @@ public class HttpHelperService : IHttpHelperService
         if (response.Content.Headers.ContentType?.MediaType?.StartsWith("video/", StringComparison.OrdinalIgnoreCase) == true)
             return (true,"");
 
-        var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var reader = new StreamReader(stream);
         var html = await reader.ReadToEndAsync();
 

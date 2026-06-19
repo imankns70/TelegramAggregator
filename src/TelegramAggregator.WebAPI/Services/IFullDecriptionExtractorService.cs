@@ -11,5 +11,5 @@ public interface IFullDecriptionExtractorService
     /// <param name="url">آدرس صفحه خبر</param>
     /// <param name="ct">توکن لغو عملیات</param>
     /// <returns>متن تمیز خبر</returns>
-    Task<string> GetFullDescriptionAsync(string url);
+    Task<string> GetFullDescriptionAsync(string url, CancellationToken ct = default);
 }
