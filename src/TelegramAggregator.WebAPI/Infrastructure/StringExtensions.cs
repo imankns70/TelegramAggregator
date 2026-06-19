@@ -1,4 +1,4 @@
-﻿namespace TelegramAggregator.WebAPI.Infrastructure // یا هر namespace که دوست داری
+namespace TelegramAggregator.WebAPI.Infrastructure // یا هر namespace که دوست داری
 {
     public static class StringExtensions
     {
@@ -19,5 +19,8 @@
 
             return value.Substring(0, maxLength - truncationSuffix.Length) + truncationSuffix;
         }
+
+        public static string? NullIfEmpty(this string? value) =>
+            string.IsNullOrEmpty(value) ? null : value;
     }
 }
