@@ -107,7 +107,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             var dbLookup = newsInDb.ToDictionary(n => n.Id);
             foreach (var item in newsItems)
             {
-                if (dbLookup.TryGetValue(item.Item.Id, out var news))
+                if (dbLookup.TryGetValue(item.Item.Id.GetValueOrDefault(), out var news))
                     await DecayAsync(news, item.Reason, ct);
             }
             await _context.SaveChangesAsync(ct);  // was missing CancellationToken
