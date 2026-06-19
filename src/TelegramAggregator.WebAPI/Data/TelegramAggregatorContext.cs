@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using AngleSharp.Dom;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using TelegramAggregator.WebAPI.Models.Entities;
 using TelegramAggregator.WebAPI.Models.Entities.Logs;
@@ -11,32 +12,36 @@ namespace TelegramAggregator.WebAPI.Data
         {
 
         }
-        public DbSet<News> News { get; set; } = null!;
-        public DbSet<NewsHistory> NewsHistories { get; set; } = null!;
-        public DbSet<NewsStatus> NewsStatuses { get; set; } = null!;
-        public DbSet<SportSource> SportSources { get; set; } = null!;
-        public DbSet<Log> Logs { get; set; }
-        public DbSet<HttpClientLog> HttpClientLogs { get; set; }
+        public DbSet<News> News { get; set; }  
+        public DbSet<NewsHistory> NewsHistories { get; set; }  
+        public DbSet<NewsStatus> NewsStatuses { get; set; }  
+        public DbSet<SportSource> SportSources { get; set; }  
+        //public DbSet<Log> Logs { get; set; }  
+        
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Log>().HasIndex(l => l.TimeStamp);
-            modelBuilder.Entity<Log>().HasIndex(l => l.Level);
+            //modelBuilder.Entity<Log>(entity =>
+            //{
+            //    entity.ToTable("Logging", "public");
+            //    entity.HasIndex(l => l.TimeStamp);
+            //    entity.HasIndex(l => l.Level); 
 
-            modelBuilder.Entity<HttpClientLog>().HasIndex(l => l.TimeStamp);
-            modelBuilder.Entity<HttpClientLog>().HasIndex(l => l.RequestedUrl);
-     
-          
+            //});
+           
+
+
+
             // News
             modelBuilder.Entity<News>(entity =>
             {
                 entity.ToTable(nameof(News));
-                entity.HasKey(e => e.Id);   
+                entity.HasKey(e => e.Id);
                 entity.Property(e => e.Score).IsRequired(false);
                 entity.Property(e => e.Title).IsRequired().HasMaxLength(1000);
                 entity.Property(e => e.ShortDescription).IsRequired().HasMaxLength(2000);
                 entity.Property(e => e.FullDescription).IsRequired(false).HasColumnType("text");
                 entity.Property(e => e.Caption).IsRequired(false).HasColumnType("text");
-                entity.Property(e => e.Link).IsRequired().HasColumnType("text"); 
+                entity.Property(e => e.Link).IsRequired().HasColumnType("text");
                 entity.Property(e => e.InsertDate).IsRequired();
                 entity.Property(e => e.PubDate).IsRequired();
                 entity.Property(e => e.SentDate).IsRequired(false);
@@ -95,7 +100,7 @@ namespace TelegramAggregator.WebAPI.Data
                 entity.ToTable(nameof(SportSource));
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.Title).IsRequired().HasMaxLength(50);
-                              
+
 
                 entity.HasMany(n => n.News)
               .WithOne(h => h.SportSource)

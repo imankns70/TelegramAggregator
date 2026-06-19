@@ -11,23 +11,14 @@ public static class LoggerExtension
     {
         var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Verbose()
-                .WriteTo.Console()
-                .CreateBootstrapLogger();
-
-            builder.Host.UseSerilog(); // حتی اینجا هم اضافه کنید
-            return;
-        }
+       
 
         try
         {
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Verbose()
                 .Enrich.FromLogContext()
-                .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
+                .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Verbose)
                 // ---------- جدول اصلی لاگ‌ها ----------
                 .WriteTo.PostgreSQL(
                     connectionString: connectionString,
@@ -70,6 +61,7 @@ public static class LoggerExtension
     {
         return new Dictionary<string, ColumnWriterBase>
         {
+            ["id"] = new RenderedMessageColumnWriter(),
             ["message"] = new RenderedMessageColumnWriter(),
             ["message_template"] = new MessageTemplateColumnWriter(),
             ["level"] = new LevelColumnWriter(true),
@@ -83,6 +75,7 @@ public static class LoggerExtension
     {
         return new Dictionary<string, ColumnWriterBase>
         {
+            ["id"] = new RenderedMessageColumnWriter(),
             ["message"] = new RenderedMessageColumnWriter(),
             ["message_template"] = new MessageTemplateColumnWriter(),  // حتماً اضافه کنید
             ["level"] = new LevelColumnWriter(true),

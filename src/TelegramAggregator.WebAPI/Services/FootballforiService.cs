@@ -1,7 +1,9 @@
 ﻿using Microsoft.Extensions.Options;
+using Serilog;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using TelegramAggregator.WebAPI.Data;
 using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
@@ -44,11 +46,18 @@ namespace TelegramAggregator.WebAPI.Services
             _fullDecriptionExtractor = fullDecriptionExtractor;
             _football360ScraperService = football360ScraperService;
             _newsRepository = newsRepository;
+         
         }
 
 
         public async Task FetchAndFilterNewsAndAddToQueueAsync(CancellationToken ct)
         {
+            _logger.LogTrace("تست عمومی با ILogger — باید در جدول logs درج بشه");
+            _logger.LogInformation("تست عمومی با ILogger — باید در جدول logs درج بشه");
+            _logger.LogWarning("تست Warning با ILogger — باید در جدول logs درج بشه");
+            _logger.LogDebug("تست Debug — نباید درج بشه چون سطح sink Information هست");
+
+       
             var allItems = new List<NewsItem>();
             foreach (var source in _footbalForiSettings.Sources)
             {
@@ -77,6 +86,9 @@ namespace TelegramAggregator.WebAPI.Services
 
             if (allItems.Any())
             {
+                _logger.LogWarning("همه دیتا جمع شد");
+                _logger.LogInformation("همه دیتا جمع شد");
+                _logger.LogDebug("همه دیتا جمع شد");
                 await _newsRepository.ProcessNewsAsync(allItems, _footbalForiSettings, ct);
 
             }

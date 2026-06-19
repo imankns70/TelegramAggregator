@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Serilog;
 using System.Text;
@@ -9,13 +9,15 @@ using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Services;
 using TelegramAggregator.WebAPI.Services.Dashboard;
+ 
+ 
 
 Console.OutputEncoding = Encoding.UTF8;
 Console.InputEncoding = Encoding.UTF8;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.AddSeriLogLogger();
- 
+builder.Host.UseSerilog();
 
 builder.Configuration
     .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
@@ -50,6 +52,7 @@ builder.Services.AddCors(options =>
 
 
 
+builder.Services.AddSingleton<IPlaywrightService, PlaywrightService>();
 builder.Services.AddHttpClient<IHttpHelperService, HttpHelperService>("RssHttpClient", client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
@@ -92,14 +95,14 @@ builder.Services.AddSingleton<ITelegramBotClient>(sp =>
 });
 
 
-// سرویس اصلی + سرویس پس‌زمینه
-builder.Services.AddScoped<FootballforiService>();
-builder.Services.AddHostedService<FootballforiBackgroundService>(); // این خودش Publish رو یک بار استارت می‌کنه
+//// سرویس اصلی + سرویس پس‌زمینه
+//builder.Services.AddScoped<FootballforiService>();
+//builder.Services.AddHostedService<FootballforiBackgroundService>(); // این خودش Publish رو یک بار استارت می‌کنه
 
 // ------------------- اپلیکیشن -------------------
 var app = builder.Build();
-
-
+ 
+ 
 // Middleware ها
 app.UseHttpsRedirection();
 app.UseHsts();
@@ -108,7 +111,7 @@ app.UseRouting();
 app.UseCors("AllowAll");
 
 app.UseSerilogRequestLogging();
-
+ 
 app.MapControllers();
 
 // در پروداکشن روی همه آی‌پی‌ها گوش بده
@@ -118,7 +121,8 @@ if (app.Environment.IsProduction())
 }
 
 
-    using (var scope = app.Services.CreateScope())
+ 
+using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<TelegramAggregatorContext>();
         db.Database.Migrate();
