@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.RegularExpressions;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Models.Entities;
@@ -7,7 +7,6 @@ namespace TelegramAggregator.WebAPI.Infrastructure
 {
     public static class CaptionMakerExtension
     {
-        private const string ChannelName = "@FOOTBALFORI";
         private const string Admin = "#iman";
         private const int MaxCaptionLength = 1024;
 
@@ -28,7 +27,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             sb.AppendLine(); // خط خالی بعد از تیترها
 
             // فضای باقی‌مانده برای متن اصلی
-            int reservedFooter = ChannelName.Length + Admin.Length + 20;
+            int reservedFooter = Admin.Length + 20;
             int available = MaxCaptionLength - sb.Length - reservedFooter;
 
             string bodyText;
@@ -49,7 +48,6 @@ namespace TelegramAggregator.WebAPI.Infrastructure
             // فوتر — بدون هیچ کلمه اضافه
             sb.AppendLine();
             sb.AppendLine();
-            sb.AppendLine(ChannelName);
             sb.AppendLine(Admin);
 
             var result = sb.ToString();
@@ -60,7 +58,7 @@ namespace TelegramAggregator.WebAPI.Infrastructure
                 int cut = MaxCaptionLength - reservedFooter - 10;
                 int safeCut = cut > 150 ? cut : 150;
                 result = result.Substring(0, safeCut).Trim()
-                       + "\n\n" + ChannelName + "\n" + Admin;
+                       + "\n\n" + Admin;
             }
 
             return result;

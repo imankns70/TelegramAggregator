@@ -1,71 +1,63 @@
-﻿using System.Collections.Concurrent;
-using System.Net;
 using System.ServiceModel.Syndication;
 using System.Xml;
-using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 
 namespace TelegramAggregator.WebAPI.Services;
 
-/// <summary>
-/// پارس کردن RSS با SyndicationFeed + فیلتر تاریخ + منبع
-/// </summary>
 public class RssParserService : IRssParserService
 {
     private readonly ILogger<RssParserService> _logger;
-    private readonly INewsRepository _newsRepository;
-    public RssParserService(ILogger<RssParserService> logger, INewsRepository newsRepository)
+
+    public RssParserService(ILogger<RssParserService> logger)
     {
-        _logger = logger; 
-        _newsRepository = newsRepository;
+        _logger = logger;
     }
 
     public IEnumerable<NewsItem> Parse(string xml)
     {
         if (string.IsNullOrWhiteSpace(xml))
-            return Enumerable.Empty<NewsItem>();
-
-        var result = new List<NewsItem>();
-        XmlReader reader = null;
+        {
+            return Array.Empty<NewsItem>();
+        }
 
         try
         {
-            reader = XmlReader.Create(new StringReader(xml));
+            using var input = new StringReader(xml);
+            using var reader = XmlReader.Create(input, new XmlReaderSettings
+            {
+                DtdProcessing = DtdProcessing.Prohibit,
+                XmlResolver = null
+            });
             var feed = SyndicationFeed.Load(reader);
-            if (feed == null) return result;
-            var cutoff = DateTimeOffset.Now.AddHours(-6);
-            var feedTitle = feed.Title?.Text ?? "RSS";
+            var cutoff = DateTimeOffset.UtcNow.AddHours(-6);
 
-            result = feed.Items
-                .OrderByDescending(i => i.PublishDate.DateTime)
-                .Take(10)
-                .Reverse()
-                .Select(entry =>
+            return feed.Items
+                .Select(entry => new NewsItem
                 {
-                    return new NewsItem
-                    {
-                        Title = TextCleaner.CleanTitle(entry.Title?.Text),
-                        ShortDescription = TextCleaner.CleanShortDescription(entry.Summary?.Text),
-                        Link = entry.Links.FirstOrDefault()?.Uri?.ToString() ?? "",
-                        PubDate = entry.PublishDate.DateTime,
-                        SourceName = feed.Title?.Text ?? "RSS"
-                    };
-                }).ToList();
-
-            _newsRepository.FilterNews(result);
-
+                    Title = TextCleaner.CleanTitle(entry.Title?.Text),
+                    ShortDescription = TextCleaner.CleanShortDescription(entry.Summary?.Text),
+                    Link = entry.Links.FirstOrDefault(link => link.RelationshipType == "alternate")?.Uri?.ToString()
+                        ?? entry.Links.FirstOrDefault()?.Uri?.ToString()
+                        ?? string.Empty,
+                    PubDate = (entry.PublishDate == DateTimeOffset.MinValue
+                        ? entry.LastUpdatedTime
+                        : entry.PublishDate).ToUniversalTime(),
+                    SourceName = feed.Title?.Text ?? "RSS"
+                })
+                .Where(item => !string.IsNullOrWhiteSpace(item.Title)
+                    && Uri.TryCreate(item.Link, UriKind.Absolute, out var uri)
+                    && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
+                    && item.PubDate >= cutoff
+                    && item.PubDate <= DateTimeOffset.UtcNow.AddMinutes(5))
+                .OrderBy(item => item.PubDate)
+                .ToList();
         }
-        catch (Exception ex)
+        catch (Exception exception) when (exception is XmlException || exception is FormatException
+            || exception is ArgumentException)
         {
-            _logger.LogError(ex, "خطا در پارس RSS از منبع: {SourceName}");
+            _logger.LogError(exception, "Unable to parse RSS feed");
+            return Array.Empty<NewsItem>();
         }
-        finally
-        {
-            reader?.Dispose(); // Dispose دستی و ایمن
-        }
-
-        return result;
     }
-
 }

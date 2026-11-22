@@ -1,6 +1,10 @@
 .vs/
-bin/
-obj/
-echo ".vs/" >> .gitignore
-echo "bin/" >> .gitignore
-echo "obj/" >> .gitignore
+**/bin/
+**/obj/
+.env
+.env.*
+!.env.example
+.netlify/
+dist/
+artifacts/
+**/appsettings.Local.json

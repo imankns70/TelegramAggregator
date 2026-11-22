@@ -188,7 +188,11 @@ namespace TelegramAggregator.WebAPI.Services
                     if (best != null) return best[0];
                 }
 
-                return Src.NullIfEmpty() ?? DataSrc.NullIfEmpty() ?? DataLazySrc.NullIfEmpty() ?? DataOriginal.NullIfEmpty() ?? DataImage.NullIfEmpty();
+                return Src.NullIfEmpty()
+                    ?? DataSrc.NullIfEmpty()
+                    ?? DataLazySrc.NullIfEmpty()
+                    ?? DataOriginal.NullIfEmpty()
+                    ?? DataImage.NullIfEmpty();
             }
         }
 
@@ -227,7 +231,8 @@ namespace TelegramAggregator.WebAPI.Services
             if (img.InFigure || img.ParentTag == "figure") score += 40000;
 
             var classAttr = (img.ImgClass + " " + img.ParentClass).ToLowerInvariant();
-            if (classAttr.Contains("main") || classAttr.Contains("lead") || classAttr.Contains("hero") || classAttr.Contains("photo") || classAttr.Contains("image") || classAttr.Contains("thumb"))
+            if (classAttr.Contains("main") || classAttr.Contains("lead") || classAttr.Contains("hero")
+                || classAttr.Contains("photo") || classAttr.Contains("image") || classAttr.Contains("thumb"))
                 score += 20000;
 
             if (IsBadImage(lower)) score -= 50000;
@@ -247,7 +252,11 @@ namespace TelegramAggregator.WebAPI.Services
 
         private static bool IsBadImage(string lower)
         {
-            string[] bad = { "logo", "icon", "avatar", "banner", "advert", "ads", "ad-", "small", "tiny", "50x", "100x", "150x", "200x", "favicon", "profile", "placeholder", "watermark", "sponsor" };
+            string[] bad =
+            {
+                "logo", "icon", "avatar", "banner", "advert", "ads", "ad-", "small", "tiny", "50x", "100x", "150x", "200x",
+                "favicon", "profile", "placeholder", "watermark", "sponsor"
+            };
             return bad.Any(k => lower.Contains(k));
         }
 
@@ -285,7 +294,7 @@ namespace TelegramAggregator.WebAPI.Services
                         Timeout = 30000
                     });
 
-                    return await page.EvaluateAsync<bool>(@"
+                    return await page.EvaluateAsync<bool>(@"() => {
                         if (document.querySelector('video[src], video source[src]')) return true;
                         const links = document.querySelectorAll('source[src], a[href*="".mp4""], a[href*="".m3u8""]');
                         for (const l of links) {
@@ -295,10 +304,12 @@ namespace TelegramAggregator.WebAPI.Services
                         const iframes = document.querySelectorAll('iframe');
                         for (const i of iframes) {
                             const s = i.getAttribute('src') || '';
-                            if (s.match(/youtube\.com|youtu\.be|aparat\.com|tamasha\.com|instagram\.com\/reel|tiktok\.com|vimeo\.com|varzesh3\.com\/video/)) return true;
+                            const platforms = /youtube\.com|youtu\.be|aparat\.com|tamasha\.com|instagram\.com\/reel/;
+                            const otherPlatforms = /tiktok\.com|vimeo\.com|varzesh3\.com\/video/;
+                            if (platforms.test(s) || otherPlatforms.test(s)) return true;
                         }
                         return false;
-                    ");
+                    }");
                 }
                 finally
                 {

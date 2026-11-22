@@ -1,141 +1,142 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Serilog;
-using System.Text;
 using Telegram.Bot;
 using TelegramAggregator.WebAPI.BackgroundServices;
 using TelegramAggregator.WebAPI.Data;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
+using TelegramAggregator.WebAPI.Models.FootbalSettings;
 using TelegramAggregator.WebAPI.Services;
 using TelegramAggregator.WebAPI.Services.Dashboard;
- 
- 
 
-Console.OutputEncoding = Encoding.UTF8;
-Console.InputEncoding = Encoding.UTF8;
+if (args.Contains("--install-browsers", StringComparer.Ordinal))
+{
+    Environment.ExitCode = Microsoft.Playwright.Program.Main(new[] { "install", "--with-deps", "chromium" });
+    return;
+}
 
-var builder = WebApplication.CreateBuilder(args);
-builder.AddSeriLogLogger();
-builder.Host.UseSerilog();
-
+var configurationArgs = args.Where(argument => argument != "--migrate-only").ToArray();
+var builder = WebApplication.CreateBuilder(configurationArgs);
+// Preserve deployment configuration precedence above the scoring file.
 builder.Configuration
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-    .AddJsonFile("footbalScoring.json", optional: true, reloadOnChange: true)
-    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
-    .AddEnvironmentVariables();
-// Bind تنظیمات
+    .AddJsonFile("footbalScoring.json", optional: false, reloadOnChange: true)
+    .AddEnvironmentVariables()
+    .AddCommandLine(configurationArgs);
+builder.AddSeriLogLogger();
 builder.Services.Configure<AppSettings>(builder.Configuration);
 
-builder.Services.AddDbContext<TelegramAggregatorContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException("Set ConnectionStrings__DefaultConnection to the Npgsql connection string.");
+}
 
+builder.Services.AddDbContext<TelegramAggregatorContext>(options => options.UseNpgsql(connectionString));
 builder.Services.AddRepositories();
-// ------------------- سرویس‌ها -------------------
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-
-
-// CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
-
-
- 
-
-
-
 builder.Services.AddSingleton<IPlaywrightService, PlaywrightService>();
-builder.Services.AddHttpClient<IHttpHelperService, HttpHelperService>("RssHttpClient", client =>
+builder.Services.AddHttpClient<IHttpHelperService, HttpHelperService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(30);
-
-    // وانمود می‌کنیم یک مرورگر واقعی هستیم:
     client.DefaultRequestHeaders.UserAgent.ParseAdd(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36");
-
-    // جلوگیری از کش سمت CDN یا سرور
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36");
     client.DefaultRequestHeaders.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue
     {
-        NoCache = true,
-        NoStore = true,
-        MustRevalidate = true
+        NoCache = true
     };
-
-    client.DefaultRequestHeaders.Pragma.TryParseAdd("no-cache");
-    client.DefaultRequestHeaders.IfNoneMatch.Clear();
 });
-
-
-
-// سرویس‌های Scoped
 builder.Services.AddScoped<IFootballForiDashboardService, FootballForiDashboardService>();
 builder.Services.AddScoped<IRssParserService, RssParserService>();
 builder.Services.AddScoped<IImageExtractorService, ImageExtractorService>();
 builder.Services.AddScoped<IFullDecriptionExtractorService, FullDecriptionExtractorService>();
 builder.Services.AddScoped<IFootball360ScraperService, Football360ScraperService>();
-
-
-
-
-// Telegram Bot
-builder.Services.AddSingleton<ITelegramBotClient>(sp =>
+builder.Services.AddScoped<FootballforiService>();
+builder.Services.AddSingleton<ITelegramBotClient>(services =>
 {
-    var token = sp.GetRequiredService<IOptions<AppSettings>>().Value.FootbalForiSettings.BotToken
-                 ?? throw new InvalidOperationException("BotToken تنظیم نشده است!");
-    return new TelegramBotClient(token);
-
-});
-
-
-//// سرویس اصلی + سرویس پس‌زمینه
-//builder.Services.AddScoped<FootballforiService>();
-//builder.Services.AddHostedService<FootballforiBackgroundService>(); // این خودش Publish رو یک بار استارت می‌کنه
-
-// ------------------- اپلیکیشن -------------------
-var app = builder.Build();
- 
- 
-// Middleware ها
-app.UseHttpsRedirection();
-app.UseHsts();
-app.UseStaticFiles();        // مهم: برای debug.html و wwwroot
-app.UseRouting();
-app.UseCors("AllowAll");
-
-app.UseSerilogRequestLogging();
- 
-app.MapControllers();
-
-// در پروداکشن روی همه آی‌پی‌ها گوش بده
-if (app.Environment.IsProduction())
-{
-    app.Urls.Add("http://0.0.0.0:5000");
-}
-
-
- 
-using (var scope = app.Services.CreateScope())
+    var token = services.GetRequiredService<IOptions<AppSettings>>().Value.FootbalForiSettings.BotToken;
+    if (string.IsNullOrWhiteSpace(token))
     {
-        var db = scope.ServiceProvider.GetRequiredService<TelegramAggregatorContext>();
-        db.Database.Migrate();
+        throw new InvalidOperationException("Set FootbalForiSettings__BotToken before enabling publishing.");
     }
 
+    return new TelegramBotClient(token);
+});
 
+if (builder.Configuration.GetValue<bool>("Worker:PublishingEnabled"))
+{
+    var channelId = builder.Configuration.GetValue<long>("FootbalForiSettings:ChannelId");
+    if (channelId != FootbalForiSettings.TestChannelId)
+    {
+        throw new InvalidOperationException("Telegram publishing is restricted to the configured test channel.");
+    }
+
+    if (string.IsNullOrWhiteSpace(builder.Configuration["FootbalForiSettings:BotToken"]))
+    {
+        throw new InvalidOperationException("Set the test bot token before enabling Telegram publishing.");
+    }
+}
+
+if (builder.Configuration.GetValue<bool>("Worker:FetchEnabled")
+    || builder.Configuration.GetValue<bool>("Worker:PublishingEnabled"))
+{
+    builder.Services.AddHostedService<FootballforiBackgroundService>();
+}
+
+var app = builder.Build();
+app.UseDefaultFiles(new DefaultFilesOptions
+{
+    DefaultFileNames = { "debug.html" }
+});
+app.UseStaticFiles();
+app.UseSerilogRequestLogging();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/health"))
+    {
+        context.Response.Headers.CacheControl = "no-store";
+    }
+
+    await next();
+});
+app.MapGet("/health/live", () => Results.Ok(new { status = "running" }));
+app.MapGet("/health/ready", async (TelegramAggregatorContext database, CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var pendingMigrations = await database.Database.GetPendingMigrationsAsync(cancellationToken);
+        if (pendingMigrations.Any())
+        {
+            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        await database.News.AsNoTracking().Take(1).ToListAsync(cancellationToken);
+        return Results.Ok(new { status = "ready" });
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+        return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+    }
+});
+app.MapControllers();
 
 try
 {
-    app.Run();
+    if (app.Configuration.GetValue<bool>("Database:ApplyMigrations")
+        || args.Contains("--migrate-only", StringComparer.Ordinal))
+    {
+        await using var scope = app.Services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<TelegramAggregatorContext>();
+        await database.Database.MigrateAsync();
+    }
+
+    if (!args.Contains("--migrate-only", StringComparer.Ordinal))
+    {
+        await app.RunAsync();
+    }
 }
 finally
 {
-    // Ensure all buffered Serilog rows are flushed to PostgreSQL before process exits
-    Log.CloseAndFlush();
+    await Log.CloseAndFlushAsync();
 }

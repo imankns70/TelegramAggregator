@@ -1,4 +1,4 @@
-﻿using Serilog;
+using Serilog;
 using Serilog.Events;
 using Serilog.Filters;
 using Serilog.Sinks.PostgreSQL;
@@ -13,19 +13,30 @@ public static class LoggerExtension
 
        
 
+        if (!builder.Configuration.GetValue<bool>("Logging:DatabaseEnabled"))
+        {
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Information()
+                .Enrich.FromLogContext()
+                .WriteTo.Console()
+                .CreateLogger();
+            builder.Host.UseSerilog(Log.Logger, dispose: true);
+            return;
+        }
+
         try
         {
             Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Verbose()
+                .MinimumLevel.Information()
                 .Enrich.FromLogContext()
-                .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Verbose)
+                .WriteTo.Console(restrictedToMinimumLevel: LogEventLevel.Information)
                 // ---------- جدول اصلی لاگ‌ها ----------
                 .WriteTo.PostgreSQL(
                     connectionString: connectionString,
                     tableName: "logs",
                     schemaName: "public",
                     needAutoCreateTable: false,
-                    restrictedToMinimumLevel: LogEventLevel.Verbose,
+                    restrictedToMinimumLevel: LogEventLevel.Information,
                     columnOptions: GetGeneralColumns())
                 // ---------- لاگ‌های HttpClient جداگانه ----------
                 .WriteTo.Logger(lc => lc
@@ -35,7 +46,7 @@ public static class LoggerExtension
                         tableName: "log_http_client",
                         schemaName: "public",
                         needAutoCreateTable: false,
-                        restrictedToMinimumLevel: LogEventLevel.Verbose,
+                        restrictedToMinimumLevel: LogEventLevel.Information,
                         columnOptions: GetHttpClientColumns()
                     )
                 )
@@ -61,7 +72,6 @@ public static class LoggerExtension
     {
         return new Dictionary<string, ColumnWriterBase>
         {
-            ["id"] = new RenderedMessageColumnWriter(),
             ["message"] = new RenderedMessageColumnWriter(),
             ["message_template"] = new MessageTemplateColumnWriter(),
             ["level"] = new LevelColumnWriter(true),
@@ -75,7 +85,6 @@ public static class LoggerExtension
     {
         return new Dictionary<string, ColumnWriterBase>
         {
-            ["id"] = new RenderedMessageColumnWriter(),
             ["message"] = new RenderedMessageColumnWriter(),
             ["message_template"] = new MessageTemplateColumnWriter(),  // حتماً اضافه کنید
             ["level"] = new LevelColumnWriter(true),

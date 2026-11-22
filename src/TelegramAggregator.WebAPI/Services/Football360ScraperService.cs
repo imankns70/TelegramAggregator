@@ -1,6 +1,7 @@
 using Microsoft.Playwright;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
 using TelegramAggregator.WebAPI.Data.Repositories;
@@ -12,13 +13,13 @@ namespace TelegramAggregator.WebAPI.Services
     public class Football360ScraperService : IFootball360ScraperService
     {
         private readonly IPlaywrightService _playwright;
-        private readonly INewsRepository _newsRepository;
+        private readonly ILogger<Football360ScraperService> _logger;
         private const int MaxItems = 10;
 
-        public Football360ScraperService(IPlaywrightService playwright, INewsRepository newsRepository)
+        public Football360ScraperService(IPlaywrightService playwright, ILogger<Football360ScraperService> logger)
         {
             _playwright = playwright;
-            _newsRepository = newsRepository;
+            _logger = logger;
         }
 
         public async Task<List<NewsItem>> GetLatestNewsAsync(CancellationToken ct = default)
@@ -59,7 +60,7 @@ namespace TelegramAggregator.WebAPI.Services
                         if (hrefs.Count >= MaxItems) break;
                     }
 
-                    var tasks = hrefs.Select(href => ExtractNewsItem(context, href, ct));
+                    var tasks = hrefs.Select(href => TryExtractNewsItemAsync(context, href, ct));
                     var results = await Task.WhenAll(tasks);
 
                     foreach (var newsItem in results)
@@ -77,14 +78,36 @@ namespace TelegramAggregator.WebAPI.Services
                     await page.CloseAsync();
                 }
 
-                _newsRepository.FilterNews(newsList);
+                _logger.LogInformation("Fetched {Count} items from Football360", newsList.Count);
             }
-            catch (Exception ex)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                Console.WriteLine($"[Football360] خطا در دریافت صفحه اصلی: {ex.Message}");
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Unable to fetch Football360");
             }
 
             return newsList;
+        }
+
+        private async Task<NewsItem> TryExtractNewsItemAsync(IBrowserContext context, string href, CancellationToken ct)
+        {
+            try
+            {
+                ct.ThrowIfCancellationRequested();
+                return await ExtractNewsItem(context, href, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Unable to extract Football360 article {Link}", href);
+                return null;
+            }
         }
 
         private async Task<NewsItem> ExtractNewsItem(IBrowserContext context, string href, CancellationToken ct)
@@ -97,7 +120,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             if (string.IsNullOrWhiteSpace(href)) return null;
 
-            item.Link = "https://football360.ir" + (href.StartsWith("/") ? href : "/" + href);
+            item.Link = new Uri(new Uri("https://football360.ir/"), href).AbsoluteUri;
 
             var page = await context.NewPageAsync();
             try
@@ -108,7 +131,25 @@ namespace TelegramAggregator.WebAPI.Services
                     Timeout = 30000
                 });
 
-                var titleNode = await page.QuerySelectorAsync("h3");
+                var dataScript = await page.QuerySelectorAsync("script#__NEXT_DATA__");
+                if (dataScript != null)
+                {
+                    using var data = JsonDocument.Parse(await dataScript.TextContentAsync() ?? "{}");
+                    var post = data.RootElement.GetProperty("props").GetProperty("pageProps")
+                        .GetProperty("data").GetProperty("post");
+                    if (post.TryGetProperty("published_at", out var published)
+                        && published.TryGetInt64(out var timestamp))
+                    {
+                        item.PubDate = DateTimeOffset.FromUnixTimeSeconds(timestamp);
+                    }
+                }
+
+                if (item.PubDate < DateTimeOffset.UtcNow.AddHours(-6))
+                {
+                    return null;
+                }
+
+                var titleNode = await page.QuerySelectorAsync("h1");
                 string title = titleNode != null
                     ? (await titleNode.TextContentAsync())?.Trim() ?? ""
                     : "";
@@ -170,12 +211,12 @@ namespace TelegramAggregator.WebAPI.Services
                         item.ShortDescription = CleanDescription(item.ShortDescription);
                     }
 
-                    var fullText = await page.EvaluateAsync<string?>(@"
+                    var fullText = await page.EvaluateAsync<string?>(@"() => {
                         const content = document.querySelector('div.style_body__jQpYO div.style_content__qroM7');
                         if (!content) return null;
                         content.querySelectorAll('script, style, iframe, [class*=""ad""], aside, footer, nav').forEach(e => e.remove());
                         return content.textContent;
-                    ");
+                    }");
 
                     if (fullText != null)
                     {
@@ -249,7 +290,11 @@ namespace TelegramAggregator.WebAPI.Services
                 "در گفت‌وگو با خبرنگار فوتبال فوری: ",
                 RegexOptions.IgnoreCase);
 
-            text = Regex.Replace(text, @"^(منبع|گزارش|نویسنده)?\s*[:：؛]?\s*فوتبال\s*[۳3]۶۰\s*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
+            text = Regex.Replace(
+                text,
+                @"^(منبع|گزارش|نویسنده)?\s*[:：؛]?\s*فوتبال\s*[۳3]۶۰\s*$",
+                "",
+                RegexOptions.Multiline | RegexOptions.IgnoreCase);
 
             text = Regex.Replace(text, @"https?://[^\s]+|@\w+|#\w+", " ", RegexOptions.IgnoreCase);
 

@@ -19,7 +19,7 @@ namespace TelegramAggregator.WebAPI.Services
         {
             try
             {
-                await using var context = await _playwright.CreateContextAsync();
+                await using var context = await _playwright.CreateContextAsync(ct);
                 var page = await context.NewPageAsync();
                 try
                 {
@@ -39,8 +39,8 @@ namespace TelegramAggregator.WebAPI.Services
                     else
                         selector = GetContentSelector(host);
 
-                    var rawText = await page.EvaluateAsync<string?>(@"
-                        const el = document.querySelector(arguments[0]);
+                    var rawText = await page.EvaluateAsync<string?>(@"selector => {
+                        const el = document.querySelector(selector);
                         if (!el) return null;
                         const hasVideo = el.querySelector('video, iframe[src*=""youtube""], div[class*=""video""]');
                         if (hasVideo) {
@@ -48,7 +48,7 @@ namespace TelegramAggregator.WebAPI.Services
                             return p ? p.textContent : '';
                         }
                         return el.textContent;
-                    ", selector);
+                    }", selector);
 
                     var text = NormalizeText(rawText ?? "");
 
@@ -66,6 +66,10 @@ namespace TelegramAggregator.WebAPI.Services
                 {
                     await page.CloseAsync();
                 }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -117,23 +121,26 @@ namespace TelegramAggregator.WebAPI.Services
 
         private async Task CleanPageAsync(IPage page, string host)
         {
-            await page.EvaluateAsync(@"
+            await page.EvaluateAsync(@"() => {
                 const tags = ['script', 'style', 'nav', 'header', 'footer', 'aside', 'form', 'noscript', 'iframe', 'svg'];
                 tags.forEach(tag => document.querySelectorAll(tag).forEach(e => e.remove()));
 
-                document.querySelectorAll('[class*=""ad""], [class*=""banner""], [class*=""advert""]').forEach(e => e.remove());
-                document.querySelectorAll('[id*=""ad""], [id*=""banner""]').forEach(e => e.remove());
+                document.querySelectorAll('[class~=""ad""], [class~=""ads""], [class*=""banner""], [class*=""advert""]').forEach(e => e.remove());
+                document.querySelectorAll('[id^=""ad-""], [id*=""banner""]').forEach(e => e.remove());
                 document.querySelectorAll('div[class*=""share""], div[class*=""social""]').forEach(e => e.remove());
                 document.querySelectorAll('div[class*=""related""], div[class*=""tag""]').forEach(e => e.remove());
-            ");
+            }");
 
             if (host.Contains("tarafdari.com"))
             {
-                await page.EvaluateAsync(@"
+                await page.EvaluateAsync(@"() => {
                     const title = document.querySelector('h1.node__title, h1.title');
                     if (title) title.remove();
 
-                    document.querySelectorAll('div[class*=""node__meta""], div[class*=""author""], div[class*=""submitted""], div[class*=""meta""], div[class*=""stats""]').forEach(e => e.remove());
+                    document.querySelectorAll(
+                        'div[class*=""node__meta""], div[class*=""author""], div[class*=""submitted""], ' +
+                        'div[class*=""meta""], div[class*=""stats""]'
+                    ).forEach(e => e.remove());
 
                     document.querySelectorAll('*').forEach(el => {
                         const t = el.textContent?.trim() || '';
@@ -141,14 +148,16 @@ namespace TelegramAggregator.WebAPI.Services
                             el.remove();
                         }
                     });
-                ");
+                }");
             }
 
             if (host.Contains("khabarvarzeshi.com"))
             {
-                await page.EvaluateAsync(@"
-                    document.querySelectorAll('div[class*=""author""], div[class*=""meta""], div[class*=""time""], div[class*=""share""]').forEach(e => e.remove());
-                ");
+                await page.EvaluateAsync(@"() => {
+                    document.querySelectorAll(
+                        'div[class*=""author""], div[class*=""meta""], div[class*=""time""], div[class*=""share""]'
+                    ).forEach(e => e.remove());
+                }");
             }
         }
 

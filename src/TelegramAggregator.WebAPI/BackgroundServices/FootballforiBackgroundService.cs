@@ -1,4 +1,4 @@
-﻿using TelegramAggregator.WebAPI.Data.Repositories;
+using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Services;
 
 namespace TelegramAggregator.WebAPI.BackgroundServices;
@@ -7,12 +7,15 @@ public class FootballforiBackgroundService : BackgroundService
 {
     private readonly ILogger<FootballforiBackgroundService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IConfiguration _configuration;
     private readonly Random _rnd = Random.Shared;
     public FootballforiBackgroundService(
         ILogger<FootballforiBackgroundService> logger,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IConfiguration configuration)
     {
         _logger = logger;
+        _configuration = configuration;
         _scopeFactory = scopeFactory;
     }
 
@@ -21,8 +24,12 @@ public class FootballforiBackgroundService : BackgroundService
         _logger.LogInformation("FootballforiBackgroundService شروع شد");
 
         // دو task موازی: یکی برای واکشی، یکی برای انتشار
-        var fetchTask = FetchLoopAsync(stoppingToken);
-        var publishTask = PublishLoopAsync(stoppingToken);
+        var fetchTask = _configuration.GetValue<bool>("Worker:FetchEnabled")
+            ? FetchLoopAsync(stoppingToken)
+            : Task.CompletedTask;
+        var publishTask = _configuration.GetValue<bool>("Worker:PublishingEnabled")
+            ? PublishLoopAsync(stoppingToken)
+            : Task.CompletedTask;
 
         await Task.WhenAll(fetchTask, publishTask);
     }
@@ -71,7 +78,7 @@ public class FootballforiBackgroundService : BackgroundService
             var nowUtc = DateTime.UtcNow;
             var nowIran = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, iranTz);
 
-            bool isWorkingHours = (nowIran.Hour >= 8 && nowIran.Hour <= 23) || nowIran.Hour < 3;
+            bool isWorkingHours = nowIran.Hour >= 8 || nowIran.Hour < 1;
 
 
             if (!isWorkingHours)

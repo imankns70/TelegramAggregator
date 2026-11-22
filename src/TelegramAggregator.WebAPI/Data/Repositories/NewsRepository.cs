@@ -1,4 +1,4 @@
-﻿using AngleSharp.Dom;
+using AngleSharp.Dom;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using TelegramAggregator.WebAPI.Data;
@@ -117,7 +117,12 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
         public async Task ProcessNewsAsync(List<NewsItem> newsItems, FootbalForiSettings footbalForiSettings, CancellationToken ct)
         {
 
+            newsItems = newsItems
+                .GroupBy(item => ClearUrl(item.Link))
+                .Select(group => group.First())
+                .ToList();
             await ReceiveRangeAsync(newsItems, ct);
+            newsItems = newsItems.Where(item => item.Id.HasValue).ToList();
             var videoKeywords = footbalForiSettings.VideoKeywords;
             var otherSportsKeywords = footbalForiSettings.OtherSportsKeywords;
             var womenKeywords = footbalForiSettings.WomenKeywords;
@@ -138,7 +143,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
                 var text = $"{item.Title} {item.ShortDescription}".ToLowerInvariant();
                 bool isDecay = false;
 
-                int sportSourceId = GetSportSourceId(item.SourceName);
+                int sportSourceId = NewsUrl.GetSourceId(item.Link);
 
 
                 string decayReason = otherSportsKeywords
@@ -237,7 +242,7 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             if (!news.Any())
                 return;
 
-            int sportSourceId = GetSportSourceId(news.First().SourceName);
+            int sportSourceId = NewsUrl.GetSourceId(news.First().Link);
 
             // 1. Clean incoming links
             var cleanedNews = news
@@ -283,11 +288,12 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
             foreach (var item in newsItems)
             {
+                item.Id = null;
                 string cleanLink = ClearUrl(item.Link);
-                if (existingLinks.Contains(cleanLink))
+                if (!existingLinks.Add(cleanLink))
                     continue;
 
-                int sportSourceId = GetSportSourceId(item.SourceName);
+                int sportSourceId = NewsUrl.GetSourceId(item.Link);
                 var news = new News
                 {
                     Link = cleanLink,
@@ -326,7 +332,8 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
             var todayUtc = DateTimeOffset.UtcNow.Date;
             var inQueueNews = await GetAll()
                                          .Include(n => n.Histories)
-                                         .Where(n => (n.NewsStatusId == StatusEnumeration.InQueue.Id || n.NewsStatusId == StatusEnumeration.Receive.Id)
+                                         .Where(n => (n.NewsStatusId == StatusEnumeration.InQueue.Id
+                                             || n.NewsStatusId == StatusEnumeration.Receive.Id)
                                          && n.InsertDate.Date < todayUtc)
                                          .ToListAsync(ct);
             if (!inQueueNews.Any())
@@ -349,27 +356,8 @@ namespace TelegramAggregator.WebAPI.Models.Repositories
 
         private string ClearUrl(string url)
         {
-            var uri = new Uri(url);
-
-            var clean = uri.GetLeftPart(UriPartial.Path);
-
-            if (clean.EndsWith("/"))
-                clean = clean.TrimEnd('/');
-
-            return clean.ToLowerInvariant();
+            return NewsUrl.Normalize(url);
         }
-
-        private int GetSportSourceId(string sourceName)
-        {
-            if (sourceName == "ورزش سه | آخرین اخبار ورزشی")
-                return SportSourceEnumeration.Varzesh3.Id;
-            else if (sourceName == "طرفداری")
-                return SportSourceEnumeration.Tarafdari.Id;
-            else if (sourceName == "خبرورزشی؛ آخرین اخبار ورزشی ایران و جهان")
-                return SportSourceEnumeration.KhabarVarzeshi.Id;
-            return SportSourceEnumeration.Football360.Id;
-        }
-
 
         public async Task<IReadOnlyList<News>> GetTodayNews(DateTimeOffset iranStartDate, CancellationToken ct)
         {

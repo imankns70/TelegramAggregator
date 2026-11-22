@@ -1,4 +1,3 @@
-﻿using AngleSharp.Dom;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -27,8 +26,7 @@ public class HttpHelperService : IHttpHelperService
             // این خط مهمه! از کلاینت تنظیم‌شده استفاده کن
              
 
-            var requestUrl = $"{url}?_={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
-            var response = await _httpClient.GetAsync(requestUrl, ct);
+            using var response = await _httpClient.GetAsync(url, ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -39,6 +37,10 @@ public class HttpHelperService : IHttpHelperService
             var bytes = await response.Content.ReadAsByteArrayAsync(ct);
             var encoding = DetectEncoding(response.Content.Headers) ?? Encoding.UTF8;
             return encoding.GetString(bytes);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -70,7 +72,7 @@ public class HttpHelperService : IHttpHelperService
         var separator = url.Contains('?') ? "&" : "?";
         var requestUrl = $"{url}{separator}nocache={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
 
-        var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
+        using var request = new HttpRequestMessage(HttpMethod.Get, requestUrl);
         request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 60_000); // فقط 60KB اول
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);

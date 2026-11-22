@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using Serilog;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -14,7 +14,8 @@ namespace TelegramAggregator.WebAPI.Services
 {
     public class FootballforiService
     {
-        private readonly ITelegramBotClient _bot;
+        private readonly IServiceProvider _serviceProvider;
+        private readonly IConfiguration _configuration;
         private readonly ILogger<FootballforiService> _logger;
         private readonly IHttpHelperService _httpHelper;
         private readonly IRssParserService _rssParser;
@@ -26,7 +27,8 @@ namespace TelegramAggregator.WebAPI.Services
 
 
         public FootballforiService(
-            ITelegramBotClient bot,
+            IServiceProvider serviceProvider,
+            IConfiguration configuration,
             ILogger<FootballforiService> logger,
             IHttpHelperService httpHelper,
             IRssParserService rssParser,
@@ -37,7 +39,8 @@ namespace TelegramAggregator.WebAPI.Services
             IFootball360ScraperService football360ScraperService,
             INewsRepository newsRepository)
         {
-            _bot = bot;
+            _serviceProvider = serviceProvider;
+            _configuration = configuration;
             _logger = logger;
             _footbalForiSettings = appSettings.Value.FootbalForiSettings;
             _httpHelper = httpHelper;
@@ -52,12 +55,6 @@ namespace TelegramAggregator.WebAPI.Services
 
         public async Task FetchAndFilterNewsAndAddToQueueAsync(CancellationToken ct)
         {
-            _logger.LogTrace("تست عمومی با ILogger — باید در جدول logs درج بشه");
-            _logger.LogInformation("تست عمومی با ILogger — باید در جدول logs درج بشه");
-            _logger.LogWarning("تست Warning با ILogger — باید در جدول logs درج بشه");
-            _logger.LogDebug("تست Debug — نباید درج بشه چون سطح sink Information هست");
-
-       
             var allItems = new List<NewsItem>();
             foreach (var source in _footbalForiSettings.Sources)
             {
@@ -70,9 +67,13 @@ namespace TelegramAggregator.WebAPI.Services
                         continue;
                     }
 
-                    var parsed = _rssParser.Parse(rssContent);
-
+                    var parsed = _rssParser.Parse(rssContent).ToList();
+                    _logger.LogInformation("Fetched {Count} recent items from {Source}", parsed.Count, source.Name);
                     allItems.AddRange(parsed);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -86,9 +87,6 @@ namespace TelegramAggregator.WebAPI.Services
 
             if (allItems.Any())
             {
-                _logger.LogWarning("همه دیتا جمع شد");
-                _logger.LogInformation("همه دیتا جمع شد");
-                _logger.LogDebug("همه دیتا جمع شد");
                 await _newsRepository.ProcessNewsAsync(allItems, _footbalForiSettings, ct);
 
             }
@@ -97,8 +95,16 @@ namespace TelegramAggregator.WebAPI.Services
         }
         public async Task PublishSingleNewsAsync(CancellationToken ct)
         {
-            _logger.LogInformation("PublishContinuouslyAsync شروع شد — تا ابد زنده می‌مونه");
+            if (!_configuration.GetValue<bool>("Worker:PublishingEnabled"))
+            {
+                return;
+            }
 
+
+            if (_footbalForiSettings.ChannelId != FootbalForiSettings.TestChannelId)
+            {
+                throw new InvalidOperationException("Telegram publishing is restricted to the test channel.");
+            }
 
             News news = await _newsRepository.GetBestNews(ct);
             if (news is null)
@@ -163,14 +169,13 @@ namespace TelegramAggregator.WebAPI.Services
                     var caption = CaptionMakerExtension.GetCaption(item);
                     item.Caption = caption;
 
-                    //Message sentMessage;
-
-                    //sentMessage = await _bot.SendPhoto(
-                    //    chatId: channelId, // 👈 مستقیماً کانال
-                    //    photo: new InputFileUrl(item.ImageUrl),
-                    //    caption: caption,
-                    //    parseMode: ParseMode.Html,
-                    //    cancellationToken: ct);
+                    var bot = _serviceProvider.GetRequiredService<ITelegramBotClient>();
+                    await bot.SendPhoto(
+                        chatId: channelId,
+                        photo: new InputFileUrl(item.ImageUrl),
+                        caption: caption,
+                        parseMode: ParseMode.Html,
+                        cancellationToken: ct);
 
                     await _newsRepository.PublishedAsync(item, ct);
 

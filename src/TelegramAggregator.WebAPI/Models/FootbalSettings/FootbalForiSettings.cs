@@ -1,9 +1,11 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 
 namespace TelegramAggregator.WebAPI.Models.FootbalSettings
 {
     public class FootbalForiSettings
     {
+        public const long TestChannelId = -1003358234804;
+
         public string Name { get; set; }
         public long ChannelId { get; set; }
         public string ChannelUsername { get; set; }
