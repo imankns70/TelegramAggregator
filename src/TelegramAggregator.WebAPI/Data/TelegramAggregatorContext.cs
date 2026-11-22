@@ -1,5 +1,4 @@
-﻿using AngleSharp.Dom;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using TelegramAggregator.WebAPI.Models.Entities;
 using TelegramAggregator.WebAPI.Models.Entities.Logs;
