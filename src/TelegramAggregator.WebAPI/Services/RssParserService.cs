@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.ServiceModel.Syndication;
 using System.Xml;
 using TelegramAggregator.WebAPI.Infrastructure;
@@ -14,7 +15,7 @@ public class RssParserService : IRssParserService
         _logger = logger;
     }
 
-    public IEnumerable<NewsItem> Parse(string xml)
+    public IEnumerable<NewsItem> Parse(string xml, string sourceUrl = null)
     {
         if (string.IsNullOrWhiteSpace(xml))
         {
@@ -29,7 +30,7 @@ public class RssParserService : IRssParserService
                 DtdProcessing = DtdProcessing.Prohibit,
                 XmlResolver = null
             });
-            var feed = SyndicationFeed.Load(reader);
+            var feed = ReadFeed(reader, sourceUrl);
             var cutoff = DateTimeOffset.UtcNow.AddHours(-6);
 
             return feed.Items
@@ -59,5 +60,31 @@ public class RssParserService : IRssParserService
             _logger.LogError(exception, "Unable to parse RSS feed");
             return Array.Empty<NewsItem>();
         }
+    }
+
+    private static SyndicationFeed ReadFeed(XmlReader reader, string sourceUrl)
+    {
+        if (!Uri.TryCreate(sourceUrl, UriKind.Absolute, out var source)
+            || !NewsUrl.IsVarzesh3Host(source.IdnHost)
+            || !reader.IsStartElement("rss", string.Empty))
+        {
+            return SyndicationFeed.Load(reader);
+        }
+
+        var formatter = new Rss20FeedFormatter();
+        var defaultDateParser = formatter.DateTimeParser;
+        formatter.DateTimeParser = (XmlDateTimeData data, out DateTimeOffset date) =>
+        {
+            // Varzesh3 omits the offset in RSS. The same timestamps carry Z on its article pages.
+            return DateTimeOffset.TryParseExact(
+                data.DateTimeString,
+                "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out date)
+                || defaultDateParser(data, out date);
+        };
+        formatter.ReadFrom(reader);
+        return formatter.Feed;
     }
 }

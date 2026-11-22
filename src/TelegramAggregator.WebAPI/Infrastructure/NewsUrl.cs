@@ -26,7 +26,7 @@ public static class NewsUrl
     public static int GetSourceId(string value)
     {
         var host = new Uri(value, UriKind.Absolute).IdnHost;
-        if (IsHost(host, "varzesh3.com"))
+        if (IsVarzesh3Host(host))
         {
             return SportSourceEnumeration.Varzesh3.Id;
         }
@@ -47,6 +47,11 @@ public static class NewsUrl
         }
 
         throw new ArgumentException("Unknown news source host.", nameof(value));
+    }
+
+    public static bool IsVarzesh3Host(string host)
+    {
+        return IsHost(host, "varzesh3.ir") || IsHost(host, "varzesh3.com");
     }
 
     private static bool IsHost(string host, string domain)

@@ -305,7 +305,7 @@ namespace TelegramAggregator.WebAPI.Services
                         for (const i of iframes) {
                             const s = i.getAttribute('src') || '';
                             const platforms = /youtube\.com|youtu\.be|aparat\.com|tamasha\.com|instagram\.com\/reel/;
-                            const otherPlatforms = /tiktok\.com|vimeo\.com|varzesh3\.com\/video/;
+                            const otherPlatforms = /tiktok\.com|vimeo\.com|varzesh3\.(?:com|ir)\/video|video\.varzesh3\.ir/;
                             if (platforms.test(s) || otherPlatforms.test(s)) return true;
                         }
                         return false;
@@ -326,7 +326,8 @@ namespace TelegramAggregator.WebAPI.Services
         private static readonly string[] EmbedPlatforms =
         {
             "youtube.com", "youtu.be", "aparat.com", "tamasha.com",
-            "instagram.com/reel", "tiktok.com", "vimeo.com", "varzesh3.com/video"
+            "instagram.com/reel", "tiktok.com", "vimeo.com", "varzesh3.com/video",
+            "varzesh3.ir/video", "video.varzesh3.ir"
         };
     }
 }

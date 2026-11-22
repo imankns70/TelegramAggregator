@@ -67,7 +67,7 @@ namespace TelegramAggregator.WebAPI.Services
                         continue;
                     }
 
-                    var parsed = _rssParser.Parse(rssContent).ToList();
+                    var parsed = _rssParser.Parse(rssContent, source.Url).ToList();
                     _logger.LogInformation("Fetched {Count} recent items from {Source}", parsed.Count, source.Name);
                     allItems.AddRange(parsed);
                 }

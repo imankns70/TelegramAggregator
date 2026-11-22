@@ -1,6 +1,7 @@
 using Microsoft.Playwright;
 using System.Net;
 using System.Text.RegularExpressions;
+using TelegramAggregator.WebAPI.Infrastructure;
 
 namespace TelegramAggregator.WebAPI.Services
 {
@@ -55,7 +56,7 @@ namespace TelegramAggregator.WebAPI.Services
                     text = host switch
                     {
                         var h when h.Contains("tarafdari.com") => CleanTarafdariText(text),
-                        var h when h.Contains("varzesh3.com") => CleanVarzesh3Text(text),
+                        var h when NewsUrl.IsVarzesh3Host(h) => CleanVarzesh3Text(text),
                         var h when h.Contains("khabarvarzeshi.com") => CleanKhabarVarzeshiText(text),
                         _ => text
                     };
@@ -82,7 +83,7 @@ namespace TelegramAggregator.WebAPI.Services
         {
             return host switch
             {
-                var h when h.Contains("varzesh3.com") => "div.news-body, div.news-text, div.newsPage, article",
+                var h when NewsUrl.IsVarzesh3Host(h) => "div.news-body, div.news-text, div.newsPage, article",
 
                 var h when h.Contains("tarafdari.com") =>
                     "div.node-content, div.field--name-body, div.field-items, div.field-item, article",

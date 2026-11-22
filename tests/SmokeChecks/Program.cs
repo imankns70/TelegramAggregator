@@ -7,10 +7,34 @@ using TelegramAggregator.WebAPI.Services;
 
 public class Program
 {
-    public static async Task Main()
+    public static async Task Main(string[] args)
     {
         Check(NewsUrl.GetSourceId("https://www.tarafdari.com/node/123") == 2, "Source identity uses article host");
         Check(NewsUrl.GetSourceId("https://football360.ir/post/123") == 4, "Football360 identity");
+        Check(NewsUrl.GetSourceId("https://www.varzesh3.ir/news/123") == 1, "New Varzesh3 domain uses the existing source ID");
+        Check(NewsUrl.GetSourceId("https://www.varzesh3.com/news/123") == 1, "Legacy Varzesh3 links still use the same ID");
+
+        const string feedUrl = "https://www.varzesh3.ir/rss/all";
+        var publishedAt = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddMinutes(-10).ToUnixTimeSeconds());
+        var rss = $"""
+            <rss version="2.0"><channel><title>Varzesh3</title><item>
+            <title>Match result</title><link>https://www.varzesh3.ir/news/123</link>
+            <pubDate>{publishedAt:yyyy-MM-dd'T'HH:mm:ss}</pubDate>
+            </item></channel></rss>
+            """;
+        var parser = new RssParserService(NullLogger<RssParserService>.Instance);
+        Check(parser.Parse(rss, feedUrl).Single().PubDate == publishedAt, "Varzesh3 ISO dates without an offset are UTC");
+
+        if (args.Contains("--live-varzesh3", StringComparer.Ordinal))
+        {
+            using var liveClient = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            var liveHttp = new HttpHelperService(liveClient, NullLogger<HttpHelperService>.Instance);
+            var liveFeed = await liveHttp.GetStringAsync(feedUrl);
+            var liveItems = parser.Parse(liveFeed, feedUrl).ToList();
+            Check(liveItems.Count > 0, "The live Varzesh3 feed returned recent news");
+            Check(liveItems.All(item => NewsUrl.GetSourceId(item.Link) == 1), $"Mapped all {liveItems.Count} live items to Varzesh3");
+        }
+
         var url = NewsUrl.Normalize("https://WWW.TARAFDARI.COM/News/ABC?id=1&utm_source=test#section");
         Check(url == "https://www.tarafdari.com/News/ABC?id=1", "Preserve case and identity query, strip tracking");
         Check(NewsUrl.Normalize("https://tarafdari.com/news?id=1")

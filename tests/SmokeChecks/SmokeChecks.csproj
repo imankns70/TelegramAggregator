@@ -7,12 +7,17 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="System.ServiceModel.Syndication" Version="10.0.0" />
     <Using Include="Microsoft.Extensions.Logging" />
     <Compile Include="../../src/TelegramAggregator.WebAPI/Infrastructure/NewsUrl.cs" Link="NewsUrl.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Infrastructure/TextCleaner.cs" Link="TextCleaner.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Models/NewsItem.cs" Link="NewsItem.cs" />
     <Compile Include="../../src/TelegramAggregator.WebAPI/Models/Enums/Enumeration.cs" Link="Enumeration.cs" />
     <Compile Include="../../src/TelegramAggregator.WebAPI/Models/Enums/SportSourceEnumeration.cs" Link="SportSourceEnumeration.cs" />
     <Compile Include="../../src/TelegramAggregator.WebAPI/Services/HttpHelperService.cs" Link="HttpHelperService.cs" />
     <Compile Include="../../src/TelegramAggregator.WebAPI/Services/IHttpHelperService.cs" Link="IHttpHelperService.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Services/RssParserService.cs" Link="RssParserService.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Services/IRssParserService.cs" Link="IRssParserService.cs" />
     <Reference Include="Microsoft.CodeAnalysis">
       <HintPath>$(MSBuildSDKsPath)/../Roslyn/bincore/Microsoft.CodeAnalysis.dll</HintPath>
     </Reference>
