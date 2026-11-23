@@ -23,6 +23,14 @@ builder.Configuration
     .AddJsonFile("footbalScoring.json", optional: false, reloadOnChange: true)
     .AddEnvironmentVariables()
     .AddCommandLine(configurationArgs);
+
+if (string.IsNullOrWhiteSpace(builder.Configuration[WebHostDefaults.ServerUrlsKey])
+    && ushort.TryParse(builder.Configuration["PORT"], out var platformPort)
+    && platformPort > 0)
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{platformPort}");
+}
+
 builder.AddSeriLogLogger();
 builder.Services.Configure<AppSettings>(builder.Configuration);
 

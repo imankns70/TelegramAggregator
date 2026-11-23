@@ -13,6 +13,7 @@ WORKDIR /app
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     ASPNETCORE_ENVIRONMENT=Production
 COPY --from=build /publish/ ./
+RUN find /app/.playwright/node -type f -name node -exec chmod a+x {} +
 USER $APP_UID
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "TelegramAggregator.WebAPI.dll"]
