@@ -7,14 +7,12 @@ COPY src/ src/
 RUN dotnet publish src/TelegramAggregator.WebAPI/TelegramAggregator.WebAPI.csproj \
     -c Release --no-restore -o /publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble
+# Keep this tag in sync with Microsoft.Playwright in the project file.
+FROM mcr.microsoft.com/playwright/dotnet:v1.60.0-noble
 WORKDIR /app
 ENV ASPNETCORE_HTTP_PORTS=8080 \
-    ASPNETCORE_ENVIRONMENT=Production \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    ASPNETCORE_ENVIRONMENT=Production
 COPY --from=build /publish/ ./
-RUN dotnet TelegramAggregator.WebAPI.dll --install-browsers \
-    && chmod -R a+rX /ms-playwright
 USER $APP_UID
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "TelegramAggregator.WebAPI.dll"]
