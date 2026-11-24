@@ -105,8 +105,9 @@ namespace TelegramAggregator.WebAPI.Services
                         return null;
                     }
 
-                    var imgDataList = await page.EvaluateAsync<List<ImgInfo>>(@"
-                        Array.from(document.querySelectorAll(
+                    // Deserialize the JSON in .NET to avoid Playwright's converter for nested DTOs.
+                    var imgDataJson = await page.EvaluateAsync<string>(@"
+                        JSON.stringify(Array.from(document.querySelectorAll(
                             'article img, figure img, ' +
                             'div.news img, div.body img, div.content img, div.post img, div.article img, div.style_body img, ' +
                             'img.main, img.lead, img.hero, img.photo, img.image, img.thumb'
@@ -117,12 +118,13 @@ namespace TelegramAggregator.WebAPI.Services
                             dataLazySrc: img.getAttribute('data-lazy-src') || '',
                             dataOriginal: img.getAttribute('data-original') || '',
                             dataImage: img.getAttribute('data-image') || '',
-                            imgClass: img.className || '',
+                            imgClass: img.getAttribute('class') || '',
                             parentClass: img.parentElement?.getAttribute('class') || '',
                             parentTag: img.parentElement?.tagName?.toLowerCase() || '',
                             inFigure: !!img.closest('figure')
-                        }))
+                        })))
                     ");
+                    var imgDataList = JsonSerializer.Deserialize<List<ImgInfo>>(imgDataJson, JsonSerializerOptions.Web);
 
                     foreach (var imgData in imgDataList)
                     {

@@ -145,7 +145,7 @@ namespace TelegramAggregator.WebAPI.Services
 
                     document.querySelectorAll('*').forEach(el => {
                         const t = el.textContent?.trim() || '';
-                        if (t.length < 100 && (t.includes('مشاهده') || t.includes('دیدگاه') || t.includes('طرفداری |'))) {
+                        if (t.length < 100 && (t.includes('مشاهده') || t.includes('دیدگاه'))) {
                             el.remove();
                         }
                     });
@@ -178,7 +178,7 @@ namespace TelegramAggregator.WebAPI.Services
 
             var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                             .Select(l => l.Trim())
-                            .Where(l => l.Length > 3 && !l.StartsWith("خبرنگار") && !l.StartsWith("منبع"));
+                            .Where(l => l.Length > 3);
 
             return string.Join("\n\n", lines).Trim();
         }
@@ -192,8 +192,6 @@ namespace TelegramAggregator.WebAPI.Services
             text = Regex.Replace(text, @"با دعوت.*?هدیه بگیرید\.?", "", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             text = Regex.Replace(text, @"تبدیل\s*،?\s*\d+\s*هزار\s*تومان.*", "", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             text = Regex.Replace(text, @"\d+\s*(مشاهده|دیدگاه).*?$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            text = Regex.Replace(text, @"^طرفداری\s*[\|｜:؛]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            text = Regex.Replace(text, @"به\s*گزارش\s*طرفداری.*", "", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, @"https?://[^\s]+", "");
             text = Regex.Replace(text, @"[\u200B-\u200D\uFEFF\u2066-\u2069\u202A-\u202E]", "");
             text = Regex.Replace(text, @"(\u200C)+", "\u200C");
@@ -218,8 +216,6 @@ namespace TelegramAggregator.WebAPI.Services
 
             text = Regex.Replace(text, @"@\w+|#\w+", " ", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, @"^\s*\d+\s*(مشاهده|دیدگاه|نفر|بار|بازدید)[^\n]*$\n?", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            text = Regex.Replace(text, @"^خبرورزشی\s*[\|｜:؛]\s*", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            text = Regex.Replace(text, @"به\s*گزارش\s*خبرورزشی.*", "", RegexOptions.IgnoreCase);
             text = Regex.Replace(text, @"^نویسنده\s*:\s*.*$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
             text = Regex.Replace(text, @"^ارسال شده توسط\s*.*$", "", RegexOptions.IgnoreCase | RegexOptions.Multiline);
             text = Regex.Replace(text, @"لینک کوتاه.*", "", RegexOptions.IgnoreCase | RegexOptions.Singleline);

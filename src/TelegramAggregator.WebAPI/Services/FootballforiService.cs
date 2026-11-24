@@ -56,7 +56,30 @@ namespace TelegramAggregator.WebAPI.Services
         public async Task FetchAndFilterNewsAndAddToQueueAsync(CancellationToken ct)
         {
             var allItems = new List<NewsItem>();
-            // RSS fetching remains disabled, as in the local working copy.
+            foreach (var source in _footbalForiSettings.Sources)
+            {
+                try
+                {
+                    var rssContent = await _httpHelper.GetStringAsync(source.Url, ct);
+                    if (string.IsNullOrWhiteSpace(rssContent))
+                    {
+                        _logger.LogWarning("RSS خالی از {Source}", source.Name ?? source.Url);
+                        continue;
+                    }
+
+                    var parsed = _rssParser.Parse(rssContent, source.Url).ToList();
+                    _logger.LogInformation("Fetched {Count} recent items from {Source}", parsed.Count, source.Name ?? source.Url);
+                    allItems.AddRange(parsed);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name ?? source.Url, source.Url);
+                }
+            }
 
             var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
             allItems.AddRange(football360News);
@@ -69,11 +92,11 @@ namespace TelegramAggregator.WebAPI.Services
 
 
         }
-        public async Task PublishSingleNewsAsync(CancellationToken ct)
+        public async Task<bool> PublishSingleNewsAsync(CancellationToken ct)
         {
             if (!_configuration.GetValue<bool>("Worker:PublishingEnabled"))
             {
-                return;
+                return false;
             }
 
 
@@ -85,41 +108,28 @@ namespace TelegramAggregator.WebAPI.Services
             News news = await _newsRepository.GetBestNews(ct);
             if (news is null)
             {
-                await Task.Delay(3000, ct);
-
+                return false;
             }
-            else
-            {
-                await SendToTelegramAsync(news, _footbalForiSettings.ChannelId, ct);
 
-            }
+            await SendToTelegramAsync(news, _footbalForiSettings.ChannelId, ct);
+            return true;
 
 
         }
         private async Task SendToTelegramAsync(News item, long channelId, CancellationToken ct)
         {
-            bool hasVideo = false;
-
             var imageTask = _imageExtractor.ExtractMainImageAsync(item.Link, ct);
             var hasVideoTask = _imageExtractor.HasVideoAsync(item.Link, ct);
-
-            Task<string> fullDescTask = null;
-
-            if (item.SportSourceId != SportSourceEnumeration.Football360.Id)
-            {
-                fullDescTask = _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link, ct);
-                await Task.WhenAll(imageTask, hasVideoTask, fullDescTask);
-            }
-            else
-            {
-                await Task.WhenAll(imageTask, hasVideoTask);
-            }
+            var isFootball360 = item.SportSourceId == SportSourceEnumeration.Football360.Id;
+            // A body saved by an older scraper can be present but incomplete.
+            var fullDescTask = isFootball360
+                ? _football360ScraperService.GetFullDescriptionAsync(item.Link, ct)
+                : _fullDecriptionExtractor.GetFullDescriptionAsync(item.Link, ct);
+            await Task.WhenAll(imageTask, hasVideoTask, fullDescTask);
 
             item.ImageUrl = await imageTask;
-            hasVideo = await hasVideoTask;
-
-            if (fullDescTask != null)
-                item.FullDescription = await fullDescTask;
+            var hasVideo = await hasVideoTask;
+            item.FullDescription = await fullDescTask;
 
             if (!Uri.TryCreate(item.ImageUrl, UriKind.Absolute, out var imageUrl)
                 || (imageUrl.Scheme != Uri.UriSchemeHttps && imageUrl.Scheme != Uri.UriSchemeHttp))
@@ -132,7 +142,8 @@ namespace TelegramAggregator.WebAPI.Services
                 await _newsRepository.DecayAsync(item, "حاوی تگ ویدئو", ct, saveNow: true);
                 await Task.Delay(3000, ct);
             }
-            else if (item.FullDescription != null && item.FullDescription.Contains("خطا در دریافت محتوا"))
+            else if ((isFootball360 && string.IsNullOrWhiteSpace(item.FullDescription))
+                || item.FullDescription?.Contains("خطا در دریافت محتوا") == true)
             {
                 await _newsRepository.DecayAsync(item, "خطا در واکشی شرح کامل", ct, saveNow: true);
                 await Task.Delay(3000, ct);

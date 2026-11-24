@@ -1,6 +1,4 @@
 using Microsoft.Playwright;
-using System.Net;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Web;
@@ -67,7 +65,8 @@ namespace TelegramAggregator.WebAPI.Services
                     {
                         if (newsItem != null &&
                             !string.IsNullOrWhiteSpace(newsItem.Title) &&
-                            !string.IsNullOrWhiteSpace(newsItem.ShortDescription))
+                            !string.IsNullOrWhiteSpace(newsItem.ShortDescription) &&
+                            !string.IsNullOrWhiteSpace(newsItem.FullDescription))
                         {
                             newsList.Add(newsItem);
                         }
@@ -167,21 +166,7 @@ namespace TelegramAggregator.WebAPI.Services
                     );
                 }
 
-                var paragraphNodes = await page.QuerySelectorAllAsync("div[class*='style_content__qroM7'] p");
-                if (paragraphNodes.Count > 0)
-                {
-                    var sb = new StringBuilder();
-                    foreach (var p in paragraphNodes)
-                    {
-                        var text = NormalizeText(await p.TextContentAsync() ?? "");
-                        if (text.Length < 20) continue;
-                        sb.AppendLine(text);
-                        sb.AppendLine();
-                    }
-
-                    item.FullDescription = CleanDescription(
-                        HttpUtility.HtmlDecode(sb.ToString().Trim()));
-                }
+                item.FullDescription = await ReadArticleBodyAsync(page);
             }
             finally
             {
@@ -241,25 +226,42 @@ namespace TelegramAggregator.WebAPI.Services
             }
         }
 
-        private string NormalizeText(string text)
+        public async Task<string> GetFullDescriptionAsync(string link, CancellationToken ct = default)
         {
-            if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                await using var context = await _playwright.CreateContextAsync(ct);
+                var page = await context.NewPageAsync();
+                await page.GotoAsync(link, new PageGotoOptions
+                {
+                    WaitUntil = WaitUntilState.DOMContentLoaded,
+                    Timeout = 30000
+                });
+                ct.ThrowIfCancellationRequested();
+                return await ReadArticleBodyAsync(page);
+            }
+            catch (PlaywrightException exception)
+            {
+                ct.ThrowIfCancellationRequested();
+                _logger.LogWarning(exception, "Unable to read Football360 article body {Link}", link);
+                return string.Empty;
+            }
+        }
 
-            text = WebUtility.HtmlDecode(text)
-                             .Replace("\t", " ")
-                             .Replace("\u200C", " ")
-                             .Replace("\u200B", "")
-                             .Replace(" ", " ")
-                             .Trim();
+        private static async Task<string> ReadArticleBodyAsync(IPage page)
+        {
+            var content = await page.QuerySelectorAsync("div[class*='style_body__'] div[class*='style_content__']");
+            if (content == null)
+            {
+                return string.Empty;
+            }
 
-            text = Regex.Replace(text, @"^\|+\s*", "");
-            text = Regex.Replace(text, @"\s{2,}", " ");
-
-            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                            .Select(l => l.Trim())
-                            .Where(l => l.Length > 3 && !l.StartsWith("خبرنگار") && !l.StartsWith("منبع"));
-
-            return string.Join("\n\n", lines).Trim();
+            var text = await content.InnerTextAsync();
+            var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(CleanDescription)
+                .Where(line => line.Length > 0);
+            return string.Join("\n\n", lines);
         }
 
         private static string CleanDescription(string text)
@@ -275,31 +277,10 @@ namespace TelegramAggregator.WebAPI.Services
                 "$1 "
             );
 
-            text = Regex.Replace(
-                text,
-                @"به\s*گزارش\s*فوتبال\s*(?:360|۳۶۰)",
-                "به گزارش فوتبال فوری",
-                RegexOptions.IgnoreCase
-            );
-
-            text = Regex.Replace(text, @"«?\s*فوتبال\s*[۳3]۶۰\s*»?", "", RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"فوتبال\s*360", "", RegexOptions.IgnoreCase);
-
-            text = Regex.Replace(text,
-                @"در\s*گفت[‌\u200C\s]*وگو\s*با\s*[:؛]?\s*",
-                "در گفت‌وگو با خبرنگار فوتبال فوری: ",
-                RegexOptions.IgnoreCase);
-
-            text = Regex.Replace(
-                text,
-                @"^(منبع|گزارش|نویسنده)?\s*[:：؛]?\s*فوتبال\s*[۳3]۶۰\s*$",
-                "",
-                RegexOptions.Multiline | RegexOptions.IgnoreCase);
-
             text = Regex.Replace(text, @"https?://[^\s]+|@\w+|#\w+", " ", RegexOptions.IgnoreCase);
 
             text = Regex.Replace(text, @"(برچسب|تگ|کلیدواژه)[‌\s]*ها.*$", "", RegexOptions.Multiline | RegexOptions.IgnoreCase);
-            text = Regex.Replace(text, @"\d+[\s\u200C]*(مشاهده|دیدگاه|نفر|بار|بازدید).*", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"^\s*\d+[ \u200C]*(مشاهده|دیدگاه|بازدید)\s*$", "", RegexOptions.Multiline);
 
             var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
                             .Select(l => l.Trim())

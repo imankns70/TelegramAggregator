@@ -139,18 +139,24 @@ public class FootballforiBackgroundService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var service = scope.ServiceProvider.GetRequiredService<FootballforiService>();
-                await service.PublishSingleNewsAsync(ct);  // متد جدید که فقط یک خبر بفرسته
+                var foundNews = await service.PublishSingleNewsAsync(ct);
+                if (!foundNews)
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(1), ct);
+                    continue;
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "خطا در انتشار خبر");
-                await Task.Delay(TimeSpan.FromSeconds(3), ct);
+                await Task.Delay(TimeSpan.FromMinutes(1), ct);
+                continue;
             }
 
             int randomId = _rnd.Next(20, 40);
             _logger.LogDebug("زمان خواب تا ارسال بعدی {RandomId} دقیقه", randomId);
             // WARNING: 15s delay is DEBUG mode — use the randomized delay in production!
-            await Task.Delay(TimeSpan.FromMinutes(randomId), ct);
+            await Task.Delay(TimeSpan.FromSeconds(randomId), ct);
 
         }
 

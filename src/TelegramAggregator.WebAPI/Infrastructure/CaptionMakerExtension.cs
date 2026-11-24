@@ -10,63 +10,66 @@ public static class CaptionMakerExtension
 {
     private const int MaxRichTextBytes = 32_768;
     private const int BodyPreviewLength = 220;
-    private const string DetailsLabel = "جزئیات خبر";
-    private const string Admin = "#iman";
+    private const string HeadlinePrefix = "⚽ ";
+    private const string DetailsLabel = "متن کامل خبر";
     private const string SectionBreak = "\n\n";
     private static readonly char[] SentenceEndings = { '.', '!', '?', '؟', '۔', '\n' };
-    private static readonly char[] RepeatedTextSeparators = { ' ', '.', '!', '?', '؟', '۔', '،', ',', ':', '؛', '–', '—' };
+    private static readonly char[] RepeatedTextSeparators = { ' ', '\n', '.', '!', '?', '؟', '۔', '،', ',', ':', '؛', '–', '—' };
+    private static readonly Regex SourceNames = new(
+        @"(?<![\p{L}\p{M}\p{N}])
+          (?:
+              (?:خبر[\s\u200C]+)?ورزش[\s\u200C]*(?:سه|[3۳٣]) | varzesh[\s\u200C]*3
+            | طرفدار[یي] | tarafdari
+            | خبر[\s\u200C]*ورزش[یي] | khabar[\s\u200C]*varzeshi
+            | فوتبال[\s\u200C]*(?:[3۳٣][6۶٦][0۰٠]|فور[یي]) | football[\s\u200C]*360
+          )
+          (?![\p{L}\p{M}\p{N}])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.IgnorePatternWhitespace);
 
     public static string GetRichHtml(News item)
     {
         var title = CleanText(item.Title);
         if (title.Length == 0)
         {
-            title = "خبر فوری";
+            title = "خبر فوتبال";
         }
 
         var summary = WithoutRepeatedOpening(CleanText(item.ShortDescription), title);
-        var body = GetBody(item.FullDescription, title, summary);
+        var body = GetBody(item.FullDescription, title);
+        var hasDetails = body.Length > BodyPreviewLength;
+        var preview = WithoutRepeatedOpening(body, summary);
+        if (hasDetails)
+        {
+            preview = summary.Length == 0 ? body[..FindBreak(body, BodyPreviewLength)].TrimEnd() : "";
+        }
+
         title = Shorten(title, 180);
         summary = Shorten(summary, 260);
 
-        var source = GetSourceName(item);
-        var sourceLabel = source.Length == 0 ? "متن کامل خبر" : $"متن کامل در {source}";
-        var hasLink = Uri.TryCreate(item.Link, UriKind.Absolute, out var link)
-            && (link.Scheme == Uri.UriSchemeHttps || link.Scheme == Uri.UriSchemeHttp)
-            && link.Host.Length > 0
-            && link.UserInfo.Length == 0;
-        var footerLabel = hasLink ? $"↗ {sourceLabel}" : source;
-        var footer = hasLink
-            ? $"<a href=\"{WebUtility.HtmlEncode(link.AbsoluteUri)}\">{WebUtility.HtmlEncode(footerLabel)}</a>"
-            : WebUtility.HtmlEncode(footerLabel);
-
-        var sections = new List<string> { $"<p><b>{WebUtility.HtmlEncode(title)}</b></p>" };
+        var headline = HeadlinePrefix + title;
+        var sections = new List<string> { $"<h2>{WebUtility.HtmlEncode(headline)}</h2>" };
         if (summary.Length > 0)
         {
             sections.Add(ToParagraph(summary));
         }
 
-        var fixedText = string.Join(SectionBreak, title, summary, DetailsLabel, footerLabel, Admin);
-        var bodyBudget = MaxRichTextBytes - Encoding.UTF8.GetByteCount(fixedText) - SectionBreak.Length;
-        body = FitBody(body, bodyBudget);
-        var previewBreak = FindBreak(body, BodyPreviewLength);
-        var preview = body[..previewBreak].TrimEnd();
         if (preview.Length > 0)
         {
             sections.Add(ToParagraph(preview));
         }
 
-        var details = body[previewBreak..].TrimStart();
-        if (details.Length > 0)
+        if (hasDetails)
         {
-            sections.Add($"<details><summary>{DetailsLabel}</summary>{ToParagraph(details)}</details>");
+            var fixedText = string.Join(SectionBreak, headline, summary, preview, DetailsLabel);
+            var bodyBudget = MaxRichTextBytes - Encoding.UTF8.GetByteCount(fixedText) - SectionBreak.Length;
+            var details = FitBody(body, bodyBudget);
+            sections.Add($"<details><summary><b>{DetailsLabel}</b></summary>{ToParagraph(details)}</details>");
         }
 
-        sections.Add(footer.Length > 0 ? $"<p>{footer}<br>{Admin}</p>" : $"<p>{Admin}</p>");
         return string.Join('\n', sections);
     }
 
-    private static string GetBody(string text, string title, string summary)
+    private static string GetBody(string text, string title)
     {
         text = Regex.Replace(text ?? "", @"</(?:p|div|li|h[1-6])\s*>|<br\b[^>]*>", "\n", RegexOptions.IgnoreCase);
         text = Regex.Replace(text, @"https?://[^\s<]+", "", RegexOptions.IgnoreCase);
@@ -74,9 +77,7 @@ public static class CaptionMakerExtension
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var line in text.Split('\n'))
         {
-            var paragraph = CleanText(line);
-            paragraph = Regex.Replace(paragraph, @"^(طرفداری|ورزش[‌ ]*سه|خبرورزشی|فوتبال\s*[۳3][۶6][۰0])\s*[|｜]\s*", "");
-            paragraph = WithoutRepeatedOpening(WithoutRepeatedOpening(paragraph, title), summary);
+            var paragraph = WithoutRepeatedOpening(CleanText(line), title);
 
             if (paragraph.Length > 0 && seen.Add(paragraph))
             {
@@ -124,7 +125,8 @@ public static class CaptionMakerExtension
         text = Regex.Replace(text ?? "", @"</?[a-zA-Z][a-zA-Z0-9]*\b[^<>]*>", " ");
         text = WebUtility.HtmlDecode(text);
         text = Regex.Replace(text, @"[\u200B\uFEFF\u2066-\u2069\u202A-\u202E]", "");
-        return Regex.Replace(text, @"\s+", " ").Trim();
+        text = Regex.Replace(text, @"\s+", " ").Trim();
+        return SourceNames.Replace(text, "خبر فوری");
     }
 
     private static string WithoutRepeatedOpening(string text, string opening)
@@ -188,15 +190,4 @@ public static class CaptionMakerExtension
         return cutoff;
     }
 
-    private static string GetSourceName(News item)
-    {
-        return item.SportSourceId switch
-        {
-            var id when id == SportSourceEnumeration.Varzesh3.Id => "ورزش۳",
-            var id when id == SportSourceEnumeration.Tarafdari.Id => SportSourceEnumeration.Tarafdari.Name,
-            var id when id == SportSourceEnumeration.KhabarVarzeshi.Id => "خبرورزشی",
-            var id when id == SportSourceEnumeration.Football360.Id => "فوتبال۳۶۰",
-            _ => Shorten(CleanText(item.SportSource?.Title), 60)
-        };
-    }
 }
