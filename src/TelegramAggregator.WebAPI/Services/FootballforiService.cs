@@ -56,31 +56,7 @@ namespace TelegramAggregator.WebAPI.Services
         public async Task FetchAndFilterNewsAndAddToQueueAsync(CancellationToken ct)
         {
             var allItems = new List<NewsItem>();
-            foreach (var source in _footbalForiSettings.Sources)
-            {
-                try
-                {
-                    var rssContent = await _httpHelper.GetStringAsync(source.Url, ct);
-                    if (string.IsNullOrWhiteSpace(rssContent))
-                    {
-                        _logger.LogWarning("RSS خالی از {Source}", source.Name ?? source.Url);
-                        continue;
-                    }
-
-                    var parsed = _rssParser.Parse(rssContent, source.Url).ToList();
-                    _logger.LogInformation("Fetched {Count} recent items from {Source}", parsed.Count, source.Name ?? source.Url);
-                    allItems.AddRange(parsed);
-                }
-                catch (OperationCanceledException) when (ct.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "خطا در واکشی منبع: {Source} | {Url}", source.Name, source.Url);
-                    await Task.Delay(3000, ct);
-                }
-            }
+            // RSS fetching remains disabled, as in the local working copy.
 
             var football360News = await _football360ScraperService.GetLatestNewsAsync(ct);
             allItems.AddRange(football360News);
