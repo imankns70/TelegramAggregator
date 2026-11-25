@@ -1,8 +1,8 @@
 using Microsoft.Extensions.Options;
 using Serilog;
+using System.Net;
 using Telegram.Bot;
 using Telegram.Bot.Types;
-using Telegram.Bot.Types.Enums;
 using TelegramAggregator.WebAPI.Data;
 using TelegramAggregator.WebAPI.Data.Repositories;
 using TelegramAggregator.WebAPI.Infrastructure;
@@ -121,7 +121,8 @@ namespace TelegramAggregator.WebAPI.Services
             if (fullDescTask != null)
                 item.FullDescription = await fullDescTask;
 
-            if (string.IsNullOrEmpty(item.ImageUrl))
+            if (!Uri.TryCreate(item.ImageUrl, UriKind.Absolute, out var imageUrl)
+                || (imageUrl.Scheme != Uri.UriSchemeHttps && imageUrl.Scheme != Uri.UriSchemeHttp))
             {
                 await _newsRepository.DecayAsync(item, "خبر بدون عکس", ct, saveNow: true);
                 await Task.Delay(3000, ct);
@@ -142,15 +143,17 @@ namespace TelegramAggregator.WebAPI.Services
 
                 try
                 {
-                    var caption = CaptionMakerExtension.GetCaption(item);
-                    item.Caption = caption;
+                    item.Caption = CaptionMakerExtension.GetRichHtml(item);
+                    var richMessage = new InputRichMessage
+                    {
+                        Html = $"<img src=\"{WebUtility.HtmlEncode(imageUrl.AbsoluteUri)}\"/>\n{item.Caption}",
+                        IsRtl = true
+                    };
 
                     var bot = _serviceProvider.GetRequiredService<ITelegramBotClient>();
-                    await bot.SendPhoto(
+                    await bot.SendRichMessage(
                         chatId: channelId,
-                        photo: new InputFileUrl(item.ImageUrl),
-                        caption: caption,
-                        parseMode: ParseMode.Html,
+                        richMessage: richMessage,
                         cancellationToken: ct);
 
                     await _newsRepository.PublishedAsync(item, ct);

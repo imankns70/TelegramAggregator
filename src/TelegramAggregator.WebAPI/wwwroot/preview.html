@@ -72,6 +72,34 @@
             word-wrap: break-word; /* جلوگیری از خروج متن از مرز */
         }
 
+        .caption a {
+            color: #61baff;
+        }
+
+        .caption p {
+            margin: 0 0 12px;
+        }
+
+        .caption p:last-child {
+            margin-bottom: 0;
+        }
+
+        .caption details {
+            border-block: 1px solid #333;
+            margin: 12px 0;
+            padding: 8px 0;
+        }
+
+        .caption summary {
+            color: #61baff;
+            cursor: pointer;
+            font-weight: 700;
+        }
+
+        .caption details p {
+            margin-top: 8px;
+        }
+
         .refresh {
             text-align: center;
             margin: 18px 0 8px;
@@ -101,24 +129,6 @@
         const REFRESH_INTERVAL = 60000;
         let countdown = REFRESH_INTERVAL / 1000;
 
-        function cleanCaption(rawCaption) {
-            if (!rawCaption) return "در حال بارگذاری کپشن...";
-
-            let cleaned = rawCaption.trim();
-            cleaned = cleaned.replace(/\n/g, '<br>');
-
-            cleaned = cleaned.replace(/^(<br\s*\/?\s*>)*/gi, '');
-            cleaned = cleaned.replace(/(<br\s*\/?\s*>)*/gi, '');
-
-            cleaned = cleaned.replace(/(<br\s*\/?\s*>{3,})/gi, '<br><br>');
-
-            cleaned = cleaned.replace(/<\/b>(?!<br>)/gi, '</b><br><br>');
-
-            cleaned = cleaned.replace(/([^<br>])(@FOOTBALFORI|#iman)/gi, '$1<br><br>$2');
-
-            return cleaned;
-        }
-
         async function loadPreview() {
             try {
                 const res = await fetch('/api/dashboard/latest-preview');
@@ -139,7 +149,7 @@
                     content += `<div class="placeholder-image">تصویر خبر<br><small>در دسترس نیست</small></div>`;
                 }
 
-                content += `<div class="caption">${cleanCaption(data.caption)}</div>`;
+                content += `<div class="caption">${data.caption || 'خبری برای پیش‌نمایش وجود ندارد.'}</div>`;
 
                 document.getElementById('preview').innerHTML = content;
 

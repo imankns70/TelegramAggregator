@@ -128,7 +128,7 @@ namespace TelegramAggregator.WebAPI.Services.Dashboard
             var item = await _newsRepository.GetLastNews(ct);
             if (item != null)
             {
-                var caption = CaptionMakerExtension.GetCaption(item);
+                var caption = CaptionMakerExtension.GetRichHtml(item);
                 return (imageurl: item.ImageUrl, caption: caption);
             }
 
