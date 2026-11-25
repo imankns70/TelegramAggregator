@@ -100,9 +100,9 @@ namespace TelegramAggregator.WebAPI.Services
             }
 
 
-            if (_footbalForiSettings.ChannelId != FootbalForiSettings.TestChannelId)
+            if (!FootbalForiSettings.IsPublishingChannelAllowed(_footbalForiSettings.ChannelId))
             {
-                throw new InvalidOperationException("Telegram publishing is restricted to the test channel.");
+                throw new InvalidOperationException("Telegram publishing requires the main or test channel.");
             }
 
             News news = await _newsRepository.GetBestNews(ct);

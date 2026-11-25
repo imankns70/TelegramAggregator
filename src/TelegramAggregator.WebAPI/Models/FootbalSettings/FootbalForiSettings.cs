@@ -5,6 +5,12 @@ namespace TelegramAggregator.WebAPI.Models.FootbalSettings
     public class FootbalForiSettings
     {
         public const long TestChannelId = -1003358234804;
+        public const long MainChannelId = -1003115196905;
+
+        public static bool IsPublishingChannelAllowed(long channelId)
+        {
+            return channelId is TestChannelId or MainChannelId;
+        }
 
         public string Name { get; set; }
         public long ChannelId { get; set; }

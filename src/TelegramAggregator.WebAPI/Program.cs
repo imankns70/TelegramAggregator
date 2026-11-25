@@ -75,9 +75,9 @@ builder.Services.AddSingleton<ITelegramBotClient>(services =>
 if (builder.Configuration.GetValue<bool>("Worker:PublishingEnabled"))
 {
     var channelId = builder.Configuration.GetValue<long>("FootbalForiSettings:ChannelId");
-    if (channelId != FootbalForiSettings.TestChannelId)
+    if (!FootbalForiSettings.IsPublishingChannelAllowed(channelId))
     {
-        throw new InvalidOperationException("Telegram publishing is restricted to the configured test channel.");
+        throw new InvalidOperationException("Telegram publishing requires the main or test channel.");
     }
 
     if (string.IsNullOrWhiteSpace(builder.Configuration["FootbalForiSettings:BotToken"]))
