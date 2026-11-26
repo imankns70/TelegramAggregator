@@ -111,12 +111,11 @@ namespace TelegramAggregator.WebAPI.Services
                 return false;
             }
 
-            await SendToTelegramAsync(news, _footbalForiSettings.ChannelId, ct);
-            return true;
+            return await TrySendToTelegramAsync(news, _footbalForiSettings.ChannelId, ct);
 
 
         }
-        private async Task SendToTelegramAsync(News item, long channelId, CancellationToken ct)
+        private async Task<bool> TrySendToTelegramAsync(News item, long channelId, CancellationToken ct)
         {
             var imageTask = _imageExtractor.ExtractMainImageAsync(item.Link, ct);
             var hasVideoTask = _imageExtractor.HasVideoAsync(item.Link, ct);
@@ -135,51 +134,50 @@ namespace TelegramAggregator.WebAPI.Services
                 || (imageUrl.Scheme != Uri.UriSchemeHttps && imageUrl.Scheme != Uri.UriSchemeHttp))
             {
                 await _newsRepository.DecayAsync(item, "خبر بدون عکس", ct, saveNow: true);
-                await Task.Delay(3000, ct);
+                return false;
             }
-            else if (hasVideo)
+            if (hasVideo)
             {
                 await _newsRepository.DecayAsync(item, "حاوی تگ ویدئو", ct, saveNow: true);
-                await Task.Delay(3000, ct);
+                return false;
             }
-            else if ((isFootball360 && string.IsNullOrWhiteSpace(item.FullDescription))
+            if ((isFootball360 && string.IsNullOrWhiteSpace(item.FullDescription))
                 || item.FullDescription?.Contains("خطا در دریافت محتوا") == true)
             {
                 await _newsRepository.DecayAsync(item, "خطا در واکشی شرح کامل", ct, saveNow: true);
-                await Task.Delay(3000, ct);
+                return false;
             }
-            else
+
+            item.Caption = CaptionMakerExtension.GetRichHtml(item);
+            var richMessage = new InputRichMessage
             {
+                Html = $"<img src=\"{WebUtility.HtmlEncode(imageUrl.AbsoluteUri)}\"/>\n{item.Caption}",
+                IsRtl = true
+            };
 
-
-                try
-                {
-                    item.Caption = CaptionMakerExtension.GetRichHtml(item);
-                    var richMessage = new InputRichMessage
-                    {
-                        Html = $"<img src=\"{WebUtility.HtmlEncode(imageUrl.AbsoluteUri)}\"/>\n{item.Caption}",
-                        IsRtl = true
-                    };
-
-                    var bot = _serviceProvider.GetRequiredService<ITelegramBotClient>();
-                    await bot.SendRichMessage(
-                        chatId: channelId,
-                        richMessage: richMessage,
-                        cancellationToken: ct);
-
-                    await _newsRepository.PublishedAsync(item, ct);
-
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "خطا در ارسال به تلگرام {Message}", ex.Message);
-                    await _newsRepository.DecayAsync(item, $"خطا در ارسال به تلگرام {ex.Message}", ct, saveNow: true);
-                    await Task.Delay(TimeSpan.FromSeconds(3), ct);  // was 3000s (50 min!) — fixed to 3s
-                }
-
-
+            var bot = _serviceProvider.GetRequiredService<ITelegramBotClient>();
+            try
+            {
+                await bot.SendRichMessage(chatId: channelId, richMessage: richMessage, cancellationToken: ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "خطا در ارسال به تلگرام {Message}", ex.Message);
+                await _newsRepository.DecayAsync(item, $"خطا در ارسال به تلگرام {ex.Message}", ct, saveNow: true);
+                // A failed response can leave delivery unconfirmed, so keep the publication interval.
+                return true;
             }
 
+            try
+            {
+                await _newsRepository.PublishedAsync(item, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogError(ex, "خبر {NewsId} در تلگرام ارسال شد ولی ثبت انتشار ناموفق بود", item.Id);
+            }
+
+            return true;
         }
     }
 }

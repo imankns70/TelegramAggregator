@@ -5,10 +5,11 @@ namespace TelegramAggregator.WebAPI.BackgroundServices;
 
 public class FootballforiBackgroundService : BackgroundService
 {
+    private const int MinPublishIntervalMinutes = 20;
+    private const int MaxPublishIntervalMinutes = 40;
     private readonly ILogger<FootballforiBackgroundService> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
-    private readonly Random _rnd = Random.Shared;
     public FootballforiBackgroundService(
         ILogger<FootballforiBackgroundService> logger,
         IServiceScopeFactory scopeFactory,
@@ -72,6 +73,7 @@ public class FootballforiBackgroundService : BackgroundService
         _logger.LogInformation("شروع حلقه انتشار خبر");
         var iranTz = GetIranTimeZone();
         DateOnly? lastExpireRun = null;
+        DateTimeOffset? nextPublishAt = null;
         while (!ct.IsCancellationRequested)
         {
 
@@ -135,29 +137,40 @@ public class FootballforiBackgroundService : BackgroundService
             }
 
 
+            var delay = TimeSpan.FromMinutes(1);
             try
             {
                 using var scope = _scopeFactory.CreateScope();
-                var service = scope.ServiceProvider.GetRequiredService<FootballforiService>();
-                var foundNews = await service.PublishSingleNewsAsync(ct);
-                if (!foundNews)
+                if (nextPublishAt is null)
                 {
-                    await Task.Delay(TimeSpan.FromMinutes(1), ct);
-                    continue;
+                    var repo = scope.ServiceProvider.GetRequiredService<INewsRepository>();
+                    var lastSent = (await repo.GetLastNews(ct))?.SentDate;
+                    nextPublishAt = lastSent?.AddMinutes(MinPublishIntervalMinutes) ?? DateTimeOffset.MinValue;
+                }
+
+                var remaining = nextPublishAt.Value - DateTimeOffset.UtcNow;
+                if (remaining > TimeSpan.Zero)
+                {
+                    delay = remaining;
+                }
+                else
+                {
+                    var service = scope.ServiceProvider.GetRequiredService<FootballforiService>();
+                    if (await service.PublishSingleNewsAsync(ct))
+                    {
+                        var interval = Random.Shared.Next(MinPublishIntervalMinutes, MaxPublishIntervalMinutes + 1);
+                        delay = TimeSpan.FromMinutes(interval);
+                        nextPublishAt = DateTimeOffset.UtcNow + delay;
+                        _logger.LogDebug("زمان خواب تا ارسال بعدی {Minutes} دقیقه", interval);
+                    }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 _logger.LogError(ex, "خطا در انتشار خبر");
-                await Task.Delay(TimeSpan.FromMinutes(1), ct);
-                continue;
             }
 
-            int randomId = _rnd.Next(20, 40);
-            _logger.LogDebug("زمان خواب تا ارسال بعدی {RandomId} دقیقه", randomId);
-            // WARNING: 15s delay is DEBUG mode — use the randomized delay in production!
-            await Task.Delay(TimeSpan.FromSeconds(randomId), ct);
-
+            await Task.Delay(delay, ct);
         }
 
     }

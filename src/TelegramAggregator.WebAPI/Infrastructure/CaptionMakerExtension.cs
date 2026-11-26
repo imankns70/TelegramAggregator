@@ -10,8 +10,7 @@ public static class CaptionMakerExtension
 {
     private const int MaxRichTextBytes = 32_768;
     private const int BodyPreviewLength = 220;
-    private const string HeadlinePrefix = "⚽ ";
-    private const string DetailsLabel = "متن کامل خبر";
+    private const string DetailsLabel = "🔹 متن کامل خبر";
     private const string SectionBreak = "\n\n";
     private static readonly char[] SentenceEndings = { '.', '!', '?', '؟', '۔', '\n' };
     private static readonly char[] RepeatedTextSeparators = { ' ', '\n', '.', '!', '?', '؟', '۔', '،', ',', ':', '؛', '–', '—' };
@@ -25,6 +24,10 @@ public static class CaptionMakerExtension
           )
           (?![\p{L}\p{M}\p{N}])",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.IgnorePatternWhitespace);
+    private const string BrandMention = "[\"«“„']?خبر[ \\u200C]+فوری[\"»”‟']?(?![\\p{L}\\p{M}\\p{N}])";
+    private static readonly Regex RepeatedBrandMentions = new(
+        $@"(?<![\p{{L}}\p{{M}}\p{{N}}])(?<first>(?<attribution>(?:به[ \u200C]+گزارش )?){BrandMention})(?:(?:[،,] *| +)\k<attribution>{BrandMention})+",
+        RegexOptions.CultureInvariant);
 
     public static string GetRichHtml(News item)
     {
@@ -46,8 +49,15 @@ public static class CaptionMakerExtension
         title = Shorten(title, 180);
         summary = Shorten(summary, 260);
 
-        var headline = HeadlinePrefix + title;
-        var sections = new List<string> { $"<h2>{WebUtility.HtmlEncode(headline)}</h2>" };
+        var headlineEmoji = item.Score switch
+        {
+            >= 200 => "🔥",
+            >= 150 => "⚡",
+            >= 100 => "⭐",
+            _ => "⚽"
+        };
+        var headline = $"{headlineEmoji} {title}";
+        var sections = new List<string> { $"<p><b>{WebUtility.HtmlEncode(headline)}</b></p>" };
         if (summary.Length > 0)
         {
             sections.Add(ToParagraph(summary));
@@ -63,7 +73,7 @@ public static class CaptionMakerExtension
             var fixedText = string.Join(SectionBreak, headline, summary, preview, DetailsLabel);
             var bodyBudget = MaxRichTextBytes - Encoding.UTF8.GetByteCount(fixedText) - SectionBreak.Length;
             var details = FitBody(body, bodyBudget);
-            sections.Add($"<details><summary><b>{DetailsLabel}</b></summary>{ToParagraph(details)}</details>");
+            sections.Add($"<details><summary>{DetailsLabel}</summary>{ToParagraph(details)}</details>");
         }
 
         return string.Join('\n', sections);
@@ -126,7 +136,8 @@ public static class CaptionMakerExtension
         text = WebUtility.HtmlDecode(text);
         text = Regex.Replace(text, @"[\u200B\uFEFF\u2066-\u2069\u202A-\u202E]", "");
         text = Regex.Replace(text, @"\s+", " ").Trim();
-        return SourceNames.Replace(text, "خبر فوری");
+        text = SourceNames.Replace(text, "خبر فوری");
+        return RepeatedBrandMentions.Replace(text, "${first}");
     }
 
     private static string WithoutRepeatedOpening(string text, string opening)

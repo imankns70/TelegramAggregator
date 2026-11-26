@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.Extensions.Logging.Abstractions;
 using TelegramAggregator.WebAPI.Infrastructure;
+using TelegramAggregator.WebAPI.Models.Entities;
 using TelegramAggregator.WebAPI.Services;
 
 public class Program
@@ -67,6 +68,35 @@ public class Program
             Console.WriteLine("PASS: HTTP cancellation propagates");
         }
 
+        var article = new News
+        {
+            Title = "قرعه‌کشی لیگ قهرمانان",
+            ShortDescription = "به گزارش \"خبر فوری\"، به گزارش \"ورزش سه\"، به گزارش «طرفداری»، هفته پنجم آغاز شد.",
+            FullDescription = "<p>به گزارش «ورزش سه»، به گزارش «خبر فوری»، مسابقات ادامه دارد. "
+                + new string('م', 240) + "</p><p>خبر فوری، خبر فوری؛ نتایج اعلام شد.</p>"
+                + "<p>خبر فوری درباره مسابقه نوشت و سپس خبر فوری نتیجه را منتشر کرد.</p>",
+            Link = "https://www.varzesh3.ir/news/123?first=1&second=2"
+        };
+        var caption = CaptionMakerExtension.GetRichHtml(article);
+        var decodedCaption = WebUtility.HtmlDecode(caption);
+        Check(decodedCaption.Contains("به گزارش \"خبر فوری\"، هفته پنجم آغاز شد.")
+            && decodedCaption.Contains("به گزارش «خبر فوری»، مسابقات ادامه دارد.")
+            && decodedCaption.Contains("خبر فوری؛ نتایج اعلام شد.")
+            && decodedCaption.Contains("خبر فوری درباره مسابقه نوشت و سپس خبر فوری نتیجه را منتشر کرد."),
+            "Adjacent duplicate source mentions collapse while separate mentions remain");
+        Check(decodedCaption.StartsWith("<p><b>⚽ قرعه‌کشی لیگ قهرمانان</b></p>"), "Headline uses bold body-size text");
+        foreach (var (score, emoji) in new[] { (99, "⚽"), (100, "⭐"), (149, "⭐"), (150, "⚡"), (199, "⚡"), (200, "🔥"), (201, "🔥") })
+        {
+            article.Score = score;
+            var scoredCaption = WebUtility.HtmlDecode(CaptionMakerExtension.GetRichHtml(article));
+            Check(scoredCaption.StartsWith($"<p><b>{emoji} {article.Title}</b></p>", StringComparison.Ordinal),
+                $"Headline uses {emoji} for score {score}");
+        }
+
+        Check(decodedCaption.Contains("<details><summary>🔹 متن کامل خبر</summary><p>")
+            && !caption.Contains("href=", StringComparison.OrdinalIgnoreCase),
+            "Details use a plain label and blue icon in the expandable block");
+
         var root = Path.GetFullPath(GetRepositoryRoot());
         var files = Directory.GetFiles(Path.Combine(root, "src"), "*.cs", SearchOption.AllDirectories)
             .Where(file => !file.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar))
@@ -78,7 +108,7 @@ public class Program
             Check(errors.Count == 0, "C# syntax: " + Path.GetRelativePath(root, file));
         }
 
-        Console.WriteLine($"Passed URL/HTTP regressions and syntax checks for {files.Count} C# files.");
+        Console.WriteLine($"Passed URL, HTTP, and caption regressions and syntax checks for {files.Count} C# files.");
     }
 
     private static string GetRepositoryRoot()
