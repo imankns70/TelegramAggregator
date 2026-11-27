@@ -5,7 +5,7 @@ using TelegramAggregator.WebAPI.Models.LiveBoard;
 
 namespace TelegramAggregator.WebAPI.Services.LiveBoard;
 
-public class FotMobScraperService(IPlaywrightService playwright) : IFotMobScraperService
+public class FotMobScraperService(IPlaywrightService playwright, ILogger<FotMobScraperService> logger) : IFotMobScraperService
 {
     private static readonly Uri BaseUrl = new("https://www.fotmob.com");
 
@@ -14,7 +14,7 @@ public class FotMobScraperService(IPlaywrightService playwright) : IFotMobScrape
         CancellationToken ct = default)
         => ReadCompetitionAsync(competitionUrl, sourceCompetitionId, competitionName, null, ct);
 
-    public Task<List<MatchDto>> GetFinishedMatchesAsync(
+    public Task<List<MatchDto>> GetMatchesForDayAsync(
         LiveBoardCompetition competition, DateTimeOffset day, CancellationToken ct)
         => ReadCompetitionAsync(competition.SourceUrl, competition.SourceCompetitionId, competition.Name, day, ct);
 
@@ -26,12 +26,12 @@ public class FotMobScraperService(IPlaywrightService playwright) : IFotMobScrape
         var page = await context.NewPageAsync();
         var fixtures = await LoadPageAsync(page, competitionUrl, ct);
         var matches = ParseFixtures(fixtures, sourceCompetitionId, competitionName,
-            archiveDay ?? DateTimeOffset.UtcNow, finishedOnly: archiveDay.HasValue);
+            archiveDay ?? DateTimeOffset.UtcNow);
 
         for (var index = 0; index < matches.Count; index++)
         {
             var match = matches[index];
-            if (!archiveDay.HasValue && !match.Status.IsInProgress())
+            if (!match.Status.IsInProgress() && !(archiveDay.HasValue && match.Status == MatchStatus.Finished))
                 continue;
 
             try
@@ -43,7 +43,7 @@ public class FotMobScraperService(IPlaywrightService playwright) : IFotMobScrape
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                throw new InvalidOperationException($"Could not read match {match.SourceMatchId}.", ex);
+                logger.LogWarning(ex, "Could not read match details for {MatchId}. Keeping the FotMob fixture.", match.SourceMatchId);
             }
         }
 
@@ -85,10 +85,10 @@ public class FotMobScraperService(IPlaywrightService playwright) : IFotMobScrape
     }
 
     internal static List<MatchDto> ParseFixtures(JsonElement page, string competitionId, string competitionName,
-        DateTimeOffset now, bool finishedOnly = false)
+        DateTimeOffset day)
     {
         EnsureCompetition(page.GetProperty("details").GetProperty("id"), competitionId);
-        var (dayStart, dayEnd) = LiveBoardMatchDay.GetUtcBounds(now);
+        var (dayStart, dayEnd) = LiveBoardMatchDay.GetUtcBounds(day);
         var matches = new List<MatchDto>();
         foreach (var fixture in page.GetProperty("fixtures").GetProperty("allMatches").EnumerateArray())
         {
@@ -98,10 +98,14 @@ public class FotMobScraperService(IPlaywrightService playwright) : IFotMobScrape
                 continue;
 
             var matchStatus = ReadStatus(status);
-            var finished = matchStatus == MatchStatus.Finished;
-            if (finishedOnly ? !finished : !matchStatus.IsInProgress() &&
-                (matchStatus != MatchStatus.Upcoming || start < now))
-                continue;
+            var score = ReadText(Get(status, "scoreStr")).Split('-', StringSplitOptions.TrimEntries);
+            int? homeScore = null;
+            int? awayScore = null;
+            if (score.Length == 2 && int.TryParse(score[0], out var homeScoreValue) && int.TryParse(score[1], out var awayScoreValue))
+            {
+                homeScore = homeScoreValue;
+                awayScore = awayScoreValue;
+            }
 
             var path = fixture.GetProperty("pageUrl").GetString();
             if (path == null || !path.StartsWith("/matches/", StringComparison.Ordinal))
@@ -116,6 +120,8 @@ public class FotMobScraperService(IPlaywrightService playwright) : IFotMobScrape
                 AwayTeam = fixture.GetProperty("away").GetProperty("name").GetString()!,
                 StartUtc = start,
                 Status = matchStatus,
+                HomeScore = homeScore,
+                AwayScore = awayScore,
                 DetailUrl = new Uri(BaseUrl, path).AbsoluteUri,
                 SourceUrl = new Uri(BaseUrl, path).AbsoluteUri
             });

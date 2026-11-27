@@ -78,12 +78,11 @@ public sealed class LiveBoardArchiveService(
             {
                 try
                 {
-                    var matches = await scraper.GetFinishedMatchesAsync(competition, yesterday, token);
-                    var final = matches.Where(match => match.Status == MatchStatus.Finished
-                        && match.StartUtc >= yesterday && match.StartUtc < today).ToList();
-                    foreach (var match in final)
+                    var fixtures = await scraper.GetMatchesForDayAsync(competition, yesterday, token);
+                    var matches = fixtures.Where(match => match.StartUtc >= yesterday && match.StartUtc < today).ToList();
+                    foreach (var match in matches)
                         match.CompetitionDisplayOrder = competition.DisplayOrder;
-                    _results[competition.SourceCompetitionId] = final;
+                    _results[competition.SourceCompetitionId] = matches;
                 }
                 catch (Exception ex) when (!token.IsCancellationRequested)
                 {

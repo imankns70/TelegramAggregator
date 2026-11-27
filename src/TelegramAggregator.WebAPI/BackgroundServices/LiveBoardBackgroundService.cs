@@ -121,13 +121,15 @@ public class LiveBoardBackgroundService(
                 match.CompetitionDisplayOrder = competition.DisplayOrder;
             }
         }
-        var lastFetch = _snapshots.Values.Select(snapshot => (DateTimeOffset?)snapshot.FetchedAt).Min();
+        var lastFetch = _snapshots.Values.Select(snapshot => (DateTimeOffset?)snapshot.FetchedAt).Max();
+        var failedCompetitions = competitions.Count - fresh.Count;
         var boardTime = DateTimeOffset.UtcNow;
         var yesterday = archive.GetText(boardTime);
         var matchesToShow = SelectMatches(boardTime);
         var animate = matchesToShow.Any(match => match.Status.IsInProgress() &&
             match.RecentEvents.Any(e => LiveBoardMessageFormatter.IsAnimatedEvent(e.Type)));
-        var content = formatter.Format(matchesToShow, null, settings.LiveRefreshSeconds, boardTime, yesterday, animate);
+        var content = formatter.Format(matchesToShow, lastFetch, settings.LiveRefreshSeconds, boardTime, yesterday, animate,
+            failedCompetitions);
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
         var fingerprintKey = $"published:{settings.ChannelId}:{messageId}";
         _lastPublishedFingerprint ??= await repo.GetStateAsync(fingerprintKey, ct);
@@ -139,7 +141,7 @@ public class LiveBoardBackgroundService(
             var published = false;
             if (animate)
             {
-                var rich = formatter.Format(matchesToShow, lastFetch, settings.LiveRefreshSeconds, boardTime, yesterday, animate);
+                var rich = content;
                 if (EditAnimatedBoardRequest.HasAnimation(rich))
                 {
                     try
@@ -157,7 +159,10 @@ public class LiveBoardBackgroundService(
             }
             if (!published)
             {
-                var plain = formatter.Format(matchesToShow, lastFetch, settings.LiveRefreshSeconds, boardTime, yesterday);
+                var plain = animate
+                    ? formatter.Format(matchesToShow, lastFetch, settings.LiveRefreshSeconds, boardTime, yesterday,
+                        failedCompetitions: failedCompetitions)
+                    : content;
                 await RetryEditAsync(() => bot.EditMessageText(settings.ChannelId, messageId, plain,
                     ParseMode.Html, cancellationToken: ct), ct);
             }
@@ -219,11 +224,7 @@ public class LiveBoardBackgroundService(
             match.RecentEvents.Clear();
             match.RecentEventsUntil = null;
         }
-        var live = matches.Where(match => match.Status.IsInProgress()).ToList();
-        return live.Count > 0 ? live : matches
-            .Where(match => match.Status == MatchStatus.Upcoming && match.StartUtc >= now)
-            .OrderBy(match => match.StartUtc).ThenBy(match => match.SourceMatchId, StringComparer.Ordinal)
-            .Take(10).ToList();
+        return matches;
     }
 
     private TimeSpan GetNextDelay(LiveBoardSettings settings, DateTimeOffset now, TimeSpan elapsed)

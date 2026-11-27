@@ -268,7 +268,7 @@ public class Program
         Check(formatter.Format(new List<MatchDto>(), staleFetch, boardTime: staleFetch).Contains("جمعه ۶ آذر ۱۴۰۵")
             && formatter.Format(new List<MatchDto>(), staleFetch, boardTime: midnightUtc).Contains("شنبه ۷ آذر ۱۴۰۵"),
             "The Persian date follows the current Tehran day even when the last fetch was yesterday");
-        Check(formatter.Format(new List<MatchDto>(), midnightUtc).Contains("فعلاً بازی زنده یا پیش رو برای نمایش نیست"),
+        Check(formatter.Format(new List<MatchDto>(), midnightUtc).Contains("فعلاً بازی‌ای برای امروز در دسترس نیست."),
             "Empty live board refers to today's fixtures");
 
         var finishedMatch = new MatchDto
@@ -285,6 +285,15 @@ public class Program
         };
         var finText = formatter.Format(new List<MatchDto> { finishedMatch }, DateTimeOffset.UtcNow);
         Check(finText.Contains("پایان"), "Finished status shown");
+        upcomingMatch.StartUtc = DateTimeOffset.Parse("2026-11-27T20:00:00Z");
+        var mixed = formatter.Format([liveMatch, finishedMatch, upcomingMatch], null, boardTime: checkedAt);
+        Check(mixed.Contains("برنامهٔ بازی‌های امروز") && mixed.Contains("دقیقهٔ ۷۲")
+            && mixed.Contains("پایان") && mixed.Contains("۲۳:۳۰") && mixed.Contains("ناتینگهام فارست – چلسی"),
+            "Today's schedule displays a 23:30 fixture and a final result alongside a live match");
+        var refreshed = formatter.Format([upcomingMatch], checkedAt.AddMinutes(5), boardTime: checkedAt,
+            failedCompetitions: 2);
+        Check(refreshed.Contains("۱۶:۰۵") && refreshed.Contains("به‌روزرسانی ۲ رقابت از FotMob ناموفق بود")
+            && refreshed.Contains("۲۳:۳۰"), "Board shows fresh fetch time and partial FotMob failure alongside fixtures");
         finishedMatch.Statistics = new MatchStatistics(new(58, 42), null, null, null);
         finishedMatch.Events.Add(new MatchEvent { Type = "goal", Team = finishedMatch.HomeTeam, Minute = 72 });
         var archive = LiveBoardMessageFormatter.FormatYesterday(staleFetch.AddDays(-1), [finishedMatch]);
@@ -300,7 +309,7 @@ public class Program
             yesterday: archive, animateEvents: true);
         const string goalVideo = "<video src=\"tg://video?id=goal\"></video>";
         var animation = animated.IndexOf(goalVideo, StringComparison.Ordinal);
-        var archiveDetails = animated.IndexOf("<details><summary>🗓️ نتایج دیروز</summary>", StringComparison.Ordinal);
+        var archiveDetails = animated.IndexOf("<details><summary>🗓️ بازی‌های دیروز</summary>", StringComparison.Ordinal);
         Check(animation > animated.IndexOf("تازه", StringComparison.Ordinal) && archiveDetails > animation
             && !animated[archiveDetails..].Contains("<video")
             && !animated.Contains("tg://video?id=redcard")
@@ -353,7 +362,7 @@ public class Program
             "Today's fixtures and yesterday's expandable results share Telegram's message limit");
 
         var emptyArchive = LiveBoardMessageFormatter.FormatYesterday(staleFetch.AddDays(-1), []);
-        Check(emptyArchive.Contains("فعلاً نتیجه‌ای برای نمایش نیست.") && !emptyArchive.Contains("⚠️"),
+        Check(emptyArchive.Contains("فعلاً بازی‌ای برای دیروز در دسترس نیست.") && !emptyArchive.Contains("⚠️"),
             "Empty archive uses a neutral message");
 
         Console.WriteLine("PASS: Live board formatter tests");

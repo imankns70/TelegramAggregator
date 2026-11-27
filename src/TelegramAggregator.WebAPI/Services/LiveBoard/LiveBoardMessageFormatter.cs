@@ -8,7 +8,7 @@ public interface ILiveBoardMessageFormatter
 {
     string Format(List<MatchDto> matches, DateTimeOffset? lastFetch,
         int liveRefreshSeconds = LiveBoardSettings.DefaultLiveRefreshSeconds, DateTimeOffset? boardTime = null,
-        string? yesterday = null, bool animateEvents = false);
+        string? yesterday = null, bool animateEvents = false, int failedCompetitions = 0);
 }
 
 public class LiveBoardMessageFormatter : ILiveBoardMessageFormatter
@@ -18,19 +18,21 @@ public class LiveBoardMessageFormatter : ILiveBoardMessageFormatter
 
     public string Format(List<MatchDto> matches, DateTimeOffset? lastFetch,
         int liveRefreshSeconds = LiveBoardSettings.DefaultLiveRefreshSeconds, DateTimeOffset? boardTime = null,
-        string? yesterday = null, bool animateEvents = false)
+        string? yesterday = null, bool animateEvents = false, int failedCompetitions = 0)
     {
         var heading = new StringBuilder(FormatHeading(boardTime ?? DateTimeOffset.UtcNow, liveRefreshSeconds));
         heading.AppendLine();
         if (lastFetch is { } fetchedAt)
             heading.AppendLine($"🕒 آخرین به‌روزرسانی {FormatClock(fetchedAt)} به وقت تهران");
+        if (failedCompetitions > 0)
+            heading.AppendLine($"⚠️ به‌روزرسانی {ToPersianNumerals(failedCompetitions.ToString())} رقابت از FotMob ناموفق بود.");
 
-        if (matches.Any(match => match.Status.IsInProgress()))
+        if (matches.Count > 0 && matches.All(match => match.Status.IsInProgress()))
             heading.AppendLine("\n🔴 <b>بازی‌های زنده</b>");
         else if (matches.Count > 0)
             heading.AppendLine("\n📅 <b>برنامهٔ بازی‌های امروز</b>");
         else
-            heading.AppendLine("\nفعلاً بازی زنده یا پیش رو برای نمایش نیست.");
+            heading.AppendLine("\nفعلاً بازی‌ای برای امروز در دسترس نیست.");
 
         var suffix = yesterday == null ? "" : $"\n\n<blockquote expandable>{yesterday}</blockquote>";
         var today = RenderBoard(heading.ToString(), matches, MessageLimit - suffix.Length, animateEvents: animateEvents);
@@ -39,14 +41,14 @@ public class LiveBoardMessageFormatter : ILiveBoardMessageFormatter
 
         var rich = ToRichParagraphs(today);
         return yesterday == null ? rich : rich +
-            $"<details><summary>🗓️ نتایج دیروز</summary>{ToRichParagraphs(yesterday[(yesterday.IndexOf('\n') + 1)..])}</details>";
+            $"<details><summary>🗓️ بازی‌های دیروز</summary>{ToRichParagraphs(yesterday[(yesterday.IndexOf('\n') + 1)..])}</details>";
     }
 
     internal static string FormatYesterday(DateTimeOffset day, List<MatchDto> matches)
     {
-        var heading = new StringBuilder($"🗓️ <b>نتایج دیروز</b>\n{FormatDate(day)}\n");
+        var heading = new StringBuilder($"🗓️ <b>بازی‌های دیروز</b>\n{FormatDate(day)}\n");
         if (matches.Count == 0)
-            heading.AppendLine("فعلاً نتیجه‌ای برای نمایش نیست.");
+            heading.AppendLine("فعلاً بازی‌ای برای دیروز در دسترس نیست.");
 
         return RenderBoard(heading.ToString(), matches, 1750, includeArchiveStatistics: true);
     }
@@ -156,7 +158,7 @@ public class LiveBoardMessageFormatter : ILiveBoardMessageFormatter
         var home = TeamName(match.HomeTeam, match.HomeTeamFa, "میزبان");
         var away = TeamName(match.AwayTeam, match.AwayTeamFa, "مهمان");
         var time = FormatTimePart(match);
-        if (match.Status == MatchStatus.Upcoming)
+        if (match.Status is MatchStatus.Upcoming or MatchStatus.Postponed or MatchStatus.Cancelled or MatchStatus.Unknown)
             return $"{RightToLeft}<b>{time}</b> · {home} – {away}";
 
         var score = FormatScore(match);
