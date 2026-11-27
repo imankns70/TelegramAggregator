@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Services/LiveBoard/Animations/*.gif" />
     <Compile Remove="Channels\**" />
     <Content Remove="Channels\**" />
     <EmbeddedResource Remove="Channels\**" />

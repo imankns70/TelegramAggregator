@@ -23,6 +23,14 @@
     <Compile Include="../../src/TelegramAggregator.WebAPI/Services/IHttpHelperService.cs" Link="IHttpHelperService.cs" />
     <Compile Include="../../src/TelegramAggregator.WebAPI/Services/RssParserService.cs" Link="RssParserService.cs" />
     <Compile Include="../../src/TelegramAggregator.WebAPI/Services/IRssParserService.cs" Link="IRssParserService.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Models/LiveBoard/MatchStatus.cs" Link="MatchStatus.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Models/LiveBoard/LiveBoardMatchDay.cs" Link="LiveBoardMatchDay.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Models/LiveBoard/LiveBoardSettings.cs" Link="LiveBoardSettings.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Models/LiveBoard/MatchEvent.cs" Link="MatchEvent.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Models/LiveBoard/LiveBoardUpdates.cs" Link="LiveBoardUpdates.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Models/LiveBoard/MatchDto.cs" Link="MatchDto.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Services/LiveBoard/LiveBoardMessageFormatter.cs" Link="LiveBoardMessageFormatter.cs" />
+    <Compile Include="../../src/TelegramAggregator.WebAPI/Services/LiveBoard/PersianTeamNames.cs" Link="PersianTeamNames.cs" />
     <Reference Include="Microsoft.CodeAnalysis">
       <HintPath>$(MSBuildSDKsPath)/../Roslyn/bincore/Microsoft.CodeAnalysis.dll</HintPath>
     </Reference>

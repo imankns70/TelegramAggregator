@@ -7,8 +7,10 @@ using TelegramAggregator.WebAPI.Data;
 using TelegramAggregator.WebAPI.Infrastructure;
 using TelegramAggregator.WebAPI.Models;
 using TelegramAggregator.WebAPI.Models.FootbalSettings;
+using TelegramAggregator.WebAPI.Models.LiveBoard;
 using TelegramAggregator.WebAPI.Services;
 using TelegramAggregator.WebAPI.Services.Dashboard;
+using TelegramAggregator.WebAPI.Services.LiveBoard;
 
 if (args.Contains("--install-browsers", StringComparer.Ordinal))
 {
@@ -90,6 +92,13 @@ if (builder.Configuration.GetValue<bool>("Worker:FetchEnabled")
     || builder.Configuration.GetValue<bool>("Worker:PublishingEnabled"))
 {
     builder.Services.AddHostedService<FootballforiBackgroundService>();
+}
+
+if (builder.Configuration.GetValue<bool>("LiveBoardSettings:Enabled"))
+{
+    builder.Services.AddSingleton<LiveBoardArchiveService>();
+    builder.Services.AddHostedService(services => services.GetRequiredService<LiveBoardArchiveService>());
+    builder.Services.AddHostedService<LiveBoardBackgroundService>();
 }
 
 var app = builder.Build();

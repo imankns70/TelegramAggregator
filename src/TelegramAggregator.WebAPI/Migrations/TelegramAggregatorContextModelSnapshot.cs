@@ -145,6 +145,145 @@ namespace TelegramAggregator.WebAPI.Migrations
                     b.ToTable("SportSource", (string)null);
                 });
 
+            modelBuilder.Entity("TelegramAggregator.WebAPI.Models.LiveBoard.LiveBoardCompetition", b =>
+                {
+                    b.Property<string>("SourceCompetitionId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SourceUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("SourceCompetitionId");
+
+                    b.ToTable("LiveBoardCompetitions", (string)null);
+                });
+
+            modelBuilder.Entity("TelegramAggregator.WebAPI.Models.LiveBoard.LiveBoardMatchEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("AwayScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AwayScoreEt")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AwayScorePen")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AwayTeam")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("AwayTeamFa")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CompetitionName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("DetailUrl")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EventsJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("HomeScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HomeScoreEt")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("HomeScorePen")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("HomeTeam")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("HomeTeamFa")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Minute")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceCompetitionId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SourceMatchId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SourceUrl")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("StartUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceCompetitionId");
+
+                    b.HasIndex("SourceMatchId")
+                        .IsUnique();
+
+                    b.ToTable("LiveBoardMatches", (string)null);
+                });
+
+            modelBuilder.Entity("TelegramAggregator.WebAPI.Models.LiveBoard.LiveBoardStateEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Value")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("LiveBoardState", (string)null);
+                });
+
             modelBuilder.Entity("TelegramAggregator.WebAPI.Models.Entities.News", b =>
                 {
                     b.HasOne("TelegramAggregator.WebAPI.Models.Entities.NewsStatus", "NewsStatus")

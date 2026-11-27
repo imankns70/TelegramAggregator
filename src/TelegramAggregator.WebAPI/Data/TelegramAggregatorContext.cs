@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using TelegramAggregator.WebAPI.Models.Entities;
 using TelegramAggregator.WebAPI.Models.Entities.Logs;
+using TelegramAggregator.WebAPI.Models.LiveBoard;
 
 namespace TelegramAggregator.WebAPI.Data
 {
@@ -15,6 +16,9 @@ namespace TelegramAggregator.WebAPI.Data
         public DbSet<NewsHistory> NewsHistories { get; set; }  
         public DbSet<NewsStatus> NewsStatuses { get; set; }  
         public DbSet<SportSource> SportSources { get; set; }  
+        public DbSet<LiveBoardMatchEntity> LiveBoardMatches { get; set; }
+        public DbSet<LiveBoardStateEntity> LiveBoardStates { get; set; }
+        public DbSet<LiveBoardCompetition> LiveBoardCompetitions { get; set; }
         //public DbSet<Log> Logs { get; set; }  
         
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -106,6 +110,41 @@ namespace TelegramAggregator.WebAPI.Data
               .HasForeignKey(h => h.SportSourceId);
             });
 
+
+            // LiveBoard
+            modelBuilder.Entity<LiveBoardMatchEntity>(entity =>
+            {
+                entity.ToTable("LiveBoardMatches");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.SourceMatchId).IsUnique();
+                entity.HasIndex(e => e.SourceCompetitionId);
+                entity.Property(e => e.SourceMatchId).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.SourceCompetitionId).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.CompetitionName).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.HomeTeam).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.AwayTeam).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.EventsJson).HasColumnType("text");
+                entity.Property(e => e.SourceUrl).HasColumnType("text");
+                entity.Property(e => e.DetailUrl).HasColumnType("text");
+            });
+
+            modelBuilder.Entity<LiveBoardCompetition>(entity =>
+            {
+                entity.ToTable("LiveBoardCompetitions");
+                entity.HasKey(e => e.SourceCompetitionId);
+                entity.Property(e => e.SourceCompetitionId).HasMaxLength(32);
+                entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.SourceUrl).IsRequired().HasMaxLength(500);
+            });
+
+            modelBuilder.Entity<LiveBoardStateEntity>(entity =>
+            {
+                entity.ToTable("LiveBoardState");
+                entity.HasKey(e => e.Id);
+                entity.HasIndex(e => e.Key).IsUnique();
+                entity.Property(e => e.Key).IsRequired().HasMaxLength(200);
+                entity.Property(e => e.Value).HasColumnType("text");
+            });
 
             //base
             base.OnModelCreating(modelBuilder);
