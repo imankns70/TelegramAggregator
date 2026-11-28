@@ -10,7 +10,14 @@ namespace TelegramAggregator.WebAPI.Data
         {
             services.AddScoped<INewsRepository, NewsRepository>();
             services.AddScoped<ILiveBoardRepository, LiveBoardRepository>();
-            services.AddScoped<IFotMobScraperService, FotMobScraperService>();
+            services.AddHttpClient<IFotMobScraperService, FotMobScraperService>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(12);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0");
+            }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AutomaticDecompression = System.Net.DecompressionMethods.All
+            });
             services.AddScoped<ILiveBoardMessageFormatter, LiveBoardMessageFormatter>();
             return services;
         }

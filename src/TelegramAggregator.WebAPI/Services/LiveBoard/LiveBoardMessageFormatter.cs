@@ -8,7 +8,7 @@ public interface ILiveBoardMessageFormatter
 {
     string Format(List<MatchDto> matches, DateTimeOffset? lastFetch,
         int liveRefreshSeconds = LiveBoardSettings.DefaultLiveRefreshSeconds, DateTimeOffset? boardTime = null,
-        string? yesterday = null, bool animateEvents = false, int failedCompetitions = 0);
+        string? yesterday = null, bool animateEvents = false);
 }
 
 public class LiveBoardMessageFormatter : ILiveBoardMessageFormatter
@@ -18,14 +18,12 @@ public class LiveBoardMessageFormatter : ILiveBoardMessageFormatter
 
     public string Format(List<MatchDto> matches, DateTimeOffset? lastFetch,
         int liveRefreshSeconds = LiveBoardSettings.DefaultLiveRefreshSeconds, DateTimeOffset? boardTime = null,
-        string? yesterday = null, bool animateEvents = false, int failedCompetitions = 0)
+        string? yesterday = null, bool animateEvents = false)
     {
         var heading = new StringBuilder(FormatHeading(boardTime ?? DateTimeOffset.UtcNow, liveRefreshSeconds));
         heading.AppendLine();
         if (lastFetch is { } fetchedAt)
             heading.AppendLine($"🕒 آخرین به‌روزرسانی {FormatClock(fetchedAt)} به وقت تهران");
-        if (failedCompetitions > 0)
-            heading.AppendLine($"⚠️ به‌روزرسانی {ToPersianNumerals(failedCompetitions.ToString())} رقابت از FotMob ناموفق بود.");
 
         if (matches.Count > 0 && matches.All(match => match.Status.IsInProgress()))
             heading.AppendLine("\n🔴 <b>بازی‌های زنده</b>");

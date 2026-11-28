@@ -290,10 +290,10 @@ public class Program
         Check(mixed.Contains("برنامهٔ بازی‌های امروز") && mixed.Contains("دقیقهٔ ۷۲")
             && mixed.Contains("پایان") && mixed.Contains("۲۳:۳۰") && mixed.Contains("ناتینگهام فارست – چلسی"),
             "Today's schedule displays a 23:30 fixture and a final result alongside a live match");
-        var refreshed = formatter.Format([upcomingMatch], checkedAt.AddMinutes(5), boardTime: checkedAt,
-            failedCompetitions: 2);
-        Check(refreshed.Contains("۱۶:۰۵") && refreshed.Contains("به‌روزرسانی ۲ رقابت از FotMob ناموفق بود")
-            && refreshed.Contains("۲۳:۳۰"), "Board shows fresh fetch time and partial FotMob failure alongside fixtures");
+        var refreshed = formatter.Format([upcomingMatch], checkedAt.AddMinutes(5), boardTime: checkedAt);
+        Check(refreshed.Contains("۱۶:۰۵") && refreshed.Contains("۲۳:۳۰")
+            && !refreshed.Contains("FotMob", StringComparison.OrdinalIgnoreCase)
+            && !refreshed.Contains("واکشی") && !refreshed.Contains("ناموفق"), "Board only shows match and update information");
         finishedMatch.Statistics = new MatchStatistics(new(58, 42), null, null, null);
         finishedMatch.Events.Add(new MatchEvent { Type = "goal", Team = finishedMatch.HomeTeam, Minute = 72 });
         var archive = LiveBoardMessageFormatter.FormatYesterday(staleFetch.AddDays(-1), [finishedMatch]);

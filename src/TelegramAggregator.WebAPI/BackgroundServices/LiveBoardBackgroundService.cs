@@ -58,8 +58,6 @@ public class LiveBoardBackgroundService(
         var repo = scope.ServiceProvider.GetRequiredService<ILiveBoardRepository>();
         var scraper = scope.ServiceProvider.GetRequiredService<IFotMobScraperService>();
         var formatter = scope.ServiceProvider.GetRequiredService<ILiveBoardMessageFormatter>();
-        var bot = scope.ServiceProvider.GetRequiredService<ITelegramBotClient>();
-        var messageId = _pinnedMessageId ??= await EnsureBoardMessagePinnedAsync(scope.ServiceProvider, repo, bot, settings, ct);
 
         var competitions = await repo.GetCompetitionsAsync(ct);
         var configuredIds = competitions.Select(competition => competition.SourceCompetitionId).ToHashSet();
@@ -121,15 +119,17 @@ public class LiveBoardBackgroundService(
                 match.CompetitionDisplayOrder = competition.DisplayOrder;
             }
         }
-        var lastFetch = _snapshots.Values.Select(snapshot => (DateTimeOffset?)snapshot.FetchedAt).Max();
-        var failedCompetitions = competitions.Count - fresh.Count;
         var boardTime = DateTimeOffset.UtcNow;
+        var dayStart = LiveBoardMatchDay.GetUtcBounds(boardTime).Start;
+        var lastFetch = _snapshots.Values.Where(snapshot => snapshot.FetchedAt >= dayStart)
+            .Select(snapshot => (DateTimeOffset?)snapshot.FetchedAt).Max();
         var yesterday = archive.GetText(boardTime);
         var matchesToShow = SelectMatches(boardTime);
         var animate = matchesToShow.Any(match => match.Status.IsInProgress() &&
             match.RecentEvents.Any(e => LiveBoardMessageFormatter.IsAnimatedEvent(e.Type)));
-        var content = formatter.Format(matchesToShow, lastFetch, settings.LiveRefreshSeconds, boardTime, yesterday, animate,
-            failedCompetitions);
+        var content = formatter.Format(matchesToShow, lastFetch, settings.LiveRefreshSeconds, boardTime, yesterday, animate);
+        var bot = scope.ServiceProvider.GetRequiredService<ITelegramBotClient>();
+        var messageId = _pinnedMessageId ??= await EnsureBoardMessagePinnedAsync(scope.ServiceProvider, repo, bot, settings, ct);
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)));
         var fingerprintKey = $"published:{settings.ChannelId}:{messageId}";
         _lastPublishedFingerprint ??= await repo.GetStateAsync(fingerprintKey, ct);
@@ -160,8 +160,7 @@ public class LiveBoardBackgroundService(
             if (!published)
             {
                 var plain = animate
-                    ? formatter.Format(matchesToShow, lastFetch, settings.LiveRefreshSeconds, boardTime, yesterday,
-                        failedCompetitions: failedCompetitions)
+                    ? formatter.Format(matchesToShow, lastFetch, settings.LiveRefreshSeconds, boardTime, yesterday)
                     : content;
                 await RetryEditAsync(() => bot.EditMessageText(settings.ChannelId, messageId, plain,
                     ParseMode.Html, cancellationToken: ct), ct);

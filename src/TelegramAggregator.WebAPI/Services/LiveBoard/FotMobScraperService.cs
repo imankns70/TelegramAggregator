@@ -1,13 +1,19 @@
 using System.Globalization;
+using System.Net;
 using System.Text.Json;
-using Microsoft.Playwright;
+using System.Text.RegularExpressions;
 using TelegramAggregator.WebAPI.Models.LiveBoard;
 
 namespace TelegramAggregator.WebAPI.Services.LiveBoard;
 
-public class FotMobScraperService(IPlaywrightService playwright, ILogger<FotMobScraperService> logger) : IFotMobScraperService
+public class FotMobScraperService(HttpClient http, ILogger<FotMobScraperService> logger) : IFotMobScraperService
 {
     private static readonly Uri BaseUrl = new("https://www.fotmob.com");
+    private static readonly TimeSpan DetailBudget = TimeSpan.FromSeconds(12);
+    private static readonly Regex PageData = new(
+        """<script\b[^>]*\bid\s*=\s*["']__NEXT_DATA__["'][^>]*>(?<json>.*?)</script>""",
+        RegexOptions.Singleline | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     public Task<List<MatchDto>> GetMatchesFromCompetitionPageAsync(
         string competitionUrl, string sourceCompetitionId, string competitionName,
@@ -22,12 +28,12 @@ public class FotMobScraperService(IPlaywrightService playwright, ILogger<FotMobS
         string competitionUrl, string sourceCompetitionId, string competitionName,
         DateTimeOffset? archiveDay, CancellationToken ct)
     {
-        await using var context = await playwright.CreateContextAsync(ct);
-        var page = await context.NewPageAsync();
-        var fixtures = await LoadPageAsync(page, competitionUrl, ct);
-        var matches = ParseFixtures(fixtures, sourceCompetitionId, competitionName,
-            archiveDay ?? DateTimeOffset.UtcNow);
+        var day = archiveDay ?? DateTimeOffset.UtcNow;
+        var fixtures = await LoadCalendarAsync(competitionUrl, ct);
+        var matches = ParseFixtures(fixtures, sourceCompetitionId, competitionName, day);
 
+        using var details = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        details.CancelAfter(DetailBudget);
         for (var index = 0; index < matches.Count; index++)
         {
             var match = matches[index];
@@ -36,51 +42,59 @@ public class FotMobScraperService(IPlaywrightService playwright, ILogger<FotMobS
 
             try
             {
-                var detail = ParseMatchDetail(await LoadPageAsync(page, match.DetailUrl, ct),
+                var detail = ParseMatchDetail(await LoadPageAsync(match.DetailUrl, details.Token),
                     match.DetailUrl, match.SourceMatchId, sourceCompetitionId);
+                if (detail.StartUtc != match.StartUtc)
+                    continue;
+
                 detail.CompetitionName = competitionName;
                 matches[index] = detail;
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (OperationCanceledException) when (details.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                logger.LogWarning("Detail deadline reached for competition {CompetitionId}.", sourceCompetitionId);
+                break;
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 logger.LogWarning(ex, "Could not read match details for {MatchId}. Keeping the FotMob fixture.", match.SourceMatchId);
             }
         }
 
+        ct.ThrowIfCancellationRequested();
         return matches;
     }
 
     public async Task<MatchDto?> GetMatchDetailAsync(
         string detailUrl, string? sourceMatchId, string sourceCompetitionId, CancellationToken ct = default)
     {
-        await using var context = await playwright.CreateContextAsync(ct);
-        var page = await context.NewPageAsync();
-        return ParseMatchDetail(await LoadPageAsync(page, detailUrl, ct), detailUrl, sourceMatchId, sourceCompetitionId);
+        return ParseMatchDetail(await LoadPageAsync(detailUrl, ct), detailUrl, sourceMatchId, sourceCompetitionId);
     }
 
-    private static async Task<JsonElement> LoadPageAsync(IPage page, string url, CancellationToken ct)
+    private async Task<JsonElement> LoadCalendarAsync(string url, CancellationToken ct)
     {
-        var options = new PageGotoOptions
-        {
-            WaitUntil = WaitUntilState.DOMContentLoaded,
-            Timeout = 12000
-        };
-        IResponse response;
         try
         {
-            response = await page.GotoAsync(url, options).WaitAsync(ct);
+            return await LoadPageAsync(url, ct);
         }
-        catch (PlaywrightException ex) when (!ct.IsCancellationRequested &&
-            ex.Message.Contains("net::ERR_CONNECTION_RESET", StringComparison.Ordinal))
+        catch (Exception ex) when (!ct.IsCancellationRequested && IsTransientPageFailure(ex))
         {
             await Task.Delay(TimeSpan.FromSeconds(1), ct);
-            response = await page.GotoAsync(url, options).WaitAsync(ct);
+            return await LoadPageAsync(url, ct);
         }
-        if (response?.Ok != true)
-            throw new InvalidOperationException($"FotMob returned HTTP {response?.Status} for {url}.");
+    }
 
-        var json = await page.Locator("script#__NEXT_DATA__").TextContentAsync(new() { Timeout = 3000 }).WaitAsync(ct);
-        using var document = JsonDocument.Parse(json ?? "");
+    private static bool IsTransientPageFailure(Exception ex) => ex is OperationCanceledException
+        or HttpRequestException { StatusCode: null or HttpStatusCode.RequestTimeout or >= HttpStatusCode.InternalServerError };
+
+    private async Task<JsonElement> LoadPageAsync(string url, CancellationToken ct)
+    {
+        var html = await http.GetStringAsync(url, ct);
+        var pageData = PageData.Match(html);
+        if (!pageData.Success)
+            throw new InvalidOperationException($"Match data is missing from {url}.");
+
+        using var document = JsonDocument.Parse(pageData.Groups["json"].Value);
         return document.RootElement.GetProperty("props").GetProperty("pageProps").Clone();
     }
 
